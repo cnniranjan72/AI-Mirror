@@ -3,6 +3,7 @@ import Overview from './pages/Overview'
 import Sessions from './pages/Sessions'
 import SessionDetail from './pages/SessionDetail'
 import Analytics from './pages/Analytics'
+import Chat from './pages/Chat'
 import './App.css'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
                 <Link to="/" className="nav-link">Overview</Link>
                 <Link to="/sessions" className="nav-link">Sessions</Link>
                 <Link to="/analytics" className="nav-link">Analytics</Link>
+                <Link to="/chat" className="nav-link">Chat</Link>
               </div>
             </div>
           </div>
@@ -31,6 +33,7 @@ function App() {
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/sessions/:sessionId" element={<SessionDetail />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/chat" element={<Chat />} />
           </Routes>
         </main>
 

@@ -32,7 +32,7 @@ try {
     BUFFER_SIZE: 10,             // Store events before saving
     BUFFER_TIME: 30000,          // Save buffer every 30 seconds
     BATCH_INTERVAL: 60000,       // Send to backend every 60 seconds
-    BACKEND_URL: 'http://localhost:3000/api/events'
+    BACKEND_URL: 'http://localhost:8000/ingest'
   };
 
   console.log('[AIMirror] Configuration loaded');
@@ -54,23 +54,85 @@ try {
     return `reel_${hash}`;
   }
 
-  function extractUsername(video) {
-    // Traverse DOM upward from video to find username link
-    let el = video.closest('article') || video.parentElement;
-    
-    while (el && el !== document.body) {
-      const link = el.querySelector('a[href^="/"]');
-      if (link && link.innerText && link.innerText.length < 30 && link.innerText.length > 0) {
-        const username = link.innerText.trim().replace('@', '');
-        if (username && !username.includes(' ')) {
-          return username;
-        }
-      }
-      el = el.parentElement;
-    }
-    
-    return 'unknown';
+  function extractMetadata(video) {
+  // Find the reel container (based on actual Instagram DOM structure)
+  let reelContainer = video.closest('[role="presentation"]');
+  if (!reelContainer) {
+    reelContainer = video.closest('div');
   }
+
+  // Extract username from the profile link
+  let username = "unknown";
+  try {
+    // Look for username link in the container (href="/username/reels/")
+    const usernameLink = reelContainer.querySelector('a[href*="/reels/"]');
+    if (usernameLink) {
+      const href = usernameLink.getAttribute("href");
+      if (href && href.startsWith("/")) {
+        username = href.split("/")[1]; // Extract username from /username/reels/
+      }
+    }
+  } catch (e) {
+    console.warn('[AIMirror] Username extraction error:', e);
+  }
+
+  // Extract caption from the caption text
+  let caption = "";
+  try {
+    // Look for caption in the x1g9anri div (caption container)
+    const captionContainer = reelContainer.querySelector('.x1g9anri');
+    if (captionContainer) {
+      const captionText = captionContainer.querySelector('span[dir="auto"]');
+      if (captionText) {
+        caption = captionText.innerText || "";
+      }
+    }
+  } catch (e) {
+    console.warn('[AIMirror] Caption extraction error:', e);
+  }
+
+  // Extract hashtags from caption
+  let hashtags = [];
+  try {
+    if (caption) {
+      hashtags = caption.match(/#[a-zA-Z0-9_]+/g) || [];
+    }
+  } catch (e) {
+    console.warn('[AIMirror] Hashtag extraction error:', e);
+  }
+
+  // Extract audio info if available
+  let audioInfo = "";
+  try {
+    const audioContainer = reelContainer.querySelector('a[href*="/reels/audio/"]');
+    if (audioContainer) {
+      const audioText = audioContainer.querySelector('span');
+      if (audioText) {
+        audioInfo = audioText.innerText || "";
+      }
+    }
+  } catch (e) {
+    // Audio info is optional, don't log errors
+  }
+
+  return {
+    username: username || "unknown",
+    caption: caption || "",
+    hashtags: hashtags,
+    audio_info: audioInfo || ""
+  };
+}
+
+function extractHashtags(caption) {
+  if (!caption) return [];
+
+  return caption.match(/#[a-zA-Z0-9_]+/g) || [];
+}
+
+function extractUsername(video) {
+  const meta = extractMetadata(video);
+  return meta.username;
+}
 
   // ==================== ACTIVE VIDEO DETECTION ====================
 
@@ -155,11 +217,14 @@ try {
 
     // Only record if watch time meets minimum threshold
     if (watchTime >= CONFIG.MIN_WATCH_TIME) {
-      const username = extractUsername(state.currentVideo);
+      const meta = extractMetadata(state.currentVideo);
       
       const event = {
         reel_id: state.currentReelId,
-        username: username,
+        username: meta.username,
+        caption: meta.caption,
+        hashtags: meta.hashtags,
+        audio_info: meta.audio_info,
         watch_time: parseFloat(watchTime.toFixed(2)),
         timestamp: new Date().toISOString(),
         session_id: state.sessionId
@@ -168,6 +233,15 @@ try {
       state.eventBuffer.push(event);
       console.log('[AIMirror] Stopped watching reel:', state.currentReelId);
       console.log('[AIMirror] Event recorded:', event);
+      
+      // Enhanced debug metadata extraction
+      console.log('[AIMirror] Enhanced Metadata:', {
+        username: meta.username,
+        caption: meta.caption ? meta.caption.substring(0, 100) + (meta.caption.length > 100 ? "..." : "") : "",
+        hashtags: meta.hashtags,
+        hashtag_count: meta.hashtags.length,
+        audio_info: meta.audio_info ? meta.audio_info.substring(0, 50) + (meta.audio_info.length > 50 ? "..." : "") : "none"
+      });
 
       // Save buffer if needed
       saveBufferIfNeeded();
@@ -212,10 +286,8 @@ try {
         return;
       }
 
-      const sessionData = {
-        session_id: state.sessionId,
-        start_time: new Date().toISOString(),
-        end_time: new Date().toISOString(),
+      // New backend expects { events: [...] }
+      const eventData = {
         events: events
       };
 
@@ -224,11 +296,11 @@ try {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(sessionData)
+        body: JSON.stringify(eventData)
       })
         .then(response => response.json())
         .then(data => {
-          console.log(`[AIMirror] Batch sent: ${events.length} events`);
+          console.log(`[AIMirror] Batch sent: ${events.length} events`, data);
           // Clear sent events from storage
           chrome.storage.local.set({ events: [] });
         })

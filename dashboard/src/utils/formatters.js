@@ -1,4 +1,5 @@
 import { format, formatDistanceToNow } from 'date-fns';
+import { formatDateTimeWithTimezone, getCurrentTimezone } from './timezone';
 
 export const formatDuration = (seconds) => {
   if (seconds < 60) {
@@ -16,7 +17,8 @@ export const formatDuration = (seconds) => {
 
 export const formatDateTime = (dateString) => {
   try {
-    return format(new Date(dateString), 'MMM dd, yyyy HH:mm');
+    const timezone = getCurrentTimezone();
+    return formatDateTimeWithTimezone(dateString, timezone);
   } catch (error) {
     return dateString;
   }

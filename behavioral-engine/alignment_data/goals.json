@@ -1,0 +1,16 @@
+{
+  "user_123": [
+    {
+      "goal_id": "goal_user_123_1775650415.401246",
+      "user_id": "user_123",
+      "goal": "reduce reels usage",
+      "target_watch_time": 30.0,
+      "target_attention_score": null,
+      "target_engagement_score": null,
+      "target_activity_level": null,
+      "priority": "high",
+      "created_at": "2026-04-08T17:43:35.401264",
+      "active": true
+    }
+  ]
+}

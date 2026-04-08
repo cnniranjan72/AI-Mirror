@@ -5,10 +5,25 @@ console.log('[AIMirror Background] Service worker loaded');
 
 // Configuration
 const CONFIG = {
-  BACKEND_URL: 'http://localhost:3000/api/events',
-  SYNC_INTERVAL: 60000, // Sync every 60 seconds
+  BACKEND_URL: 'http://localhost:8000/ingest',
+  SYNC_INTERVAL: 30000, // Sync every 30 seconds
   MAX_STORAGE_EVENTS: 1000 // Maximum events to keep in storage
 };
+
+// User ID management
+let userId = null;
+
+// Initialize user ID on startup
+chrome.storage.local.get(['userId'], (result) => {
+  if (!result.userId) {
+    userId = 'user_' + Math.random().toString(36).substr(2, 9);
+    chrome.storage.local.set({ userId });
+    console.log('[AIMirror Background] Generated user ID:', userId);
+  } else {
+    userId = result.userId;
+    console.log('[AIMirror Background] Loaded user ID:', userId);
+  }
+});
 
 // State
 let activeSessions = new Map();
@@ -79,44 +94,59 @@ async function syncDataToBackend() {
       return { success: true, synced: 0 };
     }
 
-    let syncedCount = 0;
-    const errors = [];
-
+    // Collect all events from all sessions
+    const allEvents = [];
     for (const session of sessions) {
       if (session.events && session.events.length > 0) {
-        try {
-          const response = await fetch(CONFIG.BACKEND_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(session)
-          });
-
-          if (response.ok) {
-            syncedCount++;
-            console.log(`[AIMirror Background] Synced session ${session.session_id}`);
-          } else {
-            errors.push(`Session ${session.session_id}: ${response.statusText}`);
-          }
-        } catch (error) {
-          errors.push(`Session ${session.session_id}: ${error.message}`);
-          console.error('[AIMirror Background] Sync error:', error);
-        }
+        allEvents.push(...session.events);
       }
     }
 
-    // If all sessions synced successfully, clear them from storage
-    if (syncedCount === sessions.length && errors.length === 0) {
-      await chrome.storage.local.set({ sessions: [] });
-      console.log('[AIMirror Background] Cleared synced sessions from storage');
+    if (allEvents.length === 0) {
+      console.log('[AIMirror Background] No events to sync');
+      return { success: true, synced: 0 };
     }
 
-    return {
-      success: errors.length === 0,
-      synced: syncedCount,
-      errors: errors
-    };
+    try {
+      // Send all events in single batch to new backend format
+      const response = await fetch(CONFIG.BACKEND_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          events: allEvents
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`[AIMirror Background] Synced ${allEvents.length} events:`, data);
+        
+        // Clear synced sessions from storage
+        await chrome.storage.local.set({ sessions: [] });
+        console.log('[AIMirror Background] Cleared synced sessions from storage');
+        
+        return {
+          success: true,
+          synced: allEvents.length,
+          response: data
+        };
+      } else {
+        const errorText = await response.text();
+        console.error('[AIMirror Background] Backend error:', response.status, errorText);
+        return {
+          success: false,
+          error: `Backend error: ${response.status} ${errorText}`
+        };
+      }
+    } catch (error) {
+      console.error('[AIMirror Background] Sync error:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
 
   } catch (error) {
     console.error('[AIMirror Background] Sync failed:', error);
