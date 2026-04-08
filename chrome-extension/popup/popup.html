@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIMirror</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🪞 AIMirror</h1>
+      <p class="subtitle">Behavioral Tracker</p>
+    </header>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="stat-value" id="sessionCount">-</div>
+        <div class="stat-label">Sessions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="eventCount">-</div>
+        <div class="stat-label">Events</div>
+      </div>
+    </div>
+
+    <div class="status">
+      <div class="status-indicator" id="statusIndicator"></div>
+      <span id="statusText">Checking status...</span>
+    </div>
+
+    <div class="actions">
+      <button id="syncBtn" class="btn btn-primary">
+        <span class="btn-icon">🔄</span>
+        Sync Now
+      </button>
+      <button id="dashboardBtn" class="btn btn-secondary">
+        <span class="btn-icon">📊</span>
+        Dashboard
+      </button>
+      <button id="clearBtn" class="btn btn-danger">
+        <span class="btn-icon">🗑️</span>
+        Clear Data
+      </button>
+    </div>
+
+    <div class="info">
+      <p class="info-text">
+        AIMirror tracks your Instagram Reels behavior for transparency and self-awareness.
+      </p>
+      <p class="info-text small">
+        Data is stored locally and synced to your private backend.
+      </p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
