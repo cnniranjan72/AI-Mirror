@@ -124,43 +124,43 @@ graph LR
 ### Chrome Extension
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **Instagram Detection** | ![Working] | Automatically detects Instagram Reels pages |
-| **Behavioral Tracking** | ![Working] | Tracks watch time, likes, scrolls, replays |
-| **Metadata Extraction** | ![Working] | Extracts usernames, captions, hashtags, audio info |
-| **Smart Batching** | ![Working] | Batches data every 60 seconds |
-| **Local Storage** | ![Working] | Stores data locally before sync |
-| **Privacy Controls** | ![Working] | User-controlled data sharing |
+| **Instagram Detection** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Automatically detects Instagram Reels pages |
+| **Behavioral Tracking** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Tracks watch time, likes, scrolls, replays |
+| **Metadata Extraction** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Extracts usernames, captions, hashtags, audio info |
+| **Smart Batching** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Batches data every 60 seconds |
+| **Local Storage** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Stores data locally before sync |
+| **Privacy Controls** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | User-controlled data sharing |
 
 ### Backend API
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **Event Ingestion** | ![Working] | POST /ingest - Receive behavioral events |
-| **Feature Engineering** | ![Working] | Compute behavioral traits and patterns |
-| **Vector Embeddings** | ![Working] | Sentence-transformers for semantic search |
-| **Vector Storage** | ![Working] | ChromaDB for efficient similarity search |
-| **RAG System** | ![Working] | Retrieval-augmented generation for chat |
-| **Persona Analysis** | ![Working] | Generate behavioral archetypes |
-| **API Documentation** | ![Working] | Swagger docs at /docs |
+| **Event Ingestion** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | POST /ingest - Receive behavioral events |
+| **Feature Engineering** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Compute behavioral traits and patterns |
+| **Vector Embeddings** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Sentence-transformers for semantic search |
+| **Vector Storage** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | ChromaDB for efficient similarity search |
+| **RAG System** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Retrieval-augmented generation for chat |
+| **Persona Analysis** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Generate behavioral archetypes |
+| **API Documentation** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Swagger docs at /docs |
 
 ### Dashboard
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **Real-time Analytics** | ![Working] | Live behavioral statistics |
-| **Persona Visualization** | ![Working] | Visual representation of behavioral patterns |
-| **AI Mirror Chat** | ![Working] | Conversational AI for behavioral insights |
-| **Timezone Support** | ![Working] | UTC and IST timezone options |
-| **Glassmorphic UI** | ![Working] | Modern dark theme with blur effects |
-| **Responsive Design** | ![Working] | Mobile-friendly interface |
+| **Real-time Analytics** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Live behavioral statistics |
+| **Persona Visualization** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Visual representation of behavioral patterns |
+| **AI Mirror Chat** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Conversational AI for behavioral insights |
+| **Timezone Support** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | UTC and IST timezone options |
+| **Glassmorphic UI** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Modern dark theme with blur effects |
+| **Responsive Design** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Mobile-friendly interface |
 
 ### Data Processing
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **Real-time Processing** | ![Working] | Live behavioral analysis |
-| **Pattern Detection** | ![Working] | Identify usage patterns |
-| **Content Analysis** | ![Working] | Hashtag and caption analysis |
-| **Audio Tracking** | ![Working] | Music preference analysis |
-| **User Profiling** | ![Working] | Behavioral persona generation |
-| **Trend Analysis** | ![Working] | Long-term pattern tracking |
+| **Real-time Processing** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Live behavioral analysis |
+| **Pattern Detection** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Identify usage patterns |
+| **Content Analysis** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Hashtag and caption analysis |
+| **Audio Tracking** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Music preference analysis |
+| **User Profiling** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Behavioral persona generation |
+| **Trend Analysis** | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) | Long-term pattern tracking |
 
 ---
 
@@ -222,9 +222,9 @@ npm run dev
 
 | Service | URL | Status |
 |--------|-----|--------|
-| **Backend Health** | http://localhost:8000/health | ![Working] |
-| **Dashboard** | http://localhost:5173 | ![Working] |
-| **API Docs** | http://localhost:8000/docs | ![Working] |
+| **Backend Health** | http://localhost:8000/health | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) |
+| **Dashboard** | http://localhost:5173 | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) |
+| **API Docs** | http://localhost:8000/docs | ![Working](https://img.shields.io/badge/Status-Working-brightgreen?style=flat) |
 
 ---
 
