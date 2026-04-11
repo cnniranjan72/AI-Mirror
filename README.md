@@ -447,38 +447,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
-
-## Roadmap
-
-### Phase 1: Foundation (Current) - Q1 2024
-- [x] Basic behavioral tracking
-- [x] Chrome extension
-- [x] Backend API
-- [x] Dashboard
-- [x] Basic analytics
-- [x] AI Mirror chat
-
-### Phase 2: Intelligence - Q2 2024
-- [ ] Advanced pattern detection
-- [ ] Predictive analytics
-- [ ] Recommendation system
-- [ ] Multi-platform support
-- [ ] Enhanced visualizations
-
-### Phase 3: Personalization - Q3 2024
-- [ ] Machine learning models
-- [ ] Personalized recommendations
-- [ ] Goal setting and tracking
-- [ ] Progress analytics
-- [ ] Social features
-
-### Phase 4: Ecosystem - Q4 2024
-- [ ] Multi-user support
-- [ ] Team analytics
-- ] API platform
-- [ ] Mobile apps
-- [ ] Enterprise features
 
 ---
 
