@@ -90,7 +90,7 @@ async def ingest_events(batch: EventBatch):
                     "total_watch_time": summary.total_watch_time,
                     "reels_count": summary.reels_count,
                     "captions": summary.captions,
-                    "hashtags": summary.hashtags,
+                    "hashtags": summary.hashtags if summary.hashtags else ["none"],
                     "audio_info": summary.audio_info
                 }
                 metadatas.append(summary_metadata)
