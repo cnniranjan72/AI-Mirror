@@ -1,0 +1,388 @@
+"""
+Runtime Builder
+SINGLE entry point for building character runtime
+NO duplicated loading logic
+"""
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+import logging
+import time
+
+from backend.identity.identity_snapshot import IdentitySnapshot, get_snapshot_manager
+from backend.identity.self_model import SelfModel
+from backend.identity.identity_engine import Identity
+from backend.reasoning import Inference
+from backend.reasoning.reasoning_context import (
+    ReasoningContext,
+    MemoryReference,
+    GoalReference,
+    ReflectionReference
+)
+
+from .core import CharacterCore, get_character_core
+from .character_state import CharacterState, get_character_state_builder
+from .runtime_metrics import RuntimeMetrics, get_runtime_metrics
+
+
+logger = logging.getLogger(__name__)
+
+
+class RuntimeBuildResult(BaseModel):
+    """Result of runtime build operation"""
+    success: bool = Field(..., description="Whether build succeeded")
+    character_core: Optional[CharacterCore] = Field(None, description="Character core")
+    character_state: Optional[CharacterState] = Field(None, description="Character state")
+    build_time_ms: float = Field(..., description="Build time in milliseconds")
+    errors: List[str] = Field(default_factory=list, description="Build errors")
+    warnings: List[str] = Field(default_factory=list, description="Build warnings")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Build metadata")
+
+
+class RuntimeBuilder:
+    """
+    Runtime Builder - SINGLE Entry Point
+    
+    Responsibilities:
+    - Load latest IdentitySnapshot
+    - Load latest SelfModel
+    - Load memories (behavior, reflection, goal)
+    - Load ReasoningContext
+    - Load recent Inferences
+    - Assemble CharacterCore
+    - Generate CharacterState
+    
+    This is the ONLY place that orchestrates runtime loading.
+    No duplicated logic anywhere else.
+    """
+    
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize Runtime Builder
+        
+        Args:
+            config: Builder configuration
+        """
+        self.config = config or {}
+        
+        # Get dependencies
+        self.snapshot_manager = get_snapshot_manager()
+        self.core_factory = get_character_core()
+        self.state_builder = get_character_state_builder()
+        self.metrics = get_runtime_metrics()
+        
+        # Configuration
+        self.max_inferences = self.config.get("max_inferences", 20)
+        self.max_reflections = self.config.get("max_reflections", 5)
+        self.max_retrievals = self.config.get("max_retrievals", 10)
+        
+        logger.info("RuntimeBuilder initialized")
+    
+    def build_runtime(
+        self,
+        user_id: str,
+        identity: Optional[Identity] = None,
+        identity_snapshot: Optional[IdentitySnapshot] = None,
+        self_model: Optional[SelfModel] = None,
+        current_query: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None
+    ) -> RuntimeBuildResult:
+        """
+        Build complete character runtime
+        
+        This is the SINGLE entry point for runtime construction.
+        
+        Args:
+            user_id: User identifier
+            identity: Optional identity (will create snapshot if provided)
+            identity_snapshot: Optional existing snapshot
+            self_model: Optional self model
+            current_query: Current user query
+            conversation_id: Conversation ID
+            session_id: Session ID
+            request_id: Request ID
+            
+        Returns:
+            RuntimeBuildResult
+        """
+        start_time = time.time()
+        errors = []
+        warnings = []
+        
+        try:
+            logger.info(f"Building runtime for user {user_id}")
+            
+            # Step 1: Load or create IdentitySnapshot
+            snapshot_start = time.time()
+            if identity_snapshot is None:
+                if identity is not None:
+                    identity_snapshot = self._create_snapshot(identity)
+                else:
+                    identity_snapshot = self._load_latest_snapshot(user_id)
+                    if identity_snapshot is None:
+                        errors.append("No identity snapshot available")
+                        return self._build_error_result(errors, warnings, start_time)
+            
+            snapshot_time = (time.time() - snapshot_start) * 1000
+            self.metrics.record_snapshot_load(snapshot_time)
+            
+            # Step 2: Load SelfModel
+            model_start = time.time()
+            if self_model is None:
+                self_model = self._load_self_model(user_id, identity_snapshot)
+                if self_model is None:
+                    warnings.append("No self model available - using empty model")
+                    self_model = self._create_empty_self_model(user_id, identity_snapshot)
+            
+            model_time = (time.time() - model_start) * 1000
+            self.metrics.record_model_load(model_time)
+            
+            # Step 3: Load Memories
+            memory_start = time.time()
+            memory_ids = self._load_memory_ids(user_id)
+            memory_time = (time.time() - memory_start) * 1000
+            self.metrics.record_memory_load(memory_time)
+            
+            # Step 4: Load ReasoningContext
+            context_start = time.time()
+            reasoning_context = self._load_reasoning_context(user_id)
+            context_time = (time.time() - context_start) * 1000
+            
+            # Step 5: Load recent Inferences
+            inference_start = time.time()
+            recent_inferences = self._load_recent_inferences(user_id)
+            inference_time = (time.time() - inference_start) * 1000
+            self.metrics.record_inference_count(len(recent_inferences))
+            
+            # Step 6: Load Goals
+            goals_start = time.time()
+            active_goals = self._load_active_goals(user_id)
+            goals_time = (time.time() - goals_start) * 1000
+            
+            # Step 7: Load Reflections
+            reflections_start = time.time()
+            recent_reflections = self._load_recent_reflections(user_id)
+            reflections_time = (time.time() - reflections_start) * 1000
+            self.metrics.record_reflection_count(len(recent_reflections))
+            
+            # Step 8: Load Recent Retrievals (placeholder)
+            recent_retrievals = []  # Would be populated from retrieval history
+            
+            # Step 9: Assemble CharacterCore
+            core_start = time.time()
+            character_core = self.core_factory.create_core(
+                user_id=user_id,
+                identity_snapshot=identity_snapshot,
+                self_model=self_model,
+                behavior_memory_ids=memory_ids.get("behavior", []),
+                reflection_memory_ids=memory_ids.get("reflection", []),
+                goal_memory_ids=memory_ids.get("goal", []),
+                episodic_memory_ids=memory_ids.get("episodic", []),
+                semantic_memory_ids=memory_ids.get("semantic", []),
+                reasoning_context=reasoning_context,
+                inference_history=recent_inferences
+            )
+            core_time = (time.time() - core_start) * 1000
+            
+            # Step 10: Generate CharacterState
+            state_start = time.time()
+            character_state = self.state_builder.build_state(
+                user_id=user_id,
+                identity_snapshot=identity_snapshot,
+                self_model=self_model,
+                behavior_memory_ids=memory_ids.get("behavior", []),
+                reflection_memory_ids=memory_ids.get("reflection", []),
+                goal_memory_ids=memory_ids.get("goal", []),
+                active_goals=active_goals,
+                current_query=current_query,
+                conversation_id=conversation_id,
+                recent_reflections=recent_reflections,
+                recent_retrievals=recent_retrievals,
+                active_inferences=recent_inferences,
+                reasoning_context=reasoning_context,
+                session_id=session_id,
+                request_id=request_id
+            )
+            state_time = (time.time() - state_start) * 1000
+            
+            # Calculate total build time
+            build_time = (time.time() - start_time) * 1000
+            self.metrics.record_build_latency(build_time)
+            
+            # Build metadata
+            metadata = {
+                "snapshot_load_ms": snapshot_time,
+                "model_load_ms": model_time,
+                "memory_load_ms": memory_time,
+                "context_load_ms": context_time,
+                "inference_load_ms": inference_time,
+                "goals_load_ms": goals_time,
+                "reflections_load_ms": reflections_time,
+                "core_build_ms": core_time,
+                "state_build_ms": state_time,
+                "total_build_ms": build_time,
+                "snapshot_version": identity_snapshot.identity_version,
+                "inference_count": len(recent_inferences),
+                "reflection_count": len(recent_reflections),
+                "goal_count": len(active_goals),
+                "memory_counts": memory_ids
+            }
+            
+            logger.info(f"Runtime built successfully in {build_time:.2f}ms")
+            
+            return RuntimeBuildResult(
+                success=True,
+                character_core=character_core,
+                character_state=character_state,
+                build_time_ms=build_time,
+                errors=errors,
+                warnings=warnings,
+                metadata=metadata
+            )
+            
+        except Exception as e:
+            logger.error(f"Error building runtime: {str(e)}", exc_info=True)
+            errors.append(f"Runtime build failed: {str(e)}")
+            return self._build_error_result(errors, warnings, start_time)
+    
+    def _create_snapshot(self, identity: Identity) -> IdentitySnapshot:
+        """Create snapshot from identity"""
+        try:
+            snapshot = self.snapshot_manager.create_snapshot(identity)
+            logger.debug(f"Created snapshot {snapshot.snapshot_id}")
+            return snapshot
+        except Exception as e:
+            logger.error(f"Error creating snapshot: {str(e)}", exc_info=True)
+            raise
+    
+    def _load_latest_snapshot(self, user_id: str) -> Optional[IdentitySnapshot]:
+        """Load latest snapshot for user"""
+        try:
+            snapshot = self.snapshot_manager.get_latest_snapshot_for_user(user_id)
+            if snapshot:
+                logger.debug(f"Loaded snapshot {snapshot.snapshot_id} for user {user_id}")
+                self.metrics.record_snapshot_age(snapshot.get_age_seconds())
+            return snapshot
+        except Exception as e:
+            logger.error(f"Error loading snapshot: {str(e)}", exc_info=True)
+            return None
+    
+    def _load_self_model(
+        self,
+        user_id: str,
+        identity_snapshot: IdentitySnapshot
+    ) -> Optional[SelfModel]:
+        """Load self model for user"""
+        try:
+            # In production, would load from database
+            # For now, return None (will create empty model)
+            logger.debug(f"Loading self model for user {user_id}")
+            return None
+        except Exception as e:
+            logger.error(f"Error loading self model: {str(e)}", exc_info=True)
+            return None
+    
+    def _create_empty_self_model(
+        self,
+        user_id: str,
+        identity_snapshot: IdentitySnapshot
+    ) -> SelfModel:
+        """Create empty self model"""
+        from backend.identity.self_model import UncertaintyMap
+        import uuid
+        
+        return SelfModel(
+            self_model_id=f"selfmodel_{user_id}_empty",
+            user_id=user_id,
+            identity_snapshot_id=identity_snapshot.snapshot_id,
+            uncertainty_map=UncertaintyMap(
+                overall_uncertainty=0.5,
+                last_updated=datetime.utcnow()
+            ),
+            overall_confidence=0.5,
+            model_completeness=0.0,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+    
+    def _load_memory_ids(self, user_id: str) -> Dict[str, List[str]]:
+        """Load memory IDs for user"""
+        try:
+            # In production, would query database for memory IDs
+            # For now, return empty
+            return {
+                "behavior": [],
+                "reflection": [],
+                "goal": [],
+                "episodic": [],
+                "semantic": []
+            }
+        except Exception as e:
+            logger.error(f"Error loading memory IDs: {str(e)}", exc_info=True)
+            return {}
+    
+    def _load_reasoning_context(self, user_id: str) -> Optional[ReasoningContext]:
+        """Load reasoning context for user"""
+        try:
+            # In production, would build from recent data
+            # For now, return None
+            return None
+        except Exception as e:
+            logger.error(f"Error loading reasoning context: {str(e)}", exc_info=True)
+            return None
+    
+    def _load_recent_inferences(self, user_id: str) -> List[Inference]:
+        """Load recent inferences for user"""
+        try:
+            # In production, would query database
+            # For now, return empty
+            return []
+        except Exception as e:
+            logger.error(f"Error loading inferences: {str(e)}", exc_info=True)
+            return []
+    
+    def _load_active_goals(self, user_id: str) -> List[GoalReference]:
+        """Load active goals for user"""
+        try:
+            # In production, would query goal memory
+            # For now, return empty
+            return []
+        except Exception as e:
+            logger.error(f"Error loading goals: {str(e)}", exc_info=True)
+            return []
+    
+    def _load_recent_reflections(self, user_id: str) -> List[ReflectionReference]:
+        """Load recent reflections for user"""
+        try:
+            # In production, would query reflection memory
+            # For now, return empty
+            return []
+        except Exception as e:
+            logger.error(f"Error loading reflections: {str(e)}", exc_info=True)
+            return []
+    
+    def _build_error_result(
+        self,
+        errors: List[str],
+        warnings: List[str],
+        start_time: float
+    ) -> RuntimeBuildResult:
+        """Build error result"""
+        build_time = (time.time() - start_time) * 1000
+        
+        return RuntimeBuildResult(
+            success=False,
+            build_time_ms=build_time,
+            errors=errors,
+            warnings=warnings,
+            metadata={"error": True}
+        )
+
+
+def get_runtime_builder() -> RuntimeBuilder:
+    """Get singleton runtime builder instance"""
+    if not hasattr(get_runtime_builder, "_instance"):
+        get_runtime_builder._instance = RuntimeBuilder()
+    return get_runtime_builder._instance
