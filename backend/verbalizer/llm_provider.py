@@ -5,13 +5,22 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_OPENAI_MODEL = "gpt-4o"
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
+
+
 async def openai_call(
     system_prompt: str,
     user_prompt: str,
-    model: str = "gpt-4",
+    model: Optional[str] = None,
     max_tokens: int = 2048,
     temperature: float = 0.7,
 ) -> str:
+    # A model id may arrive from a provider-agnostic caller (e.g. the verbalizer
+    # default). Reject ids that clearly belong to another provider.
+    if not model or not model.lower().startswith(("gpt", "o1", "o3", "chatgpt")):
+        model = DEFAULT_OPENAI_MODEL
+
     try:
         from openai import AsyncOpenAI
     except ImportError:
@@ -39,10 +48,14 @@ async def openai_call(
 async def anthropic_call(
     system_prompt: str,
     user_prompt: str,
-    model: str = "claude-3-sonnet-20241022",
+    model: Optional[str] = None,
     max_tokens: int = 2048,
     temperature: float = 0.7,
 ) -> str:
+    # Ignore ids that belong to another provider (see openai_call).
+    if not model or not model.lower().startswith("claude"):
+        model = DEFAULT_ANTHROPIC_MODEL
+
     try:
         from anthropic import AsyncAnthropic
     except ImportError:

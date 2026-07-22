@@ -8,6 +8,7 @@ Architecture V3 — FROZEN. No redesign.
 """
 import json
 import logging
+import os
 import time
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Callable, Awaitable
@@ -143,7 +144,9 @@ class LLMVerbalizer:
     ):
         self.llm_call = llm_call
         self.config = config or {}
-        self.model = self.config.get("model", "gpt-4")
+        # Provider-agnostic: when unset, each provider call resolves its own
+        # default model (see llm_provider). Avoids sending a gpt-* id to Claude.
+        self.model = self.config.get("model") or os.getenv("LLM_MODEL") or None
         self.max_tokens = self.config.get("max_tokens", 2048)
         self.temperature = self.config.get("temperature", 0.7)
 
@@ -158,14 +161,24 @@ class LLMVerbalizer:
             content = ""
 
             if self.llm_call:
-                content = await self.llm_call(
-                    system_prompt=prompt.system_prompt,
-                    user_prompt=prompt.prompt_text,
-                    model=self.model,
-                    max_tokens=self.max_tokens,
-                    temperature=self.temperature,
-                )
-            else:
+                try:
+                    content = await self.llm_call(
+                        system_prompt=prompt.system_prompt,
+                        user_prompt=prompt.prompt_text,
+                        model=self.model,
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                    )
+                except Exception as e:
+                    # Missing API key, network error, unavailable SDK — never
+                    # return a blank response; fall back to deterministic text
+                    # built directly from the character context.
+                    logger.warning(
+                        "LLM call failed (%s); using deterministic fallback", e
+                    )
+                    content = ""
+
+            if not content or not content.strip():
                 content = self._fallback_verbalization(context, plan)
 
             elapsed = (time.perf_counter() - start) * 1000
