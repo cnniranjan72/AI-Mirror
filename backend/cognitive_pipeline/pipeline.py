@@ -7,6 +7,7 @@ Architecture V3 — FROZEN. No redesign.
 """
 import json
 import logging
+import os
 import time
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
@@ -66,7 +67,12 @@ class CognitivePipelineResult:
 class CognitivePipeline:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
-        self.pipeline_timeout = self.config.get("pipeline_timeout", 30.0)
+        # Local LLMs (Ollama on CPU) can be slow, especially on the first
+        # cold call while the model loads into memory. Keep the timeout
+        # generous and env-configurable so verbalization isn't cut off.
+        self.pipeline_timeout = self.config.get(
+            "pipeline_timeout", float(os.getenv("COGNITIVE_PIPELINE_TIMEOUT", "120"))
+        )
         self.runtime_builder = get_runtime_builder()
         self.planner = get_planner_orchestrator()
         self.retriever = get_retriever()
