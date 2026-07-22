@@ -150,6 +150,17 @@ class LLMVerbalizer:
         self.model = self.config.get("model") or os.getenv("LLM_MODEL") or None
         self.max_tokens = self.config.get("max_tokens", 2048)
         self.temperature = self.config.get("temperature", 0.7)
+        # Circuit breaker: after an unrecoverable LLM error (bad key, no billing)
+        # stop calling the LLM for the rest of the process so every subsequent
+        # request serves the deterministic fallback instantly instead of waiting
+        # ~20s for the provider to reject it again. Cleared on restart.
+        self._llm_disabled = False
+        self._llm_disabled_reason: Optional[str] = None
+
+    _FATAL_LLM_ERRORS = (
+        "insufficient_quota", "authentication", "invalid_api_key",
+        "invalid api key", "401", "permission",
+    )
 
     async def verbalize(
         self,
@@ -161,7 +172,7 @@ class LLMVerbalizer:
             prompt = self._build_prompt(context, plan)
             content = ""
 
-            if self.llm_call:
+            if self.llm_call and not self._llm_disabled:
                 try:
                     content = await self.llm_call(
                         system_prompt=prompt.system_prompt,
@@ -178,6 +189,15 @@ class LLMVerbalizer:
                         "LLM call failed (%s); using deterministic fallback", e
                     )
                     content = ""
+                    msg = str(e).lower()
+                    if any(s in msg for s in self._FATAL_LLM_ERRORS):
+                        self._llm_disabled = True
+                        self._llm_disabled_reason = str(e)[:200]
+                        logger.error(
+                            "Disabling LLM verbalization for this process "
+                            "(fix the provider account, then restart): %s",
+                            self._llm_disabled_reason,
+                        )
 
             used_fallback = False
             if not content or not content.strip():

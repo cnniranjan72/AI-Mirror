@@ -33,8 +33,12 @@ async def openai_call(
         raise ValueError("OPENAI_API_KEY not configured")
 
     # Fail fast: on quota/rate errors we fall back to deterministic text, so
-    # long SDK retry backoffs would only add latency before that fallback.
-    client = AsyncOpenAI(api_key=api_key, max_retries=int(os.getenv("LLM_MAX_RETRIES", "0")))
+    # long SDK retry backoffs and hangs only add latency before that fallback.
+    client = AsyncOpenAI(
+        api_key=api_key,
+        max_retries=int(os.getenv("LLM_MAX_RETRIES", "0")),
+        timeout=float(os.getenv("LLM_TIMEOUT", "30")),
+    )
     response = await client.chat.completions.create(
         model=model,
         messages=[
@@ -69,7 +73,11 @@ async def anthropic_call(
         logger.error("ANTHROPIC_API_KEY not set")
         raise ValueError("ANTHROPIC_API_KEY not configured")
 
-    client = AsyncAnthropic(api_key=api_key, max_retries=int(os.getenv("LLM_MAX_RETRIES", "0")))
+    client = AsyncAnthropic(
+        api_key=api_key,
+        max_retries=int(os.getenv("LLM_MAX_RETRIES", "0")),
+        timeout=float(os.getenv("LLM_TIMEOUT", "30")),
+    )
     response = await client.messages.create(
         model=model,
         system=system_prompt,
