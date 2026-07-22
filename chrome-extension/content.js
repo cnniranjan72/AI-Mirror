@@ -12,8 +12,12 @@
     MIN_WATCH_TIME: 0.5,
     BATCH_SIZE: 10,
     BATCH_INTERVAL: 30000,
-    BACKEND_URL: 'http://localhost:8000/ingest',
-    USER_ID: 'default',
+    // Backend runs on :8001 in local dev (:8000 is taken by another service).
+    // Change the port here (and in background.js) to match your backend.
+    BACKEND_URL: 'http://localhost:8001/ingest',
+    // The twin this data feeds. Matches the dashboard's default user
+    // (VITE_USER_ID) so watched reels evolve the twin you see in the UI.
+    USER_ID: 'test_user_001',
   };
 
   // ==================== STATE ====================
