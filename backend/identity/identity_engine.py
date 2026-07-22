@@ -280,8 +280,14 @@ class IdentityEngine:
             emerging_topics = [node.topic for node in interest_graph.emerging_interests[:3]]
             declining_topics = [node.topic for node in interest_graph.declining_interests[:3]]
             
-            # Build timeline
-            sorted_behaviors = sorted(behavior_objects, key=lambda b: b.created_at)
+            # Build timeline (handle naive vs aware datetimes)
+            def _safe_sort_key(b):
+                dt = b.created_at
+                if dt.tzinfo is None:
+                    from datetime import timezone
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
+            sorted_behaviors = sorted(behavior_objects, key=_safe_sort_key)
             behavior_timeline = [b.unique_id for b in sorted_behaviors]
             
             # Calculate confidence
@@ -388,7 +394,14 @@ class IdentityEngine:
             for topic, topic_behaviors_list in topic_behaviors.items():
                 total_occurrences = sum(b.temporal_statistics.occurrence_count for b in topic_behaviors_list)
                 avg_engagement = sum(b.engagement_statistics.overall_engagement_rate for b in topic_behaviors_list) / len(topic_behaviors_list)
-                last_engaged = max(b.temporal_statistics.last_seen for b in topic_behaviors_list)
+                def _safe_max_dt(items):
+                    def _to_utc(dt):
+                        if dt.tzinfo is None:
+                            from datetime import timezone
+                            return dt.replace(tzinfo=timezone.utc)
+                        return dt
+                    return max(items, key=_to_utc)
+                last_engaged = _safe_max_dt(b.temporal_statistics.last_seen for b in topic_behaviors_list)
                 
                 # Determine trend
                 lifecycle_states = [b.lifecycle_state for b in topic_behaviors_list]

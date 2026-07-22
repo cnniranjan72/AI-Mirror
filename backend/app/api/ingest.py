@@ -1,15 +1,24 @@
 """
-POST /ingest — Full behavioral intelligence pipeline
-Extension → Enrich → Expand → Embed → Store → Persona → RL
-"""
+POST /ingest — V3 Pipeline Integration
 
+The SINGLE entry point for all event ingestion.
+Every event now traverses:
+  BehaviorGateway → KnowledgeConsolidation → BehaviorObjects
+  → Evidence → Inference → Identity → Snapshot → SelfModel
+
+Legacy V2 Persona is replaced by Identity + PersonaAdapter.
+"""
 import json
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
+
+from backend.core.behavior_gateway import get_behavior_gateway
+from backend.shared.contracts import BehaviorEvent, EventSource
+from pipeline.orchestrator import V3Pipeline
 
 from app.services import (
     enrichment,
@@ -17,13 +26,23 @@ from app.services import (
     embedding as emb,
     vector_store,
     feature_engineering,
-    persona as persona_svc,
     rl_layer,
 )
+from app.services.persona_adapter import identity_to_persona
 from app.db.postgres import fetchrow, execute
+from backend.providers import get_provider_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_v3_pipeline: Optional[V3Pipeline] = None
+
+
+def get_v3_pipeline() -> V3Pipeline:
+    global _v3_pipeline
+    if _v3_pipeline is None:
+        _v3_pipeline = V3Pipeline()
+    return _v3_pipeline
 
 
 class EventItem(BaseModel):
@@ -35,6 +54,7 @@ class EventItem(BaseModel):
     watch_time: float = 0
     timestamp: str = ""
     session_id: str = ""
+    source_url: str = ""
 
 
 class IngestRequest(BaseModel):
@@ -42,27 +62,85 @@ class IngestRequest(BaseModel):
     events: List[EventItem]
 
 
+class ExtractRequest(BaseModel):
+    url: str
+    prompt: Optional[str] = None
+
+
+class ExtractResponse(BaseModel):
+    success: bool
+    content_id: str
+    title: Optional[str] = None
+    caption: Optional[str] = None
+    hashtags: List[str] = Field(default_factory=list)
+    topics: List[str] = Field(default_factory=list)
+    intent: Optional[str] = None
+    sentiment: Optional[str] = None
+    confidence: float = 0
+    provider: str = ""
+    error: Optional[str] = None
+
+
 class IngestResponse(BaseModel):
     success: bool
     events_stored: int
     embeddings_created: int
     persona_label: Optional[str] = None
+    identity_version: Optional[int] = None
+    confidence: Optional[float] = None
     alignment_score: Optional[float] = None
     message: str
 
 
+async def record_cognitive_metrics(user_id: str, v3_result):
+    try:
+        from app.db.postgres import execute as db_execute
+        metrics = [
+            ("behavior_object_count", len(v3_result.behavior_objects) if v3_result.behavior_objects else 0, {"type": "pipeline"}),
+            ("evidence_count", len(v3_result.evidence) if v3_result.evidence else 0, {"type": "pipeline"}),
+            ("inference_count", len(v3_result.inferences) if v3_result.inferences else 0, {"type": "pipeline"}),
+            ("identity_version", v3_result.identity.identity_version if v3_result.identity else 0, {"type": "identity"}),
+            ("identity_confidence", v3_result.identity.overall_confidence if v3_result.identity else 0, {"type": "identity"}),
+        ]
+        for name, value, tags in metrics:
+            await db_execute(
+                """
+                INSERT INTO cognitive_metrics (user_id, metric_name, metric_value, metric_tags)
+                VALUES ($1, $2, $3, $4::jsonb)
+                """,
+                user_id, name, value, json.dumps(tags),
+            )
+    except Exception as e:
+        logger.warning(f"Failed to record metrics: {e}")
+
+
+async def cleanup_old_snapshots(user_id: str, keep_count: int = 20):
+    try:
+        from app.db.postgres import execute as db_execute
+        await db_execute(
+            """
+            DELETE FROM identity_snapshots
+            WHERE user_id = $1 AND snapshot_id NOT IN (
+                SELECT snapshot_id FROM identity_snapshots
+                WHERE user_id = $1
+                ORDER BY snapshot_timestamp DESC
+                LIMIT $2
+            )
+            """,
+            user_id, keep_count,
+        )
+    except Exception as e:
+        logger.warning(f"Snapshot cleanup failed: {e}")
+
+
 @router.post("/ingest", response_model=IngestResponse)
-async def ingest_events(req: IngestRequest):
+async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
     """
-    Full pipeline:
-    1. Store raw events
-    2. NLP enrichment (topics, sentiment, intent)
-    3. Content expansion (short → rich text)
-    4. Embedding generation (384-dim)
-    5. Vector store insertion (pgvector)
-    6. Feature engineering
-    7. Persona computation
-    8. RL alignment check
+    V3 Pipeline: Extension → BehaviorGateway → KnowledgeConsolidation
+    → BehaviorObjects → Evidence → Inference → Identity → Snapshot → SelfModel
+
+    Backward-compatible: Persona derived from Identity via PersonaAdapter.
+    Legacy: V2 services (embedding, vector_store, RL) still run alongside.
     """
     if not req.events:
         raise HTTPException(status_code=400, detail="No events provided")
@@ -70,20 +148,41 @@ async def ingest_events(req: IngestRequest):
     user_id = req.user_id
     stored_count = 0
     embed_count = 0
-    event_dicts = []
+    normalized_events = []
 
     try:
-        # ── STEP 1 & 2 & 3: Process each event ──
+        # ── STEP 1: Behavior Gateway (normalize all events) ──
+        gateway = get_behavior_gateway()
+        for ev in req.events:
+            raw_payload = {
+                "events": [{
+                    "reel_id": ev.reel_id,
+                    "username": ev.username,
+                    "caption": ev.caption,
+                    "hashtags": ev.hashtags,
+                    "audio_info": ev.audio,
+                    "watch_time": ev.watch_time,
+                    "liked": False,
+                    "timestamp": ev.timestamp or datetime.utcnow().isoformat(),
+                    "session_id": ev.session_id,
+                    "source_url": ev.source_url or "",
+                }]
+            }
+            batch_events = gateway.process_batch(raw_payload, EventSource.CHROME_EXTENSION)
+            normalized_events.extend(batch_events)
+
+        if not normalized_events:
+            raise HTTPException(status_code=400, detail="No valid events after normalization")
+
+        logger.info(f"Normalized {len(normalized_events)} events via BehaviorGateway")
+
+        # ── STEP 2: Store raw events to database ──
         texts_to_embed = []
         metadatas = []
+        event_dicts = []
 
-        for ev in req.events:
-            # 1. Store raw event
-            ts = ev.timestamp or datetime.utcnow().isoformat()
-            try:
-                ts_parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            except Exception:
-                ts_parsed = datetime.utcnow()
+        for i, bev in enumerate(normalized_events):
+            raw_ev = req.events[min(i, len(req.events) - 1)]
 
             row = await fetchrow(
                 """
@@ -93,64 +192,78 @@ async def ingest_events(req: IngestRequest):
                 RETURNING id
                 """,
                 user_id,
-                ev.reel_id,
-                ev.username,
-                ev.caption,
-                json.dumps(ev.hashtags),
-                ev.audio,
-                ev.watch_time,
-                ts_parsed,
-                ev.session_id,
+                bev.content_id,
+                bev.creator,
+                bev.caption or "",
+                json.dumps(bev.hashtags),
+                bev.audio_info,
+                bev.watch_time,
+                bev.timestamp,
+                bev.session_id,
             )
             event_id = row["id"]
             stored_count += 1
 
-            logger.info(
-                "Event stored id=%d reel=%s user=%s caption=%s",
-                event_id, ev.reel_id, ev.username,
-                ev.caption[:50] if ev.caption else "(empty)",
-            )
-
-            # 2. NLP enrichment
-            enriched = enrichment.enrich(ev.caption, ev.hashtags)
-            logger.info("[ENRICH] topics=%s sentiment=%s intent=%s",
-                         enriched["topics"], enriched["sentiment"], enriched["intent"])
-
-            # 3. Content expansion
-            expanded_text = expansion.expand(ev.caption, ev.hashtags, enriched)
-            logger.info("[EXPAND] expanded text length: %d", len(expanded_text))
+            # Content Intelligence (still needed for expansion/embeddings)
+            enriched = enrichment.enrich(bev.caption or "", bev.hashtags)
+            expanded_text = expansion.expand(bev.caption or "", bev.hashtags, enriched)
 
             texts_to_embed.append(expanded_text)
             metadatas.append({
                 "event_id": event_id,
-                "reel_id": ev.reel_id,
-                "username": ev.username,
-                "watch_time": ev.watch_time,
-                "session_id": ev.session_id,
-                "topics": enriched["topics"] or [],
-                "sentiment": enriched["sentiment"] or "neutral",
-                "intent": enriched["intent"] or "entertainment",
+                "reel_id": bev.content_id,
+                "username": bev.creator,
+                "watch_time": bev.watch_time,
+                "session_id": bev.session_id,
+                "topics": enriched.get("topics", []),
+                "sentiment": enriched.get("sentiment", "neutral"),
+                "intent": enriched.get("intent", "entertainment"),
             })
 
             event_dicts.append({
-                "reel_id": ev.reel_id,
-                "username": ev.username,
-                "caption": ev.caption,
-                "hashtags": ev.hashtags,
-                "watch_time": ev.watch_time,
-                "session_id": ev.session_id,
+                "reel_id": bev.content_id,
+                "username": bev.creator,
+                "caption": bev.caption,
+                "hashtags": bev.hashtags,
+                "watch_time": bev.watch_time,
+                "session_id": bev.session_id,
             })
 
-        # Collect all enrichment topics for persona
-        all_topics = []
+        # ── STEP 2.5: URL-based content enrichment (if source_url provided) ──
         for ev in req.events:
-            enriched = enrichment.enrich(ev.caption, ev.hashtags)
-            all_topics.extend(enriched["topics"])
+            url = (ev.source_url or "").strip()
+            if not url:
+                continue
+            try:
+                pm = get_provider_manager()
+                extracted = await pm.extract_content(url)
+                if extracted and extracted.confidence > 0.3:
+                    # Find the corresponding normalized event
+                    for bev in normalized_events:
+                        if bev.content_id == ev.reel_id:
+                            if extracted.caption and not bev.caption:
+                                bev.caption = extracted.caption
+                            if extracted.hashtags:
+                                existing_tags = set(t.lower() for t in bev.hashtags)
+                                for tag in extracted.hashtags:
+                                    if tag.lower() not in existing_tags:
+                                        bev.hashtags.append(tag)
+                                        existing_tags.add(tag.lower())
+                            if extracted.topics:
+                                bev.raw_metadata["extracted_topics"] = extracted.topics
+                            if extracted.creator and not bev.creator:
+                                bev.creator = extracted.creator
+                            bev.raw_metadata["content_extracted"] = True
+                            bev.raw_metadata["extraction_provider"] = extracted.provider
+                            bev.raw_metadata["extraction_confidence"] = extracted.confidence
+                            logger.info(f"URL enrichment for {ev.reel_id} from {url}: topics={extracted.topics}")
+                            break
+            except Exception as e:
+                logger.warning(f"URL enrichment failed for {url}: {e}")
 
-        # ── STEP 4 & 5: Batch embed + store ──
+        # ── STEP 3: Generate embeddings (for vector search) ──
         if texts_to_embed:
             embeddings = emb.encode_batch(texts_to_embed)
-            logger.info("[EMBED] generated %d embeddings (dimension: %d)", len(embeddings), len(embeddings[0]) if embeddings else 0)
             embed_count = await vector_store.insert_embeddings_batch(
                 user_id=user_id,
                 texts=texts_to_embed,
@@ -158,9 +271,24 @@ async def ingest_events(req: IngestRequest):
                 doc_type="event",
                 metadatas=metadatas,
             )
-            logger.info("[DB] inserted %d embeddings for user=%s", embed_count, user_id)
 
-        # ── STEP 6: Feature engineering ──
+        # ── STEP 4: Run V3 Pipeline (Identity replaces Persona) ──
+        pipeline = get_v3_pipeline()
+        existing_identity = await pipeline.load_identity(user_id)
+
+        v3_result = await pipeline.run(
+            user_id=user_id,
+            events=normalized_events,
+            existing_identity=existing_identity,
+        )
+
+        # ── STEP 5: Create Persona from Identity (backward compatibility) ──
+        persona_data = None
+        if v3_result.identity:
+            persona_data = identity_to_persona(v3_result.identity)
+            await save_persona_from_adapter(user_id, persona_data)
+
+        # ── STEP 6: V2 services still run alongside (for dashboard compat) ──
         features = feature_engineering.compute_features(event_dicts)
 
         # Store behavioral summary embedding
@@ -173,20 +301,12 @@ async def ingest_events(req: IngestRequest):
                 doc_type="behavioral_summary",
                 metadata={"source": "feature_engineering", "event_count": len(event_dicts)},
             )
-            logger.info("Stored behavioral summary embedding")
 
-        # ── STEP 7: Persona computation ──
-        # Get unique topics
-        unique_topics = list(set(all_topics))
-        persona = persona_svc.compute_persona(features, enrichment_topics=unique_topics)
-        await persona_svc.save_persona(user_id, persona)
-        logger.info("[PERSONA] persona_label=%s confidence=%s", persona["persona_label"], persona["confidence"])
-
-        # ── STEP 8: RL alignment ──
-        alignment = rl_layer.compute_alignment(persona, features)
+        # ── STEP 7: RL alignment (now uses identity-derived persona) ──
+        persona_for_rl = persona_data or _empty_persona()
+        alignment = rl_layer.compute_alignment(persona_for_rl, features)
         suggestion = rl_layer.suggest_action(alignment, features)
 
-        # Log the RL action
         await rl_layer.log_action(
             user_id=user_id,
             action_type=suggestion["action"]["action_id"],
@@ -195,15 +315,106 @@ async def ingest_events(req: IngestRequest):
             reward=suggestion["expected_reward"],
         )
 
+        # Background: record metrics and cleanup old snapshots
+        background_tasks.add_task(record_cognitive_metrics, user_id, v3_result)
+        background_tasks.add_task(cleanup_old_snapshots, user_id)
+
+        # Build response
+        identity_version = v3_result.identity.identity_version if v3_result.identity else None
+        confidence = v3_result.identity.overall_confidence if v3_result.identity else None
+
         return IngestResponse(
             success=True,
             events_stored=stored_count,
             embeddings_created=embed_count,
-            persona_label=persona["persona_label"],
+            persona_label=persona_data["persona_label"] if persona_data else None,
+            identity_version=identity_version,
+            confidence=confidence,
             alignment_score=alignment["overall_score"],
-            message=f"Pipeline complete: {stored_count} events → {embed_count} embeddings → persona={persona['persona_label']}",
+            message=(
+                f"V3 pipeline: {stored_count} events → "
+                f"{len(v3_result.behavior_objects)} behavior objects → "
+                f"{len(v3_result.evidence)} evidence → "
+                f"{len(v3_result.inferences)} inferences → "
+                f"identity v{identity_version}"
+            ),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Ingest pipeline failed")
         raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
+
+
+@router.post("/extract", response_model=ExtractResponse)
+async def extract_content(req: ExtractRequest):
+    """
+    Extract structured content from a URL using ScrapeGraphAI.
+    Uses LLM-powered SmartScraperGraph to extract:
+    title, caption, hashtags, topics, intent, sentiment, creator.
+    """
+    if not req.url.strip():
+        raise HTTPException(status_code=400, detail="URL cannot be empty")
+
+    try:
+        pm = get_provider_manager()
+        result = await pm.extract_content(url=req.url, prompt=req.prompt)
+
+        return ExtractResponse(
+            success=result.confidence > 0.3,
+            content_id=result.content_id,
+            title=result.title,
+            caption=result.caption,
+            hashtags=result.hashtags,
+            topics=result.topics,
+            intent=result.intent,
+            sentiment=result.sentiment,
+            confidence=result.confidence,
+            provider=result.provider,
+        )
+
+    except Exception as e:
+        logger.exception("Content extraction failed")
+        return ExtractResponse(
+            success=False,
+            content_id="",
+            error=str(e),
+        )
+
+
+async def save_persona_from_adapter(user_id: str, persona: Dict[str, Any]):
+    """Save identity-derived persona to personas table for backward compat"""
+    try:
+        await execute(
+            """
+            INSERT INTO personas (user_id, interest_vector, behavior_vector,
+                                  persona_label, traits, strengths, weaknesses,
+                                  recommendations, confidence)
+            VALUES ($1, $2::jsonb, $3::jsonb, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8::jsonb, $9)
+            """,
+            user_id,
+            json.dumps(persona["interest_vector"]),
+            json.dumps(persona["behavior_vector"]),
+            persona["persona_label"],
+            json.dumps(persona["traits"]),
+            json.dumps(persona["strengths"]),
+            json.dumps(persona["weaknesses"]),
+            json.dumps(persona["recommendations"]),
+            persona["confidence"],
+        )
+    except Exception as e:
+        logger.warning(f"Could not save persona adapter data: {e}")
+
+
+def _empty_persona() -> Dict[str, Any]:
+    return {
+        "persona_label": "Emerging User",
+        "traits": {"attention_score": 0, "engagement_score": 0, "content_diversity": 0, "curiosity_score": 0},
+        "interest_vector": {"top_topics": [], "topic_count": 0},
+        "behavior_vector": {"avg_watch_time": 0, "total_watch_time": 0, "total_events": 0, "top_creators": []},
+        "strengths": [],
+        "weaknesses": [],
+        "recommendations": [],
+        "confidence": 0,
+    }

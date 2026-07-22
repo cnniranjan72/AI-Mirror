@@ -1,0 +1,190 @@
+import { useState } from 'react'
+import { useIdentity, useCognitiveMetrics } from '../../hooks/useApi'
+import GlassCard from '../../components/ui/GlassCard'
+import StatCard from '../../components/ui/StatCard'
+import Badge from '../../components/ui/Badge'
+import { TargetIcon, ActivityIcon, BrainIcon, ClockIcon, LayersIcon } from '../../icons/icons'
+import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from 'recharts'
+import IdentityInspector from '../../components/explain/IdentityInspector'
+import IdentityEvolution from '../../components/identity/IdentityEvolution'
+
+const subProfiles = [
+  { key: 'behavior_profile', label: 'Behavior Profile', fields: ['avg_engagement_rate', 'behavior_diversity', 'behavior_stability'] },
+  { key: 'interest_graph', label: 'Interest Graph', fields: ['diversity_score'] },
+  { key: 'creator_graph', label: 'Creator Graph', fields: ['creator_diversity_score', 'dependence_score'] },
+  { key: 'learning_style', label: 'Learning Style', fields: ['confidence'] },
+  { key: 'attention_profile', label: 'Attention Profile', fields: ['avg_attention_span'] },
+]
+
+export default function IdentityPage() {
+  const { current: identityData, snapshots, summary: cognitiveSummary, loading } = useIdentity()
+  const { metrics } = useCognitiveMetrics()
+  const [inspectingIdentity, setInspectingIdentity] = useState(null)
+  const [view, setView] = useState('overview')
+
+  const identity = identityData
+  const identityId = identity?.identity_id || identityData?.latest_snapshot?.identity_id
+  const snapshotList = snapshots || []
+  const radarData = identity?.profile ? [
+    { trait: 'Openness', value: (identity.profile.openness || 0) * 100 },
+    { trait: 'Conscientiousness', value: (identity.profile.conscientiousness || 0) * 100 },
+    { trait: 'Extraversion', value: (identity.profile.extraversion || 0) * 100 },
+    { trait: 'Agreeableness', value: (identity.profile.agreeableness || 0) * 100 },
+    { trait: 'Neuroticism', value: (identity.profile.neuroticism || 0) * 100 },
+  ] : [
+    { trait: 'Openness', value: 0 },
+    { trait: 'Conscientiousness', value: 0 },
+    { trait: 'Extraversion', value: 0 },
+    { trait: 'Agreeableness', value: 0 },
+    { trait: 'Neuroticism', value: 0 },
+  ]
+
+  const versionHistory = snapshotList.map((s, i) => ({
+    version: s.snapshot_version || i + 1,
+    confidence: s.confidence || (s.overall_confidence || 0),
+    timestamp: s.snapshot_timestamp || s.created_at,
+  })).reverse()
+
+  return (
+    <div>
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          <div>
+            <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Identity</h1>
+            <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive identity profile and evolution tracking</p>
+          </div>
+          {snapshotList.length >= 2 && (
+            <div style={{ display: 'flex', gap: 4, background: 'var(--bg-surface)', borderRadius: 8, padding: 2, border: '1px solid var(--border-subtle)' }}>
+              {['overview', 'evolution'].map(v => (
+                <button key={v} onClick={() => setView(v)} style={{
+                  padding: '6px 14px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  background: view === v ? 'var(--indigo-500)' : 'transparent',
+                  color: view === v ? 'white' : 'var(--text-muted)',
+                  transition: 'all 0.15s',
+                }}>{v === 'overview' ? 'Overview' : 'Evolution'}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {view === 'overview' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
+            <StatCard label="Identity Confidence" value={identity?.overall_confidence ? `${Math.round(identity.overall_confidence * 100)}%` : '--'} icon={TargetIcon} accent="indigo" loading={loading}
+              onClick={identityId ? () => setInspectingIdentity(identityId) : undefined} />
+            <StatCard label="Completeness" value={identity?.identity_completeness ? `${Math.round(identity.identity_completeness * 100)}%` : '--'} icon={ActivityIcon} accent="violet" loading={loading}
+              onClick={identityId ? () => setInspectingIdentity(identityId) : undefined} />
+            <StatCard label="Avg Stability" value={cognitiveSummary?.avg_stability ? `${Math.round(cognitiveSummary.avg_stability * 100)}%` : '--'} icon={BrainIcon} accent="emerald" loading={loading} />
+            <StatCard label="Version" value={identity?.identity_version || cognitiveSummary?.current_version || '--'} icon={LayersIcon} accent="cyan" loading={loading} />
+            <StatCard label="Snapshots" value={snapshotList.length} icon={ClockIcon} accent="amber" loading={loading} />
+          </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
+        <GlassCard gradient>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Identity Radar</h3>
+            <Badge variant="indigo">Big Five</Badge>
+          </div>
+          <ResponsiveContainer width="100%" height={320}>
+            <RadarChart data={radarData}>
+              <PolarGrid stroke="rgba(148,163,184,0.12)" />
+              <PolarAngleAxis dataKey="trait" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+              <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+              <Radar name="Profile" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} strokeWidth={2} />
+              <Radar name="Baseline" dataKey="value" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.1} strokeWidth={1} strokeDasharray="4 4" />
+            </RadarChart>
+          </ResponsiveContainer>
+        </GlassCard>
+
+        <GlassCard gradient>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Identity Evolution</h3>
+            <Badge variant="neutral">Confidence over versions</Badge>
+          </div>
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={versionHistory}>
+              <defs>
+                <linearGradient id="colorConf" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
+              <XAxis dataKey="version" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} label={{ value: 'Version', position: 'bottom', fill: '#64748b', fontSize: 11 }} />
+              <YAxis domain={[0, 1]} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} />
+              <Area type="monotone" dataKey="confidence" stroke="#6366f1" fill="url(#colorConf)" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </GlassCard>
+      </div>
+
+      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Sub-Profile Details</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 32 }}>
+        {subProfiles.map(sp => {
+          const sub = identity?.[sp.key]
+          if (!sub) return null
+          return (
+            <GlassCard key={sp.key}>
+              <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: 'var(--text-secondary)' }}>{sp.label}</h4>
+              {sp.fields.map(f => (
+                <div key={f} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)', fontSize: 13 }}>
+                  <span style={{ color: 'var(--text-muted)', textTransform: 'capitalize' }}>{f.replace(/_/g, ' ')}</span>
+                  <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{sub[f] !== undefined ? Math.round(sub[f] * 100) / 100 : '--'}</span>
+                </div>
+              ))}
+            </GlassCard>
+          )
+        })}
+      </div>
+
+      <GlassCard gradient>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600 }}>Snapshot Explorer</h3>
+          <Badge variant="neutral">{snapshotList.length} snapshots</Badge>
+        </div>
+        {snapshotList.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No identity snapshots yet</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {snapshotList.slice(-10).reverse().map((s, i) => (
+              <div key={s.snapshot_id || i} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                borderRadius: 8, background: 'rgba(148,163,184,0.04)',
+                animation: `fadeIn 0.3s ease-out ${i * 0.04}s both`,
+              }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--indigo-400)', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                    v{s.snapshot_version || s.version || i + 1}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {s.snapshot_timestamp || s.created_at ? new Date(s.snapshot_timestamp || s.created_at).toLocaleString() : '--'}
+                  </div>
+                </div>
+                <Badge variant={s.confidence > 0.7 ? 'emerald' : s.confidence > 0.4 ? 'warning' : 'danger'}>
+                  {s.confidence ? `${Math.round(s.confidence * 100)}%` : '--'}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </GlassCard>
+
+        </>
+      )}
+
+      {view === 'evolution' && (
+        <GlassCard gradient padding="2xl">
+          <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 20 }}>Identity Evolution Timeline</h3>
+          <IdentityEvolution snapshots={snapshotList} />
+        </GlassCard>
+      )}
+
+      {inspectingIdentity && (
+        <IdentityInspector identityId={inspectingIdentity} onClose={() => setInspectingIdentity(null)} />
+      )}
+    </div>
+  )
+}

@@ -89,9 +89,10 @@ class EventNormalizer:
                 device_type=raw_event.get("device_type", "unknown"),
                 platform=raw_event.get("platform", "instagram"),
                 
-                # Raw data
+                # Raw data (pass through any extra fields)
                 raw_metadata={
                     "source_format": "extension_v1",
+                    "source_url": raw_event.get("source_url", ""),
                     "original_payload": raw_event
                 }
             )

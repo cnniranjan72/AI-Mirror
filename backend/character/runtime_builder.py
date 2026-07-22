@@ -274,12 +274,57 @@ class RuntimeBuilder:
         user_id: str,
         identity_snapshot: IdentitySnapshot
     ) -> Optional[SelfModel]:
-        """Load self model for user"""
+        """Load self model for user from database"""
         try:
-            # In production, would load from database
-            # For now, return None (will create empty model)
-            logger.debug(f"Loading self model for user {user_id}")
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    from app.db.postgres import fetchrow
+                    import json
+                    import uuid
+                    
+                    row = asyncio.run_coroutine_threadsafe(
+                        fetchrow(
+                            "SELECT * FROM self_models WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1",
+                            user_id
+                        ),
+                        loop
+                    ).result(timeout=5)
+                    
+                    if row:
+                        from backend.identity.self_model import SelfModel, Belief, UncertaintyMap
+                        
+                        beliefs_data = json.loads(row["beliefs"]) if isinstance(row["beliefs"], str) else (row["beliefs"] or [])
+                        beliefs = [Belief(**b) for b in beliefs_data]
+                        
+                        uncertainty_data = json.loads(row["uncertainty_map"]) if isinstance(row["uncertainty_map"], str) else (row["uncertainty_map"] or {})
+                        uncertainty_map = UncertaintyMap(**uncertainty_data)
+                        
+                        strong_beliefs = json.loads(row["strong_beliefs"]) if isinstance(row["strong_beliefs"], str) else (row["strong_beliefs"] or [])
+                        uncertain_beliefs = json.loads(row["uncertain_beliefs"]) if isinstance(row["uncertain_beliefs"], str) else (row["uncertain_beliefs"] or [])
+                        
+                        model = SelfModel(
+                            self_model_id=row["self_model_id"],
+                            user_id=row["user_id"],
+                            identity_snapshot_id=row["identity_snapshot_id"],
+                            beliefs=beliefs,
+                            strong_beliefs=strong_beliefs,
+                            uncertain_beliefs=uncertain_beliefs,
+                            uncertainty_map=uncertainty_map,
+                            overall_confidence=float(row.get("overall_confidence", 0.5) or 0.5),
+                            model_completeness=float(row.get("model_completeness", 0.0) or 0.0),
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"],
+                            metadata=json.loads(row["metadata"]) if isinstance(row.get("metadata"), str) else (row.get("metadata") or {})
+                        )
+                        logger.debug(f"Loaded self model for user {user_id}")
+                        return model
+            except Exception as inner:
+                logger.debug(f"Could not load self model from DB: {inner}")
+            
             return None
+            
         except Exception as e:
             logger.error(f"Error loading self model: {str(e)}", exc_info=True)
             return None
@@ -308,10 +353,42 @@ class RuntimeBuilder:
         )
     
     def _load_memory_ids(self, user_id: str) -> Dict[str, List[str]]:
-        """Load memory IDs for user"""
+        """Load memory IDs for user from V3 memories table"""
         try:
-            # In production, would query database for memory IDs
-            # For now, return empty
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    from app.db.postgres import fetch
+                    
+                    rows = asyncio.run_coroutine_threadsafe(
+                        fetch(
+                            "SELECT memory_id, memory_type FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100",
+                            user_id
+                        ),
+                        loop
+                    ).result(timeout=5)
+                    
+                    result = {
+                        "behavior": [],
+                        "reflection": [],
+                        "goal": [],
+                        "episodic": [],
+                        "semantic": []
+                    }
+                    for row in rows:
+                        mtype = row["memory_type"]
+                        mid = row["memory_id"]
+                        if mtype in result:
+                            result[mtype].append(mid)
+                        else:
+                            result.setdefault(mtype, []).append(mid)
+                    
+                    logger.debug(f"Loaded {sum(len(v) for v in result.values())} memory IDs for user {user_id}")
+                    return result
+            except Exception as inner:
+                logger.debug(f"Could not load memory IDs from DB: {inner}")
+            
             return {
                 "behavior": [],
                 "reflection": [],
@@ -324,41 +401,225 @@ class RuntimeBuilder:
             return {}
     
     def _load_reasoning_context(self, user_id: str) -> Optional[ReasoningContext]:
-        """Load reasoning context for user"""
+        """Load reasoning context for user from V3 tables"""
         try:
-            # In production, would build from recent data
-            # For now, return None
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    from app.db.postgres import fetch
+                    import json
+                    
+                    # Load recent inferences as context bases
+                    inference_rows = asyncio.run_coroutine_threadsafe(
+                        fetch(
+                            "SELECT inference_id, inference_text, inference_type, confidence, source, created_at "
+                            "FROM inferences WHERE user_id = $1 ORDER BY created_at DESC LIMIT 5",
+                            user_id
+                        ),
+                        loop
+                    ).result(timeout=5)
+                    
+                    # Load recent reflections as context
+                    reflection_rows = asyncio.run_coroutine_threadsafe(
+                        fetch(
+                            "SELECT reflection_id, reflection_text, reflection_type, significance, created_at "
+                            "FROM reflections WHERE user_id = $1 ORDER BY created_at DESC LIMIT 3",
+                            user_id
+                        ),
+                        loop
+                    ).result(timeout=5)
+                    
+                    # Load recent goals as context
+                    goal_rows = asyncio.run_coroutine_threadsafe(
+                        fetch(
+                            "SELECT goal_id, goal_description, goal_status, priority, created_at "
+                            "FROM goals WHERE user_id = $1 AND goal_status = 'active' ORDER BY priority ASC, created_at DESC LIMIT 5",
+                            user_id
+                        ),
+                        loop
+                    ).result(timeout=5)
+                    
+                    # Build memory references
+                    memory_refs = []
+                    for row in inference_rows[:3]:
+                        memory_refs.append(MemoryReference(
+                            memory_id=row["inference_id"],
+                            memory_type="inference",
+                            content=row["inference_text"],
+                            metadata={"inference_type": row["inference_type"], "confidence": float(row["confidence"] or 0.0) if row["confidence"] else 0.0},
+                            created_at=row["created_at"]
+                        ))
+                    
+                    goal_refs = []
+                    for row in goal_rows:
+                        goal_refs.append(GoalReference(
+                            goal_id=row["goal_id"],
+                            description=row["goal_description"],
+                            status=row["goal_status"],
+                            priority=int(row["priority"]) if row["priority"] else 0,
+                            created_at=row["created_at"]
+                        ))
+                    
+                    reflection_refs = []
+                    for row in reflection_rows:
+                        reflection_refs.append(ReflectionReference(
+                            reflection_id=row["reflection_id"],
+                            content=row["reflection_text"],
+                            reflection_type=row["reflection_type"],
+                            significance=float(row["significance"] or 0.0) if row["significance"] else 0.0,
+                            created_at=row["created_at"]
+                        ))
+                    
+                    context = ReasoningContext(
+                        context_id=f"ctx_{user_id}",
+                        user_id=user_id,
+                        memories=memory_refs,
+                        active_goals=goal_refs,
+                        recent_reflections=reflection_refs,
+                        context_metadata={"source": "v3_database"}
+                    )
+                    logger.debug(f"Loaded reasoning context for user {user_id}")
+                    return context
+            except Exception as inner:
+                logger.debug(f"Could not load reasoning context from DB: {inner}")
+            
             return None
+            
         except Exception as e:
             logger.error(f"Error loading reasoning context: {str(e)}", exc_info=True)
             return None
     
     def _load_recent_inferences(self, user_id: str) -> List[Inference]:
-        """Load recent inferences for user"""
+        """Load recent inferences for user from V3 inferences table"""
         try:
-            # In production, would query database
-            # For now, return empty
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    from app.db.postgres import fetch
+                    import json
+                    
+                    rows = asyncio.run_coroutine_threadsafe(
+                        fetch(
+                            "SELECT inference_id, inference_text, inference_type, confidence, "
+                            "source_evidence_ids, source_inference_ids, metadata, created_at "
+                            "FROM inferences WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+                            user_id, self.max_inferences
+                        ),
+                        loop
+                    ).result(timeout=5)
+                    
+                    inferences = []
+                    for row in rows:
+                        inferences.append(Inference(
+                            inference_id=row["inference_id"],
+                            inference_text=row["inference_text"],
+                            inference_type=row["inference_type"],
+                            confidence=float(row["confidence"] or 0.0) if row["confidence"] else 0.0,
+                            source_evidence_ids=json.loads(row["source_evidence_ids"]) if isinstance(row["source_evidence_ids"], str) else (row["source_evidence_ids"] or []),
+                            source_inference_ids=json.loads(row["source_inference_ids"]) if isinstance(row["source_inference_ids"], str) else (row["source_inference_ids"] or []),
+                            metadata=json.loads(row["metadata"]) if isinstance(row.get("metadata"), str) else (row.get("metadata") or {}),
+                            created_at=row["created_at"]
+                        ))
+                    
+                    logger.debug(f"Loaded {len(inferences)} inferences for user {user_id}")
+                    return inferences
+            except Exception as inner:
+                logger.debug(f"Could not load inferences from DB: {inner}")
+            
             return []
+            
         except Exception as e:
             logger.error(f"Error loading inferences: {str(e)}", exc_info=True)
             return []
     
     def _load_active_goals(self, user_id: str) -> List[GoalReference]:
-        """Load active goals for user"""
+        """Load active goals for user from V3 goals table"""
         try:
-            # In production, would query goal memory
-            # For now, return empty
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    from app.db.postgres import fetch
+                    
+                    rows = asyncio.run_coroutine_threadsafe(
+                        fetch(
+                            "SELECT goal_id, goal_description, goal_status, priority, "
+                            "goal_type, milestones, progress, metadata, created_at "
+                            "FROM goals WHERE user_id = $1 AND goal_status = 'active' "
+                            "ORDER BY priority ASC, created_at DESC LIMIT 10",
+                            user_id
+                        ),
+                        loop
+                    ).result(timeout=5)
+                    
+                    import json
+                    goals = []
+                    for row in rows:
+                        goals.append(GoalReference(
+                            goal_id=row["goal_id"],
+                            description=row["goal_description"],
+                            status=row["goal_status"],
+                            priority=int(row["priority"]) if row["priority"] else 0,
+                            goal_type=row.get("goal_type", "general"),
+                            milestones=json.loads(row["milestones"]) if isinstance(row.get("milestones"), str) else (row.get("milestones") or []),
+                            progress=float(row["progress"] or 0.0) if row.get("progress") else 0.0,
+                            metadata=json.loads(row["metadata"]) if isinstance(row.get("metadata"), str) else (row.get("metadata") or {}),
+                            created_at=row["created_at"]
+                        ))
+                    
+                    logger.debug(f"Loaded {len(goals)} active goals for user {user_id}")
+                    return goals
+            except Exception as inner:
+                logger.debug(f"Could not load goals from DB: {inner}")
+            
             return []
+            
         except Exception as e:
             logger.error(f"Error loading goals: {str(e)}", exc_info=True)
             return []
     
     def _load_recent_reflections(self, user_id: str) -> List[ReflectionReference]:
-        """Load recent reflections for user"""
+        """Load recent reflections for user from V3 reflections table"""
         try:
-            # In production, would query reflection memory
-            # For now, return empty
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_running():
+                    from app.db.postgres import fetch
+                    import json
+                    
+                    rows = asyncio.run_coroutine_threadsafe(
+                        fetch(
+                            "SELECT reflection_id, reflection_text, reflection_type, significance, "
+                            "source_evidence_ids, source_inference_ids, metadata, created_at "
+                            "FROM reflections WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+                            user_id, self.max_reflections
+                        ),
+                        loop
+                    ).result(timeout=5)
+                    
+                    reflections = []
+                    for row in rows:
+                        reflections.append(ReflectionReference(
+                            reflection_id=row["reflection_id"],
+                            content=row["reflection_text"],
+                            reflection_type=row["reflection_type"],
+                            significance=float(row["significance"] or 0.0) if row["significance"] else 0.0,
+                            source_evidence_ids=json.loads(row["source_evidence_ids"]) if isinstance(row["source_evidence_ids"], str) else (row["source_evidence_ids"] or []),
+                            source_inference_ids=json.loads(row["source_inference_ids"]) if isinstance(row["source_inference_ids"], str) else (row["source_inference_ids"] or []),
+                            metadata=json.loads(row["metadata"]) if isinstance(row.get("metadata"), str) else (row.get("metadata") or {}),
+                            created_at=row["created_at"]
+                        ))
+                    
+                    logger.debug(f"Loaded {len(reflections)} reflections for user {user_id}")
+                    return reflections
+            except Exception as inner:
+                logger.debug(f"Could not load reflections from DB: {inner}")
+            
             return []
+            
         except Exception as e:
             logger.error(f"Error loading reflections: {str(e)}", exc_info=True)
             return []

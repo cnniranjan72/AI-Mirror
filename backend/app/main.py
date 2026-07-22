@@ -5,23 +5,23 @@ Complete behavioral intelligence pipeline
 
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from app.db.postgres import init_pool, close_pool, run_schema, health as db_health
-from app.api import ingest, query, profile
+from app.api import ingest, query, profile, explain, seed
 
 load_dotenv()
 
-# Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-)
+from app.core.logging import configure_logging, log_with_context
+
+# Structured JSON logging
+configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 
@@ -54,10 +54,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def logging_middleware(request: Request, call_next):
+    trace_id = request.headers.get("X-Trace-Id", str(uuid.uuid4()))
+    request.state.trace_id = trace_id
+    logger.info("Request started", extra={"trace_id": trace_id, "path": request.url.path, "method": request.method})
+    response = await call_next(request)
+    response.headers["X-Trace-Id"] = trace_id
+    logger.info("Request completed", extra={"trace_id": trace_id, "status": response.status_code})
+    return response
+
 # Routes
 app.include_router(ingest.router, tags=["Ingest"])
 app.include_router(query.router, tags=["Query"])
 app.include_router(profile.router, tags=["Profile"])
+app.include_router(explain.router, tags=["Explainability"])
+app.include_router(seed.router, tags=["Seed"])
 
 
 @app.get("/")

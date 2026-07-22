@@ -16,15 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 class EvidenceType(str, Enum):
-    """Types of evidence"""
+    """Five evidence dimensions from the paper"""
     BEHAVIORAL = "behavioral"
     TEMPORAL = "temporal"
+    TOPICAL = "topical"
     CREATOR = "creator"
-    TOPIC = "topic"
     INTERACTION = "interaction"
-    SESSION = "session"
-    STATISTICAL = "statistical"
-    TREND = "trend"
 
 
 class Evidence(BaseModel):
@@ -330,6 +327,112 @@ class EvidenceEngine:
             logger.error(f"Error collecting creator evidence: {str(e)}", exc_info=True)
             return None
     
+    def collect_topical_evidence(
+        self,
+        events: List[BehaviorEvent],
+        topic: str,
+        time_window_days: int = 30
+    ) -> Evidence:
+        try:
+            relevant_events = [
+                e for e in events
+                if topic.lower() in [h.lower() for h in e.hashtags] or
+                (e.caption and topic.lower() in e.caption.lower())
+            ]
+
+            if not relevant_events:
+                return None
+
+            total_events = len(relevant_events)
+            engaged = sum(1 for e in relevant_events if e.liked or e.saved or e.shared or e.commented)
+            engagement_rate = engaged / total_events if total_events > 0 else 0.0
+            avg_watch = sum(e.watch_time for e in relevant_events) / total_events
+            timestamps = [e.timestamp for e in relevant_events]
+
+            all_hashtags = [h for e in relevant_events for h in (e.hashtags or [])]
+            top_hashtags = Counter(all_hashtags).most_common(5)
+
+            evidence = Evidence(
+                evidence_id=f"evidence_topical_{topic.lower().replace(' ', '_')}_{datetime.utcnow().timestamp()}",
+                evidence_type=EvidenceType.TOPICAL,
+                supporting_events=[e.event_id for e in relevant_events],
+                supporting_clusters=[],
+                supporting_behavior_objects=[],
+                confidence=min(1.0, total_events / 20.0),
+                weight=min(1.0, engagement_rate + 0.3),
+                explanation=f"User engaged with {total_events} pieces of {topic} content ({engagement_rate:.1%} engagement)",
+                key_metrics={
+                    "occurrence_count": total_events,
+                    "engagement_rate": round(engagement_rate, 3),
+                    "avg_watch_time": round(avg_watch, 2),
+                    "engaged_count": engaged,
+                    "top_hashtags": [h[0] for h in top_hashtags],
+                },
+                time_window_start=min(timestamps),
+                time_window_end=max(timestamps),
+                created_at=datetime.utcnow(),
+                metadata={"topic": topic}
+            )
+            return evidence
+        except Exception as e:
+            logger.error(f"Error collecting topical evidence: {e}", exc_info=True)
+            return None
+
+    def collect_interaction_evidence(
+        self,
+        events: List[BehaviorEvent],
+        time_window_days: int = 30
+    ) -> Evidence:
+        try:
+            if not events:
+                return None
+
+            total = len(events)
+            liked = sum(1 for e in events if e.liked)
+            saved = sum(1 for e in events if getattr(e, 'saved', False))
+            shared = sum(1 for e in events if getattr(e, 'shared', False))
+            commented = sum(1 for e in events if getattr(e, 'commented', False))
+            replayed = sum(getattr(e, 'replay_count', 0) for e in events)
+
+            like_rate = liked / total if total > 0 else 0
+            save_rate = saved / total if total > 0 else 0
+            replay_rate = replayed / total if total > 0 else 0
+            interaction_depth = (liked + saved + shared + commented) / total if total > 0 else 0
+
+            timestamps = [e.timestamp for e in events]
+
+            confidence = min(1.0, total / 15.0)
+            weight = min(1.0, interaction_depth + 0.3)
+
+            level = "high" if interaction_depth > 0.5 else "moderate" if interaction_depth > 0.2 else "low"
+
+            evidence = Evidence(
+                evidence_id=f"evidence_interaction_{datetime.utcnow().timestamp()}",
+                evidence_type=EvidenceType.INTERACTION,
+                supporting_events=[e.event_id for e in events],
+                supporting_clusters=[],
+                supporting_behavior_objects=[],
+                confidence=confidence,
+                weight=weight,
+                explanation=f"User shows {level} interaction depth ({interaction_depth:.1%} rate, {like_rate:.0%} likes)",
+                key_metrics={
+                    "total_interactions": total,
+                    "like_rate": round(like_rate, 3),
+                    "save_rate": round(save_rate, 3),
+                    "replay_rate": round(replay_rate, 3),
+                    "interaction_depth": round(interaction_depth, 3),
+                    "replay_count": replayed,
+                },
+                time_window_start=min(timestamps),
+                time_window_end=max(timestamps),
+                created_at=datetime.utcnow(),
+                metadata={}
+            )
+            return evidence
+        except Exception as e:
+            logger.error(f"Error collecting interaction evidence: {e}", exc_info=True)
+            return None
+
     def aggregate_evidence(
         self,
         evidence_list: List[Evidence]

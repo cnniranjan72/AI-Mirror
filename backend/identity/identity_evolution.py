@@ -214,8 +214,13 @@ class IdentityEvolutionEngine:
             # Detect shifts
             shifts = self._detect_shifts(changes)
             
-            # Create snapshot
+            # Compute identity shift (Paper Eq. 2)
+            identity_shift = self._compute_identity_shift(identity, updated_identity)
+            threshold_exceeded = identity_shift > self.config.get("snapshot_threshold", 0.15)
+            updated_identity.metadata["identity_shift"] = identity_shift
+            updated_identity.metadata["snapshot_threshold_exceeded"] = threshold_exceeded
             snapshot = self.snapshot_manager.create_snapshot(updated_identity)
+            logger.info(f"Snapshot created: identity_shift={identity_shift:.3f} (threshold_exceeded={threshold_exceeded})")
             
             # Update or create evolution record
             if evolution is None:
@@ -227,7 +232,7 @@ class IdentityEvolutionEngine:
                     current_snapshot_id=snapshot.snapshot_id,
                     first_evolution=datetime.utcnow(),
                     last_evolution=datetime.utcnow(),
-                    avg_stability=updated_identity.stability_score,
+                    avg_stability=updated_identity.behavior_profile.behavior_stability,
                     avg_evolution_rate=0.5
                 )
             else:
@@ -420,6 +425,57 @@ class IdentityEvolutionEngine:
             logger.error(f"Error detecting shifts: {str(e)}", exc_info=True)
             return []
     
+    def _compute_identity_shift(self, old: Identity, new_id: Identity) -> float:
+        """Paper Eq. 2: compute ‖I_{t+1} - I_t‖₂"""
+        try:
+            import numpy as np
+
+            old_vec = np.array([
+                old.overall_confidence,
+                old.identity_completeness,
+                old.behavior_profile.avg_engagement_rate,
+                old.behavior_profile.behavior_diversity,
+                old.behavior_profile.behavior_stability,
+                old.interest_graph.diversity_score,
+                old.creator_graph.creator_diversity_score,
+                old.creator_graph.dependence_score,
+                old.learning_style.confidence,
+                old.attention_profile.avg_attention_span,
+                old.exploration_profile.novelty_seeking_score,
+                old.exploration_profile.exploration_rate,
+                old.consistency_profile.overall_consistency,
+                old.habit_profile.routine_strength,
+                old.motivation_signals.learning_motivation,
+                old.motivation_signals.entertainment_seeking,
+                old.motivation_signals.skill_building_intent,
+            ])
+
+            new_vec = np.array([
+                new_id.overall_confidence,
+                new_id.identity_completeness,
+                new_id.behavior_profile.avg_engagement_rate,
+                new_id.behavior_profile.behavior_diversity,
+                new_id.behavior_profile.behavior_stability,
+                new_id.interest_graph.diversity_score,
+                new_id.creator_graph.creator_diversity_score,
+                new_id.creator_graph.dependence_score,
+                new_id.learning_style.confidence,
+                new_id.attention_profile.avg_attention_span,
+                new_id.exploration_profile.novelty_seeking_score,
+                new_id.exploration_profile.exploration_rate,
+                new_id.consistency_profile.overall_consistency,
+                new_id.habit_profile.routine_strength,
+                new_id.motivation_signals.learning_motivation,
+                new_id.motivation_signals.entertainment_seeking,
+                new_id.motivation_signals.skill_building_intent,
+            ])
+
+            shift = float(np.linalg.norm(new_vec - old_vec))
+            return min(1.0, shift)
+        except Exception as e:
+            logger.warning(f"Error computing identity shift: {e}")
+            return 0.0
+
     def _calculate_avg_stability(self, evolution: IdentityEvolution) -> float:
         """Calculate average stability from evolution history"""
         try:

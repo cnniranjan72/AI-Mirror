@@ -135,7 +135,9 @@ class IdentitySnapshot(BaseModel):
                 is_active=True,
                 metadata={
                     "source_identity_created_at": identity.created_at.isoformat(),
-                    "source_identity_updated_at": identity.updated_at.isoformat()
+                    "source_identity_updated_at": identity.updated_at.isoformat(),
+                    **{k: v for k, v in identity.metadata.items()
+                       if k not in ("source_identity_created_at", "source_identity_updated_at")}
                 }
             )
             

@@ -22,6 +22,7 @@ from .reasoning_context import (
     ReflectionReference
 )
 from .inference_engine import Inference, InferenceEngine, get_inference_engine
+from .reflection_engine import ReflectionEngine, Reflection, get_reflection_engine
 from .rules import Rule, RuleEngine, get_rule_engine
 
 __all__ = [
@@ -49,6 +50,10 @@ __all__ = [
     "Inference",
     "InferenceEngine",
     "get_inference_engine",
+    # Reflection
+    "Reflection",
+    "ReflectionEngine",
+    "get_reflection_engine",
     # Rules
     "Rule",
     "RuleEngine",

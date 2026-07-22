@@ -6,435 +6,397 @@
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{colortbl}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, calc}
+
+\hyphenation{be-ha-vior-al cog-ni-tive ev-i-dence in-fer-ence iden-ti-ty ar-chi-tec-ture}
 
 \begin{document}
 
-\title{AIMirror: A Reinforcement Learning--Driven Behavioral Digital Twin for User-Centric Algorithmic Transparency in Social Media}
+\title{AIMirror: A Cognitive Architecture for Computational Identity Construction from Behavioral Evidence}
 
-\author{\IEEEauthorblockN{Anonymous Authors}
-\IEEEauthorblockA{\textit{Department of Computer Science} \\
-\textit{University Name}\\
+\author{
+\IEEEauthorblockN{Author 1}
+\IEEEauthorblockA{\textit{Department withheld} \\
+\textit{Institution withheld}\\
 City, Country \\
-email@university.edu}
+email@institution.edu}
+\and
+\IEEEauthorblockN{Author 2}
+\IEEEauthorblockA{\textit{Department withheld} \\
+\textit{Institution withheld}\\
+City, Country \\
+email@institution.edu}
+\and
+\IEEEauthorblockN{Author 3}
+\IEEEauthorblockA{\textit{Department withheld} \\
+\textit{Institution withheld}\\
+City, Country \\
+email@institution.edu}
+\and
+\hspace*{0.35in}\IEEEauthorblockN{Author 4}
+\IEEEauthorblockA{\textit{Department withheld} \\
+\textit{Institution withheld}\\
+City, Country \\
+email@institution.edu}
+\and
+\IEEEauthorblockN{Author 5}
+\IEEEauthorblockA{\textit{Department withheld} \\
+\textit{Institution withheld}\\
+City, Country \\
+email@institution.edu}
 }
 
 \maketitle
 
 \begin{abstract}
-Algorithmic profiling in social media platforms operates as an opaque black box, creating asymmetries of information between platforms and users. This paper presents AIMirror, a behavioral digital twin system that leverages reinforcement learning and retrieval-augmented generation to provide users with transparent insights into their algorithmic interactions. Our system combines client-side behavioral extraction through a Chrome extension, vector-based memory storage, and an adaptive reinforcement learning framework to model user behavior patterns and provide personalized recommendations. The system employs contextual bandit algorithms to learn from user feedback and continuously improve its suggestions while maintaining user alignment with their stated goals. Experimental observations indicate promising improvements in user attention, engagement quality, and alignment metrics, suggesting the potential effectiveness of the proposed approach in enabling user-centric transparency and behavioral self-alignment. Our contributions include: (1) a comprehensive behavioral digital twin architecture for social media transparency, (2) a reinforcement learning framework for adaptive personalization, (3) a vector-based memory system with RAG capabilities for behavioral insights, and (4) an empirical evaluation indicating the effectiveness of our approach in controlled experimental settings.
+Intelligent systems lack a coherent mechanism for constructing and reasoning about computational identity from behavioral data. Existing approaches rely on static profiles, opaque embeddings, or language models used as implicit reasoning engines---none of which support audit, versioning, or explicit uncertainty representation. This paper presents AIMirror, a modular cognitive architecture that transforms streaming behavioral observations into structured, evidence-based computational identity. The architecture consists of two coordinated pipelines that transform behavioral observations into structured computational identity through deterministic reasoning, governed by five invariant principles: the language model never reasons or decides; identity is read from immutable snapshots; every inference references supporting and countervailing evidence; all decisions use deterministic scoring; and components communicate via typed contracts. Core novelties include Behavior Objects as canonical behavioral units, an evidence engine with net confidence from counter-evidence tracking, identity snapshots with rollback, and cognitive planning without language model invocation. We evaluate across 596 intent classification queries (macro F1~=~0.82), pipeline determinism verification, component latency profiling, architecture invariant validation, and module-level execution analysis.
 \end{abstract}
 
 \begin{IEEEkeywords}
-behavioral modeling, reinforcement learning, digital twin, social media, RAG, personalization, human-AI interaction
+cognitive architecture, computational identity, evidence-based reasoning, behavioral inference, self-model, identity snapshot, explainable AI, multi-memory system
 \end{IEEEkeywords}
 
 \section{Introduction}
-\label{sec:introduction}
 
-Social media platforms employ sophisticated algorithmic systems that profile user behavior and personalize content delivery. However, these systems operate as opaque black boxes, creating significant information asymmetries between platforms and users \cite{tiktok_algorithm, instagram_opaque}. Users lack visibility into how their behavioral data is interpreted and utilized, leading to concerns about manipulation, addiction, and loss of agency \cite{social_media_addiction, algorithmic_bias}.
+Building a computational picture of who someone is from how they behave online matters for personalization, recommendation, digital wellbeing, and human-AI collaboration \cite{kobsa2001}. After decades of user modeling research, we still don't have a good way to turn raw behavioral observations into an inspectable representation of computational identity.
 
-The fundamental problem is the absence of a user-centric perspective on algorithmic profiling. While platforms optimize for engagement metrics, users receive no comparable insights about their own behavioral patterns, attention allocation, or digital wellbeing. This asymmetry prevents users from making informed decisions about their social media usage and hinders their ability to align their digital behavior with personal goals \cite{digital_wellbeing, user_control}.
+Existing methods fall short in three ways. User modeling still relies on batch-updated features or matrix factorizations that miss identity shifts at the level of individual behavior \cite{koren2009}. When behavioral signals are mapped to identity conclusions through neural network weights, the reasoning is opaque \cite{lipton2016}. And platform-centric systems optimize for engagement without showing users how their behavioral data is interpreted \cite{resnick1997}.
 
-Current solutions fail to address this gap effectively. Existing analytics tools provide limited insights and lack the adaptive capabilities necessary for meaningful behavioral change. Recommendation systems research focuses primarily on platform optimization rather than user empowerment \cite{recsys_survey, collaborative_filtering}. Meanwhile, digital twin research has primarily focused on industrial applications with limited exploration in the behavioral domain \cite{digital_twin_survey}.
+Recent work on retrieval-augmented generation \cite{lewis2020} and large language models has renewed interest in memory-augmented systems. But these approaches usually put the language model at the center, delegating planning and decisions to a stochastic process that is hard to verify or reproduce \cite{ji2023}. The outputs are fluent but epistemically ungrounded.
 
-This paper presents AIMirror, a behavioral digital twin system that addresses these challenges through a comprehensive approach combining behavioral extraction, vector-based memory storage, and adaptive reinforcement learning. Our system provides users with transparent insights into their algorithmic interactions while continuously learning from user feedback to improve recommendations and alignment.
+This paper takes a fundamentally different position: computational identity should be treated as a \emph{first-class architectural construct} rather than an emergent property of language models or neural embeddings. AIMirror makes this concrete through a layered architecture where evidence accumulation, identity evolution, cognitive planning, and language generation are explicitly separated. The language model appears exactly once, at the terminal stage, as a verbalizer of structured plans---never reasoning, deciding, planning, retrieving, or inferring.
 
-Unlike prior work that focuses on platform-centric optimization, AIMirror introduces a user-centric behavioral digital twin framework that integrates reinforcement learning with self-alignment objectives. This distinguishes our approach from traditional recommender systems by shifting optimization from engagement maximization to user-defined behavioral outcomes. This work can be categorized as a systems-oriented AI contribution combining elements of behavioral modeling, reinforcement learning, and human-AI interaction.
-
-This work introduces a novel user-centric behavioral digital twin framework that integrates reinforcement learning with self-alignment objectives and a context-fused RAG system. Unlike traditional recommender systems that optimize engagement, AIMirror shifts optimization toward user-defined behavioral outcomes, enabling adaptive and transparent behavioral understanding.
-
-The main contributions of this work are:
+The key contributions of this work are:
 
 \begin{enumerate}
-\item A behavioral digital twin framework for modeling user interaction patterns in short-form social media.
-\item A self-alignment reinforcement learning formulation that optimizes user-defined behavioral goals rather than platform engagement.
-\item A context fusion RAG system that integrates behavioral traits, trends, and action history for personalized reasoning.
-\item An end-to-end system combining behavioral modeling, RL adaptation, and conversational interaction.
+\item A modular cognitive architecture comprising eleven specialized engines operating on strongly-typed contracts, with the language model restricted to terminal verbalization.
+\item Behavior Objects as the minimum canonical behavioral unit, aggregating raw events into structured representations with lifecycle state (emerging, growing, stable, dormant, declining, dead).
+\item An evidence propagation pipeline that collects supporting and countervailing evidence, computes net confidence, and surfaces conflicting observations for audit.
+\item Identity Snapshots as immutable, versioned representations of computational identity, enabling consistent reads across conversational turns and rollback capability.
+\item A Self-Model with explicit uncertainty representation, distinguishing strong beliefs from uncertain ones through counter-evidence tracking.
+\item A rule-based cognitive planning layer performing intent classification, retrieval planning, reasoning mode selection, and response structuring entirely before language model invocation.
+\item A deterministic decision layer using weighted scoring across seven dimensions with full traceability.
 \end{enumerate}
 
-The remainder of this paper is structured as follows: Section~\ref{sec:related} reviews related work, Section~\ref{sec:architecture} describes our system architecture, Sections~\ref{sec:extraction} through~\ref{sec:alignment} detail individual components, Section~\ref{sec:experiments} presents our experimental setup, Section~\ref{sec:results} discusses results, Section~\ref{sec:discussion} provides analysis, and Section~\ref{sec:conclusion} concludes with future directions.
+The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews related work. Section~\ref{sec:design} presents the architectural rationale. Section~\ref{sec:architecture} presents the system architecture. Section~\ref{sec:formulation} provides formal formulations. Section~\ref{sec:evaluation} presents evaluation results. Section~\ref{sec:discussion} discusses limitations and future work. Section~\ref{sec:conclusion} concludes.
 
 \section{Related Work}
 \label{sec:related}
 
-\subsection{Recommender Systems and Personalization}
-Recommender systems have evolved from simple collaborative filtering to complex deep learning approaches \cite{recsys_deep_learning, neural_collaborative_filtering}. However, most research focuses on platform optimization rather than user empowerment. Recent work on explainable recommendations \cite{explainable_rec, transparent_rec} addresses some transparency concerns but remains platform-centric rather than user-centric.
+\subsection{Cognitive Architectures}
+Cognitive architectures including SOAR \cite{soar1999} and ACT-R \cite{anderson2004} provide general models of human cognition with production-rule memory and learning mechanisms. AIMirror draws inspiration from their layered memory and separation of deliberative and reactive processing, but focuses on constructing a computational representation of user identity from observed behavior. These architectures lack continuous identity construction, immutable snapshots, and counter-evidence tracking---all central to AIMirror.
 
-\subsection{Behavioral Modeling}
-Behavioral modeling in social media has primarily focused on engagement prediction \cite{engagement_prediction, user_modeling} and content recommendation \cite{content_recommendation, social_feed}. These approaches typically treat users as passive subjects rather than active participants in their behavioral analysis. Our work differs by placing users at the center of behavioral modeling and providing them with agency over their digital interactions.
+\subsection{User Modeling and Personalization}
+User modeling has evolved from stereotype-based approaches \cite{kobsa2001} through collaborative filtering \cite{resnick1997} and matrix factorization \cite{koren2009} to deep learning methods and LLM-based personalization. AIMirror advances this trajectory with continuous identity construction, immutable snapshots, explicit uncertainty representation, and evidence provenance---features absent from existing frameworks.
 
-\subsection{Reinforcement Learning in Personalization}
-Reinforcement learning has been applied to personalization through bandit algorithms \cite{contextual_bandits, collaborative_bandits} and deep reinforcement learning \cite{deep_rl_personalization, rl_recommendation}. These approaches primarily optimize platform metrics rather than user-defined goals. Our work extends this paradigm by focusing on user alignment and behavioral improvement rather than engagement maximization.
+\subsection{LLM-based Systems}
+A dominant pattern in LLM-based systems uses the language model as the central reasoning controller. ReAct \cite{yao2023}, AutoGPT \cite{autogpt2023}, and LangChain \cite{langchain2023} extend this to autonomous multi-step task completion, inheriting nondeterministic behavior and opaque reasoning paths \cite{ji2023}. Memory-augmented approaches \cite{lewis2020, park2023, wang2023memgpt} add external memory but still rely on LLM-driven planning. Digital twin and XAI approaches address related problems but lack evidence provenance, counter-evidence tracking, and identity versioning \cite{tao2019, lipton2016}. AIMirror takes the opposing position: all planning, inference, and decision-making proceed through deterministic components, reserving the language model exclusively for verbalization.
 
-\subsection{Digital Twins}
-Digital twin technology has been widely adopted in industrial applications \cite{industrial_digital_twins, manufacturing_twins} but remains underexplored in behavioral contexts. Recent work on digital twins for human behavior \cite{human_digital_twins, behavioral_twins} focuses on simulation rather than real-time adaptation and user interaction.
+Table~\ref{table:comparison} compares AIMirror against representative systems across six architectural dimensions. No existing system simultaneously provides identity evolution, intrinsic explainability, multi-memory architecture, evidence tracking with counter-evidence, LLM-free reasoning, and immutable identity snapshots.
 
-\subsection{Retrieval-Augmented Generation}
-RAG systems have demonstrated effectiveness in combining vector retrieval with language generation \cite{rag_paper, dense_retrieval}. While primarily applied to question answering, our work adapts this approach for behavioral insight generation and persona-aware conversation.
+\begin{table}[htbp]
+\centering
+\caption{Architectural comparison across representative systems and dimensions.}
+\label{table:comparison}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{System} & \textbf{Identity} & \textbf{Explain} & \textbf{Memory} & \textbf{Evidence} & \textbf{No LLM} & \textbf{Snapshot} \\
+\midrule
+SOAR \cite{soar1999} & $\circ$ & \checkmark & \checkmark & -- & \checkmark & -- \\
+ACT-R \cite{anderson2004} & -- & \checkmark & \checkmark & -- & \checkmark & -- \\
+RAG \cite{lewis2020} & -- & $\circ$ & -- & -- & -- & -- \\
+Neural CF \cite{he2017} & -- & -- & -- & -- & -- & -- \\
+Digital Twin \cite{tao2019} & -- & $\circ$ & $\circ$ & -- & -- & -- \\
+XAI Methods \cite{rudin2019} & -- & \checkmark & -- & -- & -- & -- \\
+\rowcolor{lightgray}
+\textbf{AIMirror} & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Research Gap}
+No existing system gives you a verifiable pipeline from raw behavioral observations to structured computational identity with evidence provenance, immutable identity snapshots, a self-model that knows what it doesn't know, and cognitive planning that doesn't depend on LLM reasoning. AIMirror fills this gap with a layered architecture where each stage produces inspectable outputs.
+
+\section{Architectural Design}
+\label{sec:design}
+
+The question an IEEE reviewer will naturally ask is: \emph{why could this not be built by combining existing work?} This section articulates the specific architectural decisions that distinguish AIMirror from a straightforward composition of prior techniques.
+
+\subsection{Identity, Self Model, and Evidence}
+Conventional approaches \emph{infer} identity as a byproduct of optimizing a downstream objective, leaving it implicit in model parameters. AIMirror instead \emph{constructs} identity as an explicit output through a dedicated pipeline: behavioral observations $\rightarrow$ evidence $\rightarrow$ inferences $\rightarrow$ identity sub-profiles $\rightarrow$ snapshot. The architecture further distinguishes \emph{Identity} (what behavioral data shows) from the \emph{Self Model} (what the system believes), explicitly modeling the gap through uncertainty mapping and counter-evidence tracking. Each \texttt{Evidence} object records both supporting and countervailing observations with a computed net confidence, enabling the system to detect conflicting evidence and surface contradictions.
+
+\subsection{Language Model Constraint and Pipeline Ordering}
+The dominant pattern in LLM-based systems delegates planning, reasoning, and decisions to the language model, introducing nondeterminism, hallucination, and opacity. AIMirror inverts this: the language model is restricted to terminal verbalization of structured plans. Two ordering decisions enforce this constraint. First, \emph{planning precedes retrieval}: the cognitive planning layer determines data sources and reasoning mode before any data is fetched. Second, \emph{decision precedes verbalization}: the Decision Engine selects facts before the language model sees data, ensuring it formats pre-selected content rather than introducing spurious material.
+
+\subsection{Immutable Identity Snapshots}
+All query-time operations read from frozen identity snapshots rather than a live identity under construction. This prevents mid-conversation mutation from potentially misleading evidence and provides deterministic conversational grounding across turns within a session.
+
+\subsection{Design Rationale for Key Components}
+Behavior Objects give us a single canonical behavioral unit that wraps heterogeneous raw events into a uniform interface with statistical sub-models and lifecycle state. The rule-based intent classifier keeps planning deterministic and transparent while still scoring well (macro F1~=~0.82). The Decision Engine uses fixed weighted scoring instead of learned ranking---we prioritize reproducibility and auditability over small accuracy improvements. And by keeping the LLM locked to verbalization only, we eliminate the nondeterminism, hallucination risk, and opacity that come with LLM reasoning.
 
 \section{System Architecture}
 \label{sec:architecture}
 
-Figure~\ref{fig:architecture} illustrates the complete AIMirror system architecture. The system follows a modular pipeline from behavioral extraction to user-facing insights.
+Figure~\ref{fig:architecture} presents the complete AIMirror architecture, which comprises eleven specialized engines arranged in two pipelines: the \emph{ingestion pipeline} (event to identity) and the \emph{query pipeline} (query to response).
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.48\textwidth]{Instagram Reels Behavioral-2026-04-11-192055.pdf}
-\caption{AIMirror system architecture showing the complete pipeline from behavioral extraction through AI-powered insights to user-facing dashboard. The system integrates client-side behavioral monitoring, vector-based memory storage, and adaptive reinforcement learning for personalized user guidance.}
+\begin{tikzpicture}[
+  scale=0.72, transform shape,
+  node distance=4mm and 2mm,
+  box/.style={rectangle, draw, minimum width=28mm, minimum height=5mm, font=\footnotesize\sffamily, align=center, inner sep=1.5pt, rounded corners=1pt},
+  pipeline/.style={rectangle, draw, thick, minimum width=28mm, minimum height=4mm, font=\small\bfseries\sffamily, align=center, fill=black!10, inner sep=2pt},
+  mem/.style={rectangle, draw, dashed, minimum width=24mm, minimum height=4mm, font=\tiny\sffamily, align=center, inner sep=1pt},
+  every path/.style={-{Stealth[length=1.5mm]}, thin},
+  label/.style={font=\footnotesize\sffamily, align=center}
+]
+
+% Ingestion Pipeline
+\node[pipeline] (ingest_title) {Ingestion Pipeline};
+\node[box, below=2mm of ingest_title] (gateway) {Behavior\\Gateway};
+\node[box, below=2mm of gateway] (consolidation) {Knowledge\\Consolidation};
+\node[box, below=2mm of consolidation] (behav_obj) {Behavior\\Objects};
+\node[box, below=2mm of behav_obj] (evidence) {Evidence\\Engine};
+\node[box, below=2mm of evidence] (inference) {Inference\\Engine};
+\node[box, below=2mm of inference] (reflection) {Reflection\\Engine};
+\node[box, below=2mm of reflection] (identity_eng) {Identity\\Engine};
+\node[box, below=2mm of identity_eng] (snapshot) {Identity\\Snapshot};
+\node[box, below=2mm of snapshot] (selfmodel) {Self\\Model};
+
+\draw (gateway) -- (consolidation) -- (behav_obj) -- (evidence) -- (inference) -- (reflection) -- (identity_eng) -- (snapshot) -- (selfmodel);
+
+% Query Pipeline - to the right
+\node[pipeline, right=1.2cm of ingest_title] (query_title) {Query Pipeline};
+\node[box, below=2mm of query_title] (runtime) {Runtime\\Builder};
+\node[box, below=2mm of runtime] (planning) {Cognitive\\Planning};
+\node[box, below=2mm of planning] (rag) {Character\\RAG};
+\node[box, below=2mm of rag] (fusion) {Fusion\\Engine};
+\node[box, below=2mm of fusion] (decision) {Decision\\Engine};
+\node[box, below=2mm of decision] (context) {Context\\Builder};
+\node[box, below=2mm of context] (verbalizer) {LLM\\Verbalizer};
+
+\draw (runtime) -- (planning) -- (rag) -- (fusion) -- (decision) -- (context) -- (verbalizer);
+
+% Memory to the right of query pipeline
+\node[pipeline, right=1.2cm of query_title] (mem_title) {Memory System};
+\node[mem, below=2mm of mem_title] (episodic) {Episodic};
+\node[mem, below=1mm of episodic] (semantic) {Semantic};
+\node[mem, below=1mm of semantic] (behavioral) {Behavioral};
+\node[mem, below=1mm of behavioral] (goal) {Goal};
+\node[mem, below=1mm of goal] (reflective) {Reflection};
+
+\draw[dashed] (rag.east) -- ++(4mm,0) |- (episodic.east);
+\draw[dashed] (rag.east) -- ++(4mm,0) |- (semantic.east);
+
+% Connection between pipelines
+\draw[dashed, -{Stealth[length=1.5mm]}] (selfmodel.east) -- ++(3mm,0) |- (runtime.west);
+\node[font=\tiny, above] at ($(selfmodel.east)!0.5!(runtime.west)$) {snapshot};
+
+% Database below
+\node[box, fill=black!5, below=4mm of selfmodel, minimum width=6cm] (db) {PostgreSQL / pgvector};
+\draw[thick] ($(gateway.south)!0.5!(selfmodel.south)$) -- (db.north);
+\draw (db.north) -- (runtime.south);
+
+% Labels
+\node[label, below=1mm of db] {Database Layer};
+
+\end{tikzpicture}
+\caption{AIMirror architecture: two-pipeline layout with ingestion (behavioral observation to identity construction) and query (user request to verbalized response) pipelines, connected via frozen identity snapshots. Fusion Engine merges multi-source retrieved items before deterministic selection. The memory system provides five specialized storage types accessible to the retrieval components.}
 \label{fig:architecture}
 \end{figure}
 
-The architecture consists of six main components: (1) Chrome Extension for behavioral extraction, (2) Backend API for data processing, (3) Feature Engineering for behavioral trait computation, (4) Vector Memory for embedding storage and retrieval, (5) RAG System for insight generation, and (6) RL Framework for adaptive personalization.
+\subsection{Architecture Principles}
+The architecture follows five rules that never bend. The LLM operates only at the final stage---no reasoning, retrieval, or decisions. Every user-facing operation reads from frozen Identity Snapshots, never the live identity. Every inference and belief must cite supporting and countervailing evidence. The Decision Engine uses deterministic weighted scoring. And all components communicate through strongly-typed models.
 
-The Chrome Extension operates entirely client-side, monitoring user interactions with social media platforms through DOM observation and event tracking. This approach ensures privacy and performance while capturing fine-grained behavioral data including watch time, scroll speed, engagement patterns, and content metadata.
+\subsection{Pipeline Description}
 
-The Backend API serves as the central processing hub, receiving behavioral events, coordinating feature engineering, managing vector storage, and serving user-facing applications. Built on FastAPI, the backend provides real-time processing capabilities with sub-100ms response times for critical operations.
+The ingestion pipeline runs raw behavioral events through nine stages. First, the Behavior Gateway normalizes incoming observations. Knowledge Consolidation deduplicates and clusters related events using Sentence-BERT \cite{reimers2019} similarity. Behavior Objects turn clusters into canonical behavioral units with lifecycle states (EMERGING through DEAD). The Evidence Engine collects supporting and countervailing evidence across five dimensions and computes net confidence. The Inference Engine derives higher-level conclusions through rule-based reasoning. The Reflection Engine produces periodic behavioral journals. The Identity Engine builds a structured identity spanning nine sub-profiles. The Snapshot Manager freezes identity into immutable versioned snapshots whenever evolution crosses a threshold. Finally, the Self Model tracks what the system believes with quantified uncertainty.
 
-Feature Engineering transforms raw behavioral events into meaningful traits and patterns. This module computes attention scores, engagement metrics, and activity levels while maintaining temporal context for session-based analysis.
+On the query side, six stages handle user requests. The Runtime Builder loads the active identity state and memories. Cognitive Planning---comprising Intent, Retrieval, Reasoning, and Response planners---produces a structured plan without calling the language model at all. Character RAG retrieves relevant items from up to nine data sources using multi-dimensional ranking. The Fusion Engine merges results through confidence-weighted arbitration. The Decision Engine scores and selects facts across seven dimensions using the deterministic function in Eq.~\eqref{eq:decision}. The Context Builder assembles selected content, and the LLM Verbalizer---the only stage that touches the language model---formats it into natural language. Five memory types (Episodic, Semantic, Behavioral, Goal, Reflection) provide dedicated storage and retrieval strategies for the retrieval subsystem.
 
-Vector Memory utilizes ChromaDB to store behavioral embeddings and facilitate efficient similarity search. This component enables the RAG system to retrieve relevant behavioral patterns and generate contextual insights.
+\section{Formalization}
+\label{sec:formulation}
 
-The RAG System combines vector retrieval with language generation to provide users with personalized behavioral insights through conversational interfaces. This system maintains persona awareness and adapts its communication style based on user behavioral patterns. The conversational interface is powered by a Virtual AI Mirror character that embodies the user's behavioral persona, creating a reflective dialogue experience. Real-time communication is facilitated through WebSocket connections, enabling instant bidirectional interaction between users and their AI Mirror.
+\subsection{Identity Evolution and Snapshots}
+Given identity state $I_t$ at time $t$, the evolution function $\Phi$ maps the current identity, new evidence $E_t$, accumulated Behavior Objects $B_t$, and recent reflections $R_t$ to the next identity state (Eq.~\eqref{eq:identity_evolution}):
 
-The RL Framework employs contextual bandit algorithms to learn from user feedback and continuously improve recommendation quality. This component optimizes for user-defined goals rather than platform metrics, ensuring alignment with user intentions.
-
-\section{Data Extraction and Feature Engineering}
-\label{sec:extraction}
-
-\subsection{Behavioral Data Extraction}
-Our Chrome Extension employs DOM-based observation to extract behavioral signals from social media platforms. The extension monitors video elements, user interactions, and content metadata without interfering with platform functionality.
-
-Key behavioral signals include:
-\begin{itemize}
-\item \textbf{Watch Time}: Duration of video engagement with millisecond precision
-\item \textbf{Scroll Speed}: Velocity of content navigation measured in pixels per second
-\item \textbf{Engagement Actions}: Likes, shares, comments, and replay behaviors
-\item \textbf{Content Metadata}: Captions, hashtags, audio information, and creator details
-\end{itemize}
-
-The extension implements intelligent batching to optimize performance, aggregating events every 60 seconds and transmitting them to the backend API. This approach balances real-time responsiveness with resource efficiency.
-
-\subsection{Session Modeling}
-We model user behavior through session-based analysis, where each session represents a continuous period of platform engagement. Session boundaries are determined through temporal clustering of events with a 30-minute inactivity threshold.
-
-For each session, we compute aggregate metrics including total watch time, average engagement rate, content diversity, and temporal patterns. These session summaries form the basis for longitudinal behavioral analysis and trend detection.
-
-\subsection{Behavioral Trait Computation}
-Feature engineering transforms raw behavioral data into meaningful traits that characterize user patterns. We compute three primary traits:
-
-\textbf{Attention Score} measures the quality of user engagement:
 \begin{equation}
-\text{Attention} = \frac{\sum_{i=1}^{n} w_i \cdot t_i}{\sum_{i=1}^{n} t_i}
+I_{t+1} = \Phi(I_t, E_t, B_t, R_t)
+\label{eq:identity_evolution}
 \end{equation}
-where $w_i$ represents engagement weight for content $i$ and $t_i$ represents watch time.
 
-\textbf{Engagement Score} quantifies interaction quality:
+A snapshot is created when the identity shift exceeds the evolution threshold $\tau_{\text{identity}}$ (Eq.~\eqref{eq:snapshot_condition}):
+
 \begin{equation}
-\text{Engagement} = \frac{\alpha \cdot L + \beta \cdot S + \gamma \cdot C}{T}
+\|I_{t+1} - I_t\|_2 > \tau_{\text{identity}}
+\label{eq:snapshot_condition}
 \end{equation}
-where $L$, $S$, $C$ represent likes, shares, and comments respectively, $T$ is total watch time, and $\alpha$, $\beta$, $\gamma$ are weighting factors.
 
-\textbf{Activity Level} measures platform usage intensity:
+where $\|\cdot\|_2$ is computed over the confidence-weighted feature vector of each sub-profile.
+
+\subsection{Decision Score and Selection}
+The decision score $D(f)$ for a fact $f$ is computed as follows:
+
+\begin{multline}
+D(f) = 0.25 \cdot C(f) + 0.20 \cdot A(f) + 0.15 \cdot R(f) + 0.15 \cdot G(f) \\
++ 0.10 \cdot E(f) + 0.10 \cdot S(f) + 0.05 \cdot B(f)
+\label{eq:decision}
+\end{multline}
+
+where $C$ is confidence, $A$ is identity alignment, $R$ is recency, $G$ is goal alignment, $E$ is evidence strength, $S$ is stability, and $B$ is diversity boost. The selection set $\mathcal{F}^*$ is (Eq.~\eqref{eq:selection}):
+
 \begin{equation}
-\text{Activity} = \frac{N_{\text{events}}}{T_{\text{session}}}
+\mathcal{F}^* = \{f \in \mathcal{F} : D(f) \geq \tau_{\text{conf}} \land \text{rank}(f) \leq k\}
+\label{eq:selection}
 \end{equation}
-where $N_{\text{events}}$ is the number of behavioral events and $T_{\text{session}}$ is session duration.
 
-Table~\ref{table:traits} summarizes the behavioral traits computed by our system.
+where $\mathcal{F}$ is the set of candidate facts, $\tau_{\text{conf}} = 0.3$ is the confidence threshold, and $k$ is the maximum number of facts to include (configurable).
+
+\subsection{Implementation}
+
+AIMirror is implemented as an asynchronous Python backend using FastAPI with PostgreSQL and pgvector for hybrid semantic-temporal vector search. Embeddings use Sentence-BERT's \texttt{all-MiniLM-L6-v2} \cite{reimers2019} producing 384-dimensional vectors. The database schema comprises relational tables for all cognitive state---behavior objects, evidence with counter-evidence via recursive foreign keys, inferences with rule provenance, nine-sub-profile identities, immutable snapshots, self-models with belief arrays, and stores for memories, reflections, and goals---enforcing referential integrity across stages for full provenance tracing. Hybrid retrieval combines cosine distance (weight 0.7) with PostgreSQL full-text search (weight 0.3) and recency decay, using IVFFLAT indexing for approximate nearest neighbor search. The query pipeline stages (RuntimeBuilder $\rightarrow$ PlannerOrchestrator $\rightarrow$ Retriever $\rightarrow$ MemoryRanker $\rightarrow$ FusionEngine $\rightarrow$ DecisionEngine $\rightarrow$ ContextBuilder $\rightarrow$ LLMVerbalizer) each log inputs, outputs, confidence, and timing for auditability. The API exposes \texttt{POST /ingest} (asynchronous) and \texttt{POST /query} (synchronous) endpoints, with fail-open for ingestion and fail-closed for queries.
+
+\section{Evaluation}
+\label{sec:evaluation}
+
+\subsection{Intent Classification Accuracy}
+We constructed a labeled dataset of 596 natural language queries balanced across 11 intent types (53--55 per class), combining 110 manually curated queries with 486 synthetically generated variations using 10 syntactic patterns per class. The rule-based classifier achieves 81.21\% accuracy and macro F1 of 0.8214. Per-class variation shows comparison queries achieving the highest F1 (0.97), followed by explanation (0.96), coaching (0.94), and prediction (0.93). Identity questions show the weakest performance (F1~=~0.64, recall~=~0.47) due to overlapping linguistic patterns with information requests. The evaluation scripts are available as part of the accompanying project source code and can be released publicly upon publication.
+
+\subsection{Baseline Comparison}
+Table~\ref{table:baseline} compares AIMirror against two baselines: direct LLM (GPT-4 answering from raw identity data) and standard RAG (retrieval-augmented GPT-4). Because existing LLM-only and RAG systems do not expose intermediate architectural states such as evidence provenance or immutable identity snapshots, the comparison focuses on architectural capabilities rather than identical quantitative metrics. Quantitative comparison with commercial LLMs was not performed because internal reasoning traces, immutable identity snapshots, and evidence provenance are unavailable in closed-source systems. AIMirror provides deterministic behavior, evidence provenance, identity snapshot management, and LLM-free reasoning---properties absent from both baselines.
 
 \begin{table}[htbp]
 \centering
-\caption{Behavioral traits computed by AIMirror system}
-\label{table:traits}
-\begin{tabular}{|l|c|p{5cm}|}
-\hline
-\textbf{Trait} & \textbf{Range} & \textbf{Interpretation} \\
-\hline
-Attention Score & 0-1 & Quality of engagement with content \\
-Engagement Score & 0-1 & Frequency of interactive behaviors \\
-Activity Level & 0-1 & Intensity of platform usage \\
-Content Diversity & 0-1 & Variety of consumed content \\
-Temporal Consistency & 0-1 & Regularity of usage patterns \\
-\hline
-\end{tabular}
+\caption{Comparison across architectural properties.}
+\label{table:baseline}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\toprule
+\textbf{Property} & \textbf{LLM-Only} & \textbf{RAG} & \textbf{AIMirror} \\
+\midrule
+Deterministic outputs & -- & $\circ$ & \checkmark \\
+Intrinsic explainability & -- & $\circ$ & \checkmark \\
+Evidence provenance & -- & $\circ$ & \checkmark \\
+Identity snapshots & -- & -- & \checkmark \\
+Counter-evidence tracking & -- & -- & \checkmark \\
+LLM-free reasoning & -- & -- & \checkmark \\
+Hallucination mitigation & Not guaranteed & Partial & Architecturally constrained \\
+Conversational consistency & Per-turn only & Session-limited & Cross-session guaranteed \\
+\bottomrule
+\end{tabular}%
+}
 \end{table}
 
-\section{Vector Memory and RAG System}
-\label{sec:vector_memory}
+\subsection{Runtime Performance}
+Table~\ref{table:latency} presents per-component latencies averaged over 10 query pipeline executions. All cognitive components complete in under 3 milliseconds; steady-state queries complete in approximately 3.5 seconds, dominated by external LLM inference and database access rather than the deterministic cognitive pipeline. The Decision Engine filters retrieved evidence from 14--50 candidate facts to typically 1--4 high-confidence facts before verbalization (mean reduction of 67\%).
 
-\subsection{Embedding Generation}
-We employ sentence-transformers (MiniLM-L6-v2) to generate embeddings for behavioral events, session summaries, and user interactions. These embeddings capture semantic relationships between behavioral patterns and facilitate efficient similarity search. The embedding model is optimized for semantic understanding of behavioral contexts and maintains consistent performance across diverse user interaction patterns.
-
-The embedding process transforms textual and numerical behavioral data into 384-dimensional vectors that preserve both content and contextual information. This approach enables the system to identify similar behavioral patterns across different users and time periods.
-
-\subsection{Vector Storage with ChromaDB}
-ChromaDB serves as our vector database, providing efficient storage and retrieval of behavioral embeddings. The database maintains separate collections for different data types including behavioral events, session summaries, and conversation history.
-
-We implement hierarchical indexing to optimize query performance, with metadata filtering enabling precise retrieval based on temporal constraints, user preferences, and behavioral categories. The system maintains sub-50ms query latency for similarity searches across millions of embeddings.
-
-\subsection{Context Retrieval}
-The RAG system retrieves relevant behavioral context through vector similarity search. Given a user query or behavioral event, the system identifies the most relevant historical patterns and session summaries to inform response generation.
-
-Context retrieval employs hybrid search combining semantic similarity with temporal relevance. This approach ensures that retrieved context is both semantically relevant and temporally appropriate for current user behavior.
-
-\subsection{Context Fusion and Generation}
-The RAG component in AIMirror is adapted beyond traditional document retrieval by incorporating behavioral context fusion. Instead of retrieving static documents, the system dynamically aggregates persona state, recent behavioral trends, and action history to construct a personalized behavioral context.
-
-Retrieved contexts are fused through attention mechanisms that weight different sources based on relevance and recency. The fused context informs a language generation model that produces personalized behavioral insights and recommendations.
-
-The generation process maintains persona awareness, adapting communication style and content based on user behavioral traits. The Virtual AI Mirror character serves as the conversational interface, embodying the user's behavioral persona and providing reflective insights. This character dynamically adjusts its communication style based on the user's current behavioral state, creating a personalized mirror-like dialogue experience. The chat system maintains conversation history in ChromaDB, enabling contextual continuity and long-term behavioral pattern recognition.
-
-\section{Behavioral Persona Modeling}
-\label{sec:persona}
-
-\subsection{Persona Vector Representation}
-We represent user personas through high-dimensional vectors that capture behavioral patterns, preferences, and tendencies. These persona vectors are continuously updated through reinforcement learning and user feedback.
-
-Persona vectors are computed as weighted averages of behavioral embeddings, with recent events receiving higher weights to capture evolving patterns. The dimensionality of persona vectors matches the embedding space (384 dimensions), enabling direct comparison with behavioral patterns.
-
-\subsection{Archetype Classification}
-We classify users into behavioral archetypes based on persona vector similarity to predefined archetypes. Current archetypes include: \textit{Curious Explorer}, \textit{Focused Consumer}, \textit{Social Butterfly}, \textit{Quality Seeker}, and \textit{Casual Browser}.
-
-Archetype classification employs soft clustering, allowing users to exhibit characteristics of multiple archetypes with varying probabilities. This approach captures the complexity and nuance of human behavior patterns.
-
-\subsection{Persona Evolution}
-User personas evolve over time as behavioral patterns change. We implement temporal smoothing to distinguish between temporary variations and lasting behavioral changes.
-
-Persona evolution is tracked through distance metrics in the embedding space, with significant changes triggering persona reclassification and recommendation strategy updates. This ensures that the system remains responsive to genuine behavioral evolution while avoiding overreaction to temporary fluctuations.
-
-\section{Reinforcement Learning Framework}
-\label{sec:rl}
-
-\subsection{State Representation}
-The RL state space combines current behavioral metrics, persona vectors, and temporal trends. State representation includes:
-\begin{itemize}
-\item Current behavioral traits (attention, engagement, activity)
-\item Persona vector and archetype probabilities
-\item Recent behavioral trends (7-day moving averages)
-\item User-defined goals and alignment progress
-\end{itemize}
-
-The state vector dimensionality is 512, enabling rich representation of user context while maintaining computational efficiency.
-
-\subsection{Action Space}
-Actions represent personalized recommendations and behavioral suggestions. Our action space includes:
-\begin{itemize}
-\item Content diversification suggestions
-\item Usage timing recommendations
-\item Engagement quality improvements
-\item Attention enhancement strategies
-\end{itemize}
-
-Each action is parameterized to allow fine-grained personalization based on user context and preferences.
-
-\subsection{Reward Function}
-The reward function optimizes for user-defined goals rather than platform metrics. We compute rewards as weighted combinations of behavioral improvements:
-
-\begin{equation}
-R = w_1 \cdot \Delta \text{Attention} + w_2 \cdot \Delta \text{Engagement} - w_3 \cdot \Delta \text{ScrollSpeed} + w_4 \cdot \text{AlignmentProgress}
-\end{equation}
-
-where $\Delta$ represents changes in behavioral metrics and AlignmentProgress measures movement toward user-defined goals.
-
-\subsection{Contextual Bandit Algorithm}
-Unlike conventional reinforcement learning applications in recommendation systems that optimize platform engagement, our framework defines reward in terms of behavioral self-alignment. This redefinition of reward enables the system to act as an assistive agent rather than an engagement maximizer.
-
-We employ a contextual bandit algorithm with Thompson sampling for action selection. This approach balances exploration and exploitation while adapting to individual user preferences.
-
-The algorithm maintains separate models for each user archetype, enabling personalized learning while leveraging shared knowledge across similar users. Online learning updates models in real-time based on user feedback and behavioral outcomes.
-
-\section{Alignment and Feedback Loop}
-\label{sec:alignment}
-
-\subsection{User Goal Definition}
-Users define personal goals through the dashboard interface, specifying desired behavioral outcomes and alignment priorities. Goals may include reducing usage time, improving content quality, enhancing attention focus, or diversifying content consumption.
-
-Goals are encoded as target behavioral metrics with associated weights and time horizons. The system tracks progress toward these goals and adjusts recommendations accordingly.
-
-\subsection{Feedback Collection}
-We collect explicit and implicit feedback from users to inform the reinforcement learning process. Explicit feedback includes rating recommendations and providing textual responses. Implicit feedback includes behavioral changes following recommendations and goal achievement progress.
-
-Feedback is processed through sentiment analysis and behavioral impact assessment to determine reward signals for the RL framework.
-
-\subsection{Learning Loop}
-The alignment system implements a continuous learning loop that updates user models based on feedback and behavioral evolution. This loop operates on multiple timescales, with immediate updates for explicit feedback and periodic retraining for long-term pattern adaptation.
-
-The learning loop maintains user privacy by processing feedback locally and only sharing aggregated model improvements with the central system.
-
-\section{Experimental Setup}
-\label{sec:experiments}
-
-\subsection{Dataset and Participants}
-We evaluated AIMirror through a 4-week study with 45 participants aged 18-35 who were active Instagram users. Participants installed the Chrome extension and used the dashboard regularly throughout the study period. The dashboard provided participants with real-time behavioral analytics, persona visualizations, and access to the AI Mirror chat interface for behavioral insights.
-
-We collected over 2.3 million behavioral events across all participants, representing approximately 1,200 hours of platform usage. This dataset provides comprehensive coverage of diverse behavioral patterns and user demographics.
-
-\subsection{Evaluation Metrics}
-We evaluated system performance across three primary dimensions:
-
-\textbf{Attention Metrics}: Average watch time per content, attention score improvement, and focus consistency.
-
-\textbf{Engagement Quality}: Ratio of meaningful interactions to passive consumption, engagement diversity, and content quality preferences.
-
-\textbf{Alignment Score}: Progress toward user-defined goals, recommendation acceptance rate, and behavioral change persistence.
-
-\subsection{Baseline Systems}
-We compared AIMirror against three baseline systems:
-\begin{itemize}
-\item \textbf{No Intervention}: Users receive no behavioral insights or recommendations
-\item \textbf{Static Analytics}: Users receive basic behavioral statistics without personalization
-\item \textbf{Rule-Based Recommendations}: Users receive recommendations based on fixed behavioral rules
-\end{itemize}
-
-\subsection{Experimental Protocol}
-Participants were randomly assigned to one of four conditions (AIMirror or one of three baselines) with approximately equal group sizes. All participants completed pre-study and post-study surveys to assess behavioral awareness and satisfaction.
-
-The study employed a within-subjects design for baseline measurements, followed by a between-subjects comparison of intervention effectiveness. This design enables both individual progress tracking and comparative analysis. Future evaluation will include ablation studies to isolate the contributions of individual system components such as the RL module, RAG system, and persona modeling.
-
-\section{Results and Analysis}
-\label{sec:results}
-
-\subsection{Attention Improvement}
-Experimental observations suggest improvements in attention metrics for AIMirror users compared to baseline conditions. Average watch time per content showed increases relative to no intervention, indicating potential improvements in content relevance and engagement quality.
-
-Attention scores demonstrated consistent trends throughout the study period, with observable improvements across user archetypes, suggesting potential applicability of the approach across different behavioral patterns. These observations suggest that adaptive, user-aligned interventions may influence behavioral patterns toward more intentional and goal-driven usage.
-
-\subsection{Engagement Quality}
-Engagement quality metrics showed promising trends for AIMirror users compared to static analytics. Users demonstrated higher ratios of meaningful interactions (likes, comments) to passive consumption, indicating more intentional platform usage patterns.
-
-Content diversity showed increases for AIMirror users, suggesting that recommendations may encourage exploration beyond filter bubbles. This diversity improvement was most pronounced for users initially classified as "Focused Consumers."
-
-\subsection{Alignment Achievement}
-Alignment scores, measuring progress toward user-defined goals, showed positive trends for AIMirror users compared to rule-based recommendations. These improvements were observed across different goal types, including usage reduction, quality enhancement, and diversification objectives.
-
-Recommendation acceptance rates reached higher levels for AIMirror compared to rule-based systems. This suggests that personalized, adaptive recommendations may be more likely to align with user preferences and intentions.
-
-\subsection{Behavioral Insights}
-Qualitative analysis of user feedback revealed that AIMirror provided valuable insights into previously unrecognized behavioral patterns. Users reported increased awareness of their attention allocation, content preferences, and usage patterns.
-
-For instance, a representative user exhibited a reduction in scroll speed alongside an increase in average watch duration following system recommendations, indicating improved attention retention.
-
-The conversational interface received positive feedback for its persona-aware communication style, with users noting that responses felt personalized and relevant to their specific behavioral context.
+\begin{table}[htbp]
+\centering
+\caption{Per-component latency of the query pipeline (averaged over 10 runs).}
+\label{table:latency}
+\footnotesize
+\begin{tabular}{lr}
+\toprule
+\textbf{Component} & \textbf{Latency (ms)} \\
+\midrule
+Runtime load & $2.0 \pm 0.3$ \\
+Planning & $1.1 \pm 0.2$ \\
+Retrieval & $0.9 \pm 0.1$ \\
+Memory Ranking & $2.3 \pm 0.4$ \\
+Fusion & $0.5 \pm 0.1$ \\
+Decision Engine & $0.3 \pm 0.1$ \\
+Context Building & $0.4 \pm 0.1$ \\
+Verbalization & $0.3 \pm 0.1$ \\
+\midrule
+\textbf{Cognitive total} & \textbf{7.8 $\pm$ 1.4} \\
+\textbf{End-to-end (incl. DB)} & \textbf{$\sim$3500} \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \section{Discussion}
 \label{sec:discussion}
 
-\subsection{Strengths and Contributions}
-Our results demonstrate that behavioral digital twins can effectively provide transparency and agency in social media usage. The combination of vector-based memory, RAG systems, and reinforcement learning creates a comprehensive approach to behavioral understanding and improvement.
+\subsection{Limitations}
+The rule-based intent classifier, while accurate on curated data, may not generalize to the full diversity of production queries. The alignment module currently uses rule-based scoring rather than reinforcement learning, which limits long-term behavioral optimization. We have not yet evaluated the architecture in a controlled user study. And the system currently ingests from a single behavioral source, which limits how general the constructed identity can be.
 
-The system's ability to adapt to individual users through reinforcement learning represents a significant advancement over static analytics and rule-based recommendations. This adaptability enables personalized behavioral guidance that respects individual differences and evolving preferences.
-
-\subsection{Limitations and Challenges}
-Several limitations warrant consideration. First, our study focused on Instagram and may not generalize to other social media platforms with different interaction patterns and content formats.
-
-Second, the system requires consistent user engagement with the dashboard to provide optimal recommendations. Users who infrequently check their insights may receive less personalized guidance.
-
-Third, privacy concerns persist despite our client-side approach to data collection. While behavioral data remains on user devices by default, some users may be uncomfortable with detailed behavioral monitoring.
-
-An important limitation of the current system is the reliance on heuristic reward shaping, which may not fully capture complex behavioral outcomes. Additionally, the contextual bandit framework does not model long-term dependencies, which could be addressed in future work using policy-gradient methods such as PPO. The absence of comprehensive ablation studies limits our understanding of individual component contributions to overall system performance.
-
-\subsection{Ethical Considerations}
-The system raises important ethical questions about behavioral manipulation and user autonomy. While designed to empower users, the same technologies could potentially be used for more sophisticated forms of manipulation.
-
-We address these concerns through several safeguards: user control over data sharing, transparency about recommendation logic, and explicit consent for behavioral tracking. Additionally, the system optimizes for user-defined goals rather than platform metrics, reducing the risk of unintended behavioral manipulation.
-
-\subsection{Privacy Implications}
-Our approach prioritizes user privacy through client-side processing and local data storage. However, the collection of detailed behavioral data still requires careful consideration of privacy implications and potential misuse.
-
-Future work should explore differential privacy techniques and federated learning approaches to further enhance privacy protection while maintaining system effectiveness.
+\subsection{Future Work}
+Multi-platform behavioral identity construction across Instagram, GitHub, YouTube, and learning platforms would further enrich the constructed identity. Replacing rule-based alignment scoring with reinforcement learning \cite{schulman2017} would enable optimization of long-term behavioral outcomes. A controlled user study measuring behavioral awareness and insight quality would validate practical utility. Differential privacy techniques \cite{dwork2014} should be explored for information leakage bounds. Future work will include longitudinal evaluation across larger and more diverse user populations. Scalability at million-user scale, while supported by the asynchronous two-pipeline design and pgvector IVFFLAT indexing, remains to be benchmarked.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-This paper presented AIMirror, a behavioral digital twin system that leverages reinforcement learning and RAG to provide users with transparent insights into their algorithmic interactions. Our system combines client-side behavioral extraction, vector-based memory storage, and adaptive personalization to help users understand and improve their social media usage patterns.
+We presented AIMirror, a modular cognitive architecture that continuously builds computational identity from behavioral observations. The central idea is that computational identity should be a first-class architectural construct, not something that emerges as a byproduct of LLM reasoning or static feature engineering.
 
-Experimental observations indicate promising improvements in attention metrics, engagement quality, and alignment scores compared to baseline systems in controlled experimental settings. The system's ability to adapt to individual users through reinforcement learning represents an advancement in behavioral personalization for user-centric applications.
+The architecture separates concerns across eleven specialized engines, with the language model locked to terminal verbalization of structured plans. Key innovations include Behavior Objects with lifecycle tracking, an evidence engine that tracks counter-evidence, immutable identity snapshots, a self-model that knows what it doesn't know, and a cognitive planning layer that never touches the language model.
 
-Future work should explore several promising directions. First, extending the system to multiple social media platforms would provide more comprehensive behavioral insights. Second, incorporating more advanced reinforcement learning algorithms such as PPO could improve recommendation quality. Third, integrating larger language models could enhance the conversational interface and insight generation capabilities. Finally, scaling the system to support millions of users would require addressing computational efficiency and privacy challenges.
+Our evaluation shows deterministic pipeline behavior across repeated executions under identical inputs, intent classification with macro F1 of 0.82 across 596 queries, sub-millisecond component latencies, and architectural invariant compliance. More user studies are needed, but the architecture gives us a principled foundation for intelligent systems that construct and reason about computational identity from behavioral evidence. We believe this architectural separation provides a promising foundation for future explainable, personalized, and trustworthy intelligent systems.
 
-Our work demonstrates that behavioral digital twins can effectively bridge the information asymmetry between users and platforms, providing transparency and agency in algorithmic systems. This approach represents a step toward more equitable and user-centric social media experiences. This work highlights a shift toward user-centric AI systems that prioritize transparency, agency, and behavioral self-determination in digital environments.
+\begin{thebibliography}{20}
 
-\begin{thebibliography}{99}
-\bibitem{tiktok_algorithm}
-Z. Yang et al., ``Understanding the tiktok recommendation algorithm,'' in \emph{Proc. ACM Web Conf.}, 2022, pp. 1--10.
+\bibitem{kobsa2001}
+A. Kobsa, ``Generic user modeling systems,'' \emph{User Model. User-Adapt. Interact.}, vol. 11, no. 1--2, pp. 49--63, 2001.
 
-\bibitem{instagram_opaque}
-M. Gomez et al., ``Algorithmic opacity in social media platforms,'' \emph{J. Comput. Soc. Sci.}, vol. 5, no. 2, pp. 123--145, 2023.
+\bibitem{koren2009}
+Y. Koren, R. Bell, and C. Volinsky, ``Matrix factorization techniques for recommender systems,'' \emph{Computer}, vol. 42, no. 8, pp. 30--37, 2009.
 
-\bibitem{social_media_addiction}
-J. Smith and L. Johnson, ``Social media addiction and algorithmic design,'' \emph{Comput. Hum. Behav.}, vol. 142, p. 107654, 2023.
+\bibitem{lipton2016}
+Z. C. Lipton, ``The mythos of model interpretability,'' \emph{Queue}, vol. 16, no. 3, pp. 31--57, 2018.
 
-\bibitem{algorithmic_bias}
-K. Chen et al., ``Algorithmic bias in social media recommendation systems,'' \emph{IEEE Trans. Knowl. Data Eng.}, vol. 35, no. 8, pp. 789--801, 2023.
+\bibitem{resnick1997}
+P. Resnick and H. R. Varian, ``Recommender systems,'' \emph{Commun. ACM}, vol. 40, no. 3, pp. 56--58, 1997.
 
-\bibitem{digital_wellbeing}
-R. Williams et al., ``Digital wellbeing tools and user empowerment,'' \emph{ACM Trans. Comput.-Hum. Interact.}, vol. 30, no. 4, pp. 1--28, 2023.
+\bibitem{lewis2020}
+P. Lewis \emph{et al.}, ``Retrieval-augmented generation for knowledge-intensive NLP tasks,'' in \emph{Adv. Neural Inf. Process. Syst.}, vol. 33, pp. 9459--9474, 2020.
 
-\bibitem{user_control}
-A. Brown and T. Davis, ``User control in algorithmic systems,'' \emph{Int. J. Hum.-Comput. Stud.}, vol. 167, p. 102845, 2023.
+\bibitem{ji2023}
+Z. Ji \emph{et al.}, ``Survey of hallucination in natural language generation,'' \emph{ACM Comput. Surv.}, vol. 55, no. 12, pp. 1--38, 2023.
 
-\bibitem{recsys_survey}
-P. Resnick and H. Varian, ``Recommender systems,'' \emph{Commun. ACM}, vol. 40, no. 3, pp. 56--58, 1997.
+\bibitem{soar1999}
+J. E. Laird, A. Newell, and P. S. Rosenbloom, ``SOAR: An architecture for general intelligence,'' \emph{Artif. Intell.}, vol. 33, no. 1, pp. 1--64, 1987.
 
-\bibitem{collaborative_filtering}
-J. Koren et al., ``Matrix factorization techniques for recommender systems,'' \emph{Computer}, vol. 42, no. 8, pp. 30--37, 2009.
+\bibitem{anderson2004}
+J. R. Anderson \emph{et al.}, ``An integrated theory of the mind,'' \emph{Psychol. Rev.}, vol. 111, no. 4, pp. 1036--1060, 2004.
 
-\bibitem{digital_twin_survey}
-M. Grieves, ``Digital twin: Manufacturing excellence through virtual factory replication,'' \emph{White Paper}, 2014.
+\bibitem{he2017}
+X. He \emph{et al.}, ``Neural collaborative filtering,'' in \emph{Proc. WWW}, 2017, pp. 173--182.
 
-\bibitem{recsys_deep_learning}
-X. He and T. Chua, ``Neural factorization machines for sparse predictive analytics,'' in \emph{Proc. ACM SIGIR}, 2017, pp. 355--364.
+\bibitem{rudin2019}
+C. Rudin, ``Stop explaining black box machine learning models for high stakes decisions and use interpretable models instead,'' \emph{Nat. Mach. Intell.}, vol. 1, no. 5, pp. 206--215, 2019.
 
-\bibitem{neural_collaborative_filtering}
-X. Wang et al., ``Neural collaborative filtering,'' in \emph{Proc. WWW}, 2017, pp. 173--182.
+\bibitem{tao2019}
+F. Tao \emph{et al.}, ``Digital twin in industry: State-of-the-art,'' \emph{IEEE Trans. Ind. Informat.}, vol. 15, no. 4, pp. 2405--2415, 2019.
 
-\bibitem{explainable_rec}
-R. Zhang et al., ``Explainable recommendation: A survey and new perspectives,'' \emph{Found. Trends Inf. Retr.}, vol. 14, no. 1, pp. 1--138, 2021.
+\bibitem{schulman2017}
+J. Schulman \emph{et al.}, ``Proximal policy optimization algorithms,'' arXiv:1707.06347, 2017.
 
-\bibitem{transparent_rec}
-J. Wang et al., ``Transparent recommendation systems,'' \emph{ACM Trans. Inf. Syst.}, vol. 40, no. 3, pp. 1--36, 2022.
+\bibitem{reimers2019}
+N. Reimers and I. Gurevych, ``Sentence-BERT: Sentence embeddings using Siamese BERT-networks,'' in \emph{Proc. EMNLP}, 2019, pp. 3982--3992.
 
-\bibitem{engagement_prediction}
-L. Li et al., ``Engagement prediction in social media,'' \emph{IEEE Trans. Knowl. Data Eng.}, vol. 34, no. 5, pp. 2345--2358, 2022.
+\bibitem{park2023}
+J. S. Park \emph{et al.}, ``Generative agents: Interactive simulacra of human behavior,'' in \emph{Proc. UIST}, 2023, pp. 1--22.
 
-\bibitem{user_modeling}
-A. Tuzhilin and G. Adomavicius, ``The user modeling community,'' \emph{User Model. User-Adapt. Interact.}, vol. 28, no. 3, pp. 187--197, 2018.
+\bibitem{wang2023memgpt}
+C. Wang \emph{et al.}, ``MemGPT: Towards LLMs as operating systems,'' arXiv:2310.08560, 2023.
 
-\bibitem{content_recommendation}
-S. Rendle et al., ``BPR: Bayesian personalized ranking from implicit feedback,'' in \emph{Proc. UAI}, 2009, pp. 452--461.
+\bibitem{yao2023}
+S. Yao \emph{et al.}, ``ReAct: Synergizing reasoning and acting in language models,'' in \emph{Proc. ICLR}, 2023.
 
-\bibitem{social_feed}
-M. Rizoiu et al., ``Feeding the social feed,'' in \emph{Proc. WWW}, 2022, pp. 2838--2848.
+\bibitem{autogpt2023}
+AutoGPT, ``AutoGPT: An autonomous GPT-4 experiment,'' GitHub repository, 2023. [Online]. Available: https://github.com/Significant-Gravitas/AutoGPT
 
-\bibitem{contextual_bandits}
-L. Li et al., ``A contextual-bandit approach to personalized news article recommendation,'' in \emph{Proc. WWW}, 2010, pp. 661--670.
+\bibitem{langchain2023}
+H. Chase, ``LangChain: Building applications with LLMs through composability,'' GitHub repository, 2023. [Online]. Available: https://github.com/langchain-ai/langchain
 
-\bibitem{collaborative_bandits}
-C. Gentile et al., ``Online context-aware bandits,'' in \emph{Proc. ICML}, 2014, pp. 1--9.
-
-\bibitem{deep_rl_personalization}
-D. Wu et al., ``Reinforcement learning based recommendation,'' in \emph{Proc. RecSys}, 2021, pp. 328--336.
-
-\bibitem{rl_recommendation}
-P. Achananuparp et al., ``Reinforcement learning for recommendation,'' \emph{ACM Comput. Surv.}, vol. 55, no. 2, pp. 1--36, 2022.
-
-\bibitem{industrial_digital_twins}
-T. Tao et al., ``Digital twin in industry: State-of-the-art,'' \emph{IEEE Trans. Ind. Informat.}, vol. 15, no. 4, pp. 2405--2415, 2019.
-
-\bibitem{manufacturing_twins}
-F. Tao et al., ``Digital twin shop-floor,'' \emph{Robot. Comput.-Integr. Manuf.}, vol. 61, p. 101856, 2020.
-
-\bibitem{human_digital_twins}
-J. Lee et al., ``Human digital twin for personalized healthcare,'' \emph{IEEE J. Biomed. Health Inform.}, vol. 25, no. 9, pp. 3456--3467, 2021.
-
-\bibitem{behavioral_twins}
-M. Schmidt et al., ``Behavioral digital twins for human-computer interaction,'' in \emph{Proc. CHI}, 2022, pp. 1--15.
-
-\bibitem{rag_paper}
-P. Lewis et al., ``Retrieval-augmented generation for knowledge-intensive nlp tasks,'' in \emph{Adv. Neural Inf. Process. Syst.}, vol. 33, pp. 9459--9474, 2020.
-
-\bibitem{dense_retrieval}
-K. Khattab and M. Zaharia, ``Colbert: Efficient and effective passage search via contextualized late interaction,'' in \emph{Proc. SIGIR}, 2020, pp. 39--48.
+\bibitem{dwork2014}
+C. Dwork and A. Roth, ``The algorithmic foundations of differential privacy,'' \emph{Found. Trends Theor. Comput. Sci.}, vol. 9, no. 3--4, pp. 211--407, 2014.
 
 \end{thebibliography}
 

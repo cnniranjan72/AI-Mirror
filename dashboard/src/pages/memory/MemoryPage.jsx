@@ -1,0 +1,111 @@
+import { useState } from 'react'
+import { useReflections, useInferences } from '../../hooks/useApi'
+import GlassCard from '../../components/ui/GlassCard'
+import Badge from '../../components/ui/Badge'
+import { BrainIcon, LayersIcon, SearchIcon } from '../../icons/icons'
+
+const memoryTypes = [
+  { key: 'reflections', label: 'Reflection Memory', icon: BrainIcon, color: '#6366f1' },
+  { key: 'inferences', label: 'Semantic Memory', icon: LayersIcon, color: '#8b5cf6' },
+  { key: 'patterns', label: 'Pattern Memory', icon: BrainIcon, color: '#ec4899' },
+]
+
+export default function MemoryPage() {
+  const { data: reflections, loading: refLoading } = useReflections()
+  const { data: inferences, loading: infLoading } = useInferences()
+  const [search, setSearch] = useState('')
+  const [activeTab, setActiveTab] = useState('all')
+
+  const refs = Array.isArray(reflections) ? reflections : (reflections?.reflections || [])
+  const infs = Array.isArray(inferences) ? inferences : (inferences?.inferences || [])
+
+  const filterItems = (items) => {
+    if (!search) return items
+    const q = search.toLowerCase()
+    return items.filter(i => JSON.stringify(i).toLowerCase().includes(q))
+  }
+
+  const filteredRefs = filterItems(refs)
+  const filteredInfs = filterItems(infs)
+
+  const tabs = [
+    { id: 'all', label: 'All Memory', count: refs.length + infs.length },
+    { id: 'reflections', label: 'Reflections', count: refs.length },
+    { id: 'inferences', label: 'Inferences', count: infs.length },
+  ]
+
+  return (
+    <div>
+      <div style={{ marginBottom: 32 }}>
+        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Memory</h1>
+        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive memory stores and retrieval</p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
+          <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}><SearchIcon /></div>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search memory..."
+            style={{
+              width: '100%', padding: '10px 12px 10px 36px', borderRadius: 8,
+              background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
+              color: 'var(--text-primary)', fontSize: 14, outline: 'none',
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setActiveTab(t.id)} style={{
+              padding: '6px 14px', borderRadius: 100, border: '1px solid var(--border-subtle)',
+              background: activeTab === t.id ? 'rgba(99,102,241,0.15)' : 'transparent',
+              color: activeTab === t.id ? 'var(--indigo-400)' : 'var(--text-tertiary)',
+              fontSize: 13, fontWeight: 500, cursor: 'pointer',
+            }}>
+              {t.label} <span style={{ opacity: 0.6, marginLeft: 4 }}>{t.count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+        {memoryTypes.map(mt => (
+          <GlassCard key={mt.key} gradient>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: `${mt.color}15`, border: `1px solid ${mt.color}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: mt.color }}>
+                <mt.icon />
+              </div>
+              <div>
+                <h4 style={{ fontSize: 14, fontWeight: 600 }}>{mt.label}</h4>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {mt.key === 'reflections' ? filteredRefs.length : mt.key === 'inferences' ? filteredInfs.length : 0} entries
+                </div>
+              </div>
+            </div>
+            <div style={{ maxHeight: 240, overflow: 'auto' }}>
+              {(mt.key === 'reflections' ? filteredRefs : mt.key === 'inferences' ? filteredInfs : [])
+                .slice(0, 10).map((item, i) => (
+                  <div key={item.reflection_id || item.inference_id || i} style={{
+                    padding: '8px 0', borderBottom: '1px solid var(--border-subtle)',
+                    animation: `fadeIn 0.3s ease-out ${i * 0.05}s both`,
+                  }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, marginBottom: 4 }}>
+                      {item.summary || item.description || `Entry ${i + 1}`}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 8 }}>
+                      {item.confidence && <span>Conf: {Math.round(item.confidence * 100)}%</span>}
+                      {item.event_count && <span>{item.event_count} events</span>}
+                    </div>
+                  </div>
+                ))}
+              {mt.key === 'reflections' && filteredRefs.length === 0 && (
+                <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No reflections</div>
+              )}
+            </div>
+          </GlassCard>
+        ))}
+      </div>
+    </div>
+  )
+}
