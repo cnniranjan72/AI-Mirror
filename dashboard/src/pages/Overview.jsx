@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useIdentity, useReflections, useTraces, useCognitiveMetrics, useApi } from '../hooks/useApi'
+import { useIdentity, useReflections, useTraces, useApi } from '../hooks/useApi'
 import { api } from '../api/client'
 import GlassCard from '../components/ui/GlassCard'
 import StatCard from '../components/ui/StatCard'
@@ -10,57 +10,67 @@ import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#f43f5e', '#a78bfa']
 
+const parseJSON = (v) => {
+  if (v == null) return {}
+  if (typeof v === 'object') return v
+  try { return JSON.parse(v) } catch { return {} }
+}
+
 export default function Overview() {
   const navigate = useNavigate()
-  const { data: profile } = useApi(() => api.getProfile())
-  const { current: identity, summary: cognitiveSummary, loading: idLoading } = useIdentity()
+  const { current: identityRaw, summary, loading: idLoading } = useIdentity()
   const { data: traces, loading: traceLoading } = useTraces()
-  const { metrics } = useCognitiveMetrics()
   const { data: reflections } = useReflections()
-  const { data: sessions } = useApi(() => api.getSessions())
   const { data: health } = useApi(() => api.v3Health())
 
   const [refreshing, setRefreshing] = useState(false)
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    setTimeout(() => setRefreshing(false), 1000)
-  }
+  const handleRefresh = () => { setRefreshing(true); setTimeout(() => setRefreshing(false), 800) }
 
-  const isLoading = idLoading && !identity && !cognitiveSummary
-  const hasNoData = !idLoading && !identity && !traces?.length && !reflections?.length
-  const latestTrace = traces?.[0]
+  // /identity/current wraps the identity object; unwrap it.
+  const identity = identityRaw?.identity || identityRaw || null
+  const behaviorProfile = parseJSON(identity?.behavior_profile)
+  const interestGraph = parseJSON(identity?.interest_graph)
+
+  const online = health?.status === 'ok' || health?.status === 'healthy' || health?.database?.status === 'healthy'
+  const isLoading = idLoading && !identity && !summary
+  const hasNoData = !idLoading && !summary?.behavior_object_count && !identity && !(traces?.length)
+
+  const confidence = summary?.current_identity?.overall_confidence ?? identity?.overall_confidence
+  const identityVersion = summary?.current_identity?.identity_version ?? identity?.identity_version
+  // dominant_topics / dominant_interests may arrive as JSON strings.
+  const dtParsed = parseJSON(identity?.dominant_topics)
+  const dominantTopics = Array.isArray(dtParsed) ? dtParsed : (Array.isArray(identity?.dominant_topics) ? identity.dominant_topics : [])
+  const domInterests = Array.isArray(interestGraph.dominant_interests) ? interestGraph.dominant_interests : []
   const latestReflection = reflections?.[0]
-  const totalSessions = sessions?.length || 0
-  const totalTraces = traces?.length || 0
 
-  const radarData = identity?.profile ? [
-    { trait: 'Openness', value: (identity.profile.openness || 0) * 100 },
-    { trait: 'Conscientiousness', value: (identity.profile.conscientiousness || 0) * 100 },
-    { trait: 'Extraversion', value: (identity.profile.extraversion || 0) * 100 },
-    { trait: 'Agreeableness', value: (identity.profile.agreeableness || 0) * 100 },
-    { trait: 'Neuroticism', value: (identity.profile.neuroticism || 0) * 100 },
-  ] : [
-    { trait: 'Openness', value: 0 },
-    { trait: 'Conscientiousness', value: 0 },
-    { trait: 'Extraversion', value: 0 },
-    { trait: 'Agreeableness', value: 0 },
-    { trait: 'Neuroticism', value: 0 },
+  // Cognitive profile radar — built from real, available identity metrics.
+  const radarData = [
+    { trait: 'Confidence', value: Math.round((identity?.overall_confidence || 0) * 100) },
+    { trait: 'Completeness', value: Math.round((identity?.identity_completeness || 0) * 100) },
+    { trait: 'Engagement', value: Math.round((behaviorProfile.avg_engagement_rate || 0) * 100) },
+    { trait: 'Diversity', value: Math.round((behaviorProfile.behavior_diversity ?? interestGraph.diversity_score ?? 0) * 100) },
+    { trait: 'Stability', value: Math.round((behaviorProfile.behavior_stability || 0) * 100) },
   ]
 
-  const traceLatencyData = traces?.slice(0, 10).reverse().map((t, i) => ({
-    name: `#${i + 1}`, latency: t.total_ms || 0, success: t.success ? 1 : 0,
-  })) || []
-
-  const topicData = profile?.interest_distribution
-    ? Object.entries(profile.interest_distribution).map(([name, value]) => ({ name, value: Math.round(value * 100) })).slice(0, 6)
+  const topicData = dominantTopics.length
+    ? dominantTopics.slice(0, 6).map((name) => {
+        const di = domInterests.find(d => d.topic === name)
+        const w = di?.weight ?? di?.score
+        return { name, value: typeof w === 'number' ? Math.max(5, Math.round(w * 100)) : Math.round(100 / Math.min(dominantTopics.length, 6)) }
+      })
     : [{ name: 'No data', value: 100 }]
 
-  const recentActivity = sessions?.slice(0, 5).map(s => ({
-    id: s.session_id || s.id,
-    time: s.start_time || s.created_at,
-    events: s.event_count || s.total_events || 0,
-    duration: s.duration_seconds || s.total_watch_time || 0,
-  })) || []
+  const traceLatencyData = (traces || []).slice(0, 10).reverse().map((t, i) => ({
+    name: `#${i + 1}`, latency: Math.round(t.total_ms || t.total_time_ms || 0),
+  }))
+
+  const recentActivity = (traces || []).slice(0, 6).map(t => ({
+    id: t.trace_id || t.id,
+    query: t.query || '(query)',
+    intent: t.intent_type || '',
+    time: t.created_at || t.started_at,
+    success: t.success !== false,
+  }))
 
   return (
     <div>
@@ -73,8 +83,8 @@ export default function Overview() {
           <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Real-time view of your Digital Cognitive Twin</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Badge variant={health?.status === 'ok' || health?.database?.status === 'ok' ? 'emerald' : 'danger'} dot>
-            {health?.status === 'ok' || health?.database?.status === 'ok' ? 'Live' : 'Offline'}
+          <Badge variant={online ? 'emerald' : 'danger'} dot>
+            {online ? 'Live' : 'Offline'}
           </Badge>
           <button onClick={handleRefresh} style={{
             padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)',
@@ -124,44 +134,27 @@ export default function Overview() {
             >
               Import Instagram Data
             </button>
-            <button
-              onClick={async () => {
-                try {
-                  await api.seedDemo()
-                  window.location.reload()
-                } catch (e) {
-                  console.error('Seed failed:', e)
-                }
-              }}
-              style={{
-                padding: '12px 24px', borderRadius: 10,
-                background: 'transparent', border: '1px solid var(--border-strong)',
-                color: 'var(--text-primary)', fontSize: 14, fontWeight: 500, cursor: 'pointer',
-              }}
-            >
-              Load Demo Data
-            </button>
           </div>
         </div>
       )}
 
-      {/* Stats Grid */}
+      {/* Stats Grid — all sourced from /cognitive/summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
-        <StatCard label="Identity Confidence" value={identity?.overall_confidence ? `${Math.round(identity.overall_confidence * 100)}%` : '--'} icon={TargetIcon} accent="indigo" loading={isLoading} />
-        <StatCard label="Identity Stability" value={cognitiveSummary?.avg_stability ? `${Math.round(cognitiveSummary.avg_stability * 100)}%` : '--'} icon={ActivityIcon} accent="violet" loading={isLoading} />
-        <StatCard label="Sessions" value={totalSessions} icon={NetworkIcon} accent="pink" loading={!sessions} />
-        <StatCard label="Pipeline Traces" value={totalTraces} icon={CpuIcon} accent="cyan" loading={traceLoading} />
-        <StatCard label="Decisions Made" value={metrics?.filter(m => m.metric_name === 'inference_count').length || 0} icon={BrainIcon} accent="emerald" loading={false} />
-        <StatCard label="Evidence Collected" value={metrics?.filter(m => m.metric_name === 'evidence_count').reduce((s, m) => s + Math.round(m.metric_value), 0) || 0} icon={LayersIcon} accent="amber" loading={false} />
+        <StatCard label="Identity Confidence" value={confidence != null ? `${Math.round(confidence * 100)}%` : '--'} icon={TargetIcon} accent="indigo" loading={isLoading} />
+        <StatCard label="Identity Version" value={identityVersion != null ? `v${identityVersion}` : '--'} icon={ActivityIcon} accent="violet" loading={isLoading} />
+        <StatCard label="Behavior Objects" value={summary?.behavior_object_count ?? 0} icon={NetworkIcon} accent="pink" loading={!summary} />
+        <StatCard label="Evidence Collected" value={summary?.evidence_count ?? 0} icon={LayersIcon} accent="amber" loading={!summary} />
+        <StatCard label="Snapshots" value={summary?.snapshot_count ?? 0} icon={CpuIcon} accent="cyan" loading={!summary} />
+        <StatCard label="Pipeline Traces" value={summary?.trace_count ?? (traces?.length || 0)} icon={BrainIcon} accent="emerald" loading={traceLoading} />
       </div>
 
       {/* Main Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, marginBottom: 32 }}>
-        {/* Identity Radar */}
+        {/* Cognitive Profile Radar */}
         <GlassCard gradient>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Identity Profile</h3>
-            <Badge variant="indigo">Current Snapshot</Badge>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Cognitive Profile</h3>
+            <Badge variant="indigo">v{identityVersion ?? '?'}</Badge>
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <RadarChart data={radarData}>
@@ -173,31 +166,35 @@ export default function Overview() {
           </ResponsiveContainer>
         </GlassCard>
 
-        {/* Recent Activity */}
+        {/* Recent Activity — recent pipeline queries */}
         <GlassCard gradient>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Recent Activity</h3>
-            <Badge variant="neutral">{recentActivity.length} sessions</Badge>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Recent Queries</h3>
+            <Badge variant="neutral">{recentActivity.length}</Badge>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {recentActivity.length === 0 && (
               <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
-                No recent activity
+                No queries yet — try the Chat page
               </div>
             )}
             {recentActivity.map((act, i) => (
-              <div key={act.id} style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                borderRadius: 8, background: 'rgba(148,163,184,0.04)',
-                animation: `fadeIn 0.3s ease-out ${i * 0.05}s both`,
-              }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--indigo-400)', flexShrink: 0 }} />
+              <div
+                key={act.id || i}
+                onClick={() => act.id && navigate(`/trace/${act.id}`)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                  borderRadius: 8, background: 'rgba(148,163,184,0.04)', cursor: act.id ? 'pointer' : 'default',
+                  animation: `fadeIn 0.3s ease-out ${i * 0.05}s both`,
+                }}
+              >
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: act.success ? 'var(--emerald-400, #10b981)' : 'var(--danger, #f43f5e)', flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    Session {act.id?.toString().slice(0, 12)}
+                    {act.query}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {act.events} events · {act.duration ? `${Math.round(act.duration / 60)}m` : '--'}
+                    {act.intent || 'query'}{act.time ? ` · ${new Date(act.time).toLocaleTimeString()}` : ''}
                   </div>
                 </div>
               </div>
@@ -241,7 +238,7 @@ export default function Overview() {
           </ResponsiveContainer>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
             {topicData.map((t, i) => (
-              <Badge key={t.name} variant={['indigo', 'violet', 'pink', 'emerald', 'amber', 'cyan'][i]}>
+              <Badge key={t.name} variant={['indigo', 'violet', 'pink', 'emerald', 'amber', 'cyan'][i % 6]}>
                 {t.name}
               </Badge>
             ))}

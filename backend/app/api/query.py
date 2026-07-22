@@ -28,6 +28,8 @@ class QueryResponse(BaseModel):
     query: str
     template_used: str
     docs_retrieved: int
+    trace_id: Optional[str] = None
+    llm_used: bool = False
     pipeline_stages: Optional[dict] = None
     pipeline_time_ms: Optional[float] = None
 
@@ -50,12 +52,16 @@ async def query_insights(req: QueryRequest):
             if p_result.fused_evidence:
                 for fact in p_result.fused_evidence.facts[:5]:
                     sources.append({"text": fact.claim, "score": fact.confidence})
+            vr = p_result.verbalizer_response
+            llm_used = bool(vr and vr.success and not getattr(vr, "used_fallback", False))
             return QueryResponse(
                 answer=answer,
                 sources=sources,
                 query=req.query,
                 template_used="cognitive_pipeline_v3",
                 docs_retrieved=len(p_result.fused_evidence.facts) if p_result.fused_evidence else 0,
+                trace_id=p_result.pipeline_id,
+                llm_used=llm_used,
                 pipeline_stages=p_result.stages,
                 pipeline_time_ms=p_result.total_time_ms,
             )

@@ -21,27 +21,41 @@ const metricConfig = [
 
 export default function AnalyticsPage() {
   const { metrics, loading } = useCognitiveMetrics()
-  const { current: identityData } = useIdentity()
+  const { current: identityData, summary } = useIdentity()
 
   const metricList = Array.isArray(metrics) ? metrics : []
-  const identity = identityData
+  const identity = identityData?.identity || identityData
 
-  const groupedMetrics = metricConfig.map(mc => ({
-    ...mc,
-    values: metricList
+  // Current value per metric from /cognitive/summary (the time-series
+  // cognitive_metrics table is not yet populated).
+  const currentValue = (key) => {
+    switch (key) {
+      case 'behavior_object_count': return summary?.behavior_object_count ?? 0
+      case 'evidence_count': return summary?.evidence_count ?? 0
+      case 'inference_count': return summary?.inference_count ?? 0
+      case 'identity_confidence': return summary?.current_identity?.overall_confidence ?? identity?.overall_confidence ?? 0
+      case 'identity_version': return summary?.current_identity?.identity_version ?? identity?.identity_version ?? 0
+      default: return 0
+    }
+  }
+
+  const groupedMetrics = metricConfig.map(mc => {
+    const series = metricList
       .filter(m => m.metric_name === mc.key)
       .slice(-20)
-      .map((m, i) => ({
-        index: i + 1,
-        value: m.metric_value || 0,
-        timestamp: m.recorded_at,
-      })),
-  }))
+      .map((m, i) => ({ index: i + 1, value: m.metric_value || 0, timestamp: m.recorded_at }))
+    // Fall back to a flat two-point line at the current value so the card is
+    // never blank while historical metrics are absent.
+    const values = series.length ? series : [
+      { index: 1, value: currentValue(mc.key) },
+      { index: 2, value: currentValue(mc.key) },
+    ]
+    return { ...mc, values }
+  })
 
-  const pieData = metricConfig.map(mc => ({
-    name: mc.label,
-    value: groupedMetrics.find(g => g.key === mc.key)?.values?.reduce((s, v) => s + v.value, 0) || 1,
-  }))
+  const pieData = metricConfig
+    .filter(mc => mc.key !== 'identity_confidence')
+    .map(mc => ({ name: mc.label, value: currentValue(mc.key) || 0.0001 }))
 
   return (
     <div>

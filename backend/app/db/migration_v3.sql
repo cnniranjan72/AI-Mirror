@@ -289,18 +289,22 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_behavior_objects_updated_at ON behavior_objects;
 CREATE TRIGGER trg_behavior_objects_updated_at
     BEFORE UPDATE ON behavior_objects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS trg_identities_updated_at ON identities;
 CREATE TRIGGER trg_identities_updated_at
     BEFORE UPDATE ON identities
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS trg_self_models_updated_at ON self_models;
 CREATE TRIGGER trg_self_models_updated_at
     BEFORE UPDATE ON self_models
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS trg_goals_updated_at ON goals;
 CREATE TRIGGER trg_goals_updated_at
     BEFORE UPDATE ON goals
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

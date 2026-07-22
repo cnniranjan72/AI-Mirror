@@ -133,6 +133,7 @@ class VerbalizerResponse(BaseModel):
     verbalization_time_ms: float = 0.0
     token_count: int = 0
     success: bool = False
+    used_fallback: bool = False
     error: Optional[str] = None
 
 
@@ -178,8 +179,10 @@ class LLMVerbalizer:
                     )
                     content = ""
 
+            used_fallback = False
             if not content or not content.strip():
                 content = self._fallback_verbalization(context, plan)
+                used_fallback = True
 
             elapsed = (time.perf_counter() - start) * 1000
             return VerbalizerResponse(
@@ -187,6 +190,7 @@ class LLMVerbalizer:
                 verbalization_time_ms=elapsed,
                 token_count=len(content.split()),
                 success=True,
+                used_fallback=used_fallback,
             )
         except Exception as e:
             logger.error(f"Verbalization failed: {e}", exc_info=True)
@@ -338,35 +342,78 @@ class LLMVerbalizer:
 
         return "\n".join(lines)
 
+    @staticmethod
+    def _as_dict(v: Any) -> Dict[str, Any]:
+        if isinstance(v, dict):
+            return v
+        if isinstance(v, str):
+            try:
+                d = json.loads(v)
+                return d if isinstance(d, dict) else {}
+            except Exception:
+                return {}
+        return {}
+
+    def _fact_lines(self, context: CharacterContext, limit: int = 5) -> List[str]:
+        lines: List[str] = []
+        if context.fused_evidence and context.fused_evidence.facts:
+            for fact in context.fused_evidence.facts[:limit]:
+                lines.append(f"- {fact.claim}")
+        elif context.evidence:
+            for ev in context.evidence[:limit]:
+                claim = ev.get("claim") or ev.get("description") or ev.get("evidence_type", "evidence")
+                lines.append(f"- {claim}")
+        return lines
+
     def _fallback_verbalization(self, context: CharacterContext, plan: CharacterPlan) -> str:
         lines: List[str] = []
         intent = plan.intent_plan
+        snap = context.identity_snapshot or {}
+        topics = context.dominant_topics or snap.get("dominant_topics", []) or []
+        conf = context.overall_confidence or snap.get("overall_confidence", 0) or 0
 
         if intent.intent_type.value == "identity_question":
             lines.append("Based on your identity profile:")
-            if context.identity_snapshot:
-                snap = context.identity_snapshot
-                topics = snap.get("dominant_topics", [])
-                conf = snap.get("overall_confidence", 0)
-                lines.append(f"- Your dominant interests are: {', '.join(topics[:5])}")
-                lines.append(f"- Identity confidence: {conf:.2f}")
+            if topics:
+                lines.append(f"- Your dominant interests are: {', '.join(map(str, topics[:5]))}")
+            emerging = context.emerging_topics or snap.get("emerging_topics", [])
+            if emerging:
+                lines.append(f"- Emerging interests: {', '.join(map(str, emerging[:3]))}")
+            lines.append(f"- Identity confidence: {float(conf):.0%}")
+            facts = self._fact_lines(context, 3)
+            if facts:
+                lines.append("\nSupporting evidence:")
+                lines.extend(facts)
             return "\n".join(lines)
 
         if intent.intent_type.value == "behavioral_question":
             lines.append("Based on your behavioral data:")
-            for bo in context.behavior_objects[:5]:
-                lines.append(
-                    f"- {bo.get('topic', 'unknown')}: "
-                    f"{bo.get('temporal_statistics', {}).get('occurrence_count', 0)} interactions"
-                )
+            shown = 0
+            for bo in context.behavior_objects[:6]:
+                topic = bo.get("topic", "unknown")
+                temporal = self._as_dict(bo.get("temporal_statistics"))
+                engagement = self._as_dict(bo.get("engagement_statistics"))
+                count = temporal.get("occurrence_count") or bo.get("occurrence_count") or 0
+                rate = engagement.get("overall_engagement_rate")
+                detail = f"{count} interactions"
+                if isinstance(rate, (int, float)):
+                    detail += f", {rate:.0%} engagement"
+                lines.append(f"- {topic}: {detail}")
+                shown += 1
+            if shown == 0:
+                # No behavior objects reached the context — ground the answer in
+                # the evidence facts instead of returning a bare header.
+                lines.extend(self._fact_lines(context, 5) or ["- Not enough behavioral data yet."])
             return "\n".join(lines)
 
         lines.append(f"Here is what I found about '{intent.primary_question}':")
-        if context.fused_evidence:
-            for fact in context.fused_evidence.facts[:3]:
-                lines.append(f"- {fact.claim}")
-        if context.overall_confidence < 0.5:
-            lines.append("\nNote: Confidence in this information is limited.")
+        facts = self._fact_lines(context, 4)
+        if facts:
+            lines.extend(facts)
+        elif topics:
+            lines.append(f"- Your activity centers on: {', '.join(map(str, topics[:5]))}")
+        if float(conf) < 0.5:
+            lines.append("\nNote: Confidence in this information is limited by the amount of data collected so far.")
         return "\n".join(lines)
 
 

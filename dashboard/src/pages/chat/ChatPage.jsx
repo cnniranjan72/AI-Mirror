@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { useChatHistory } from '../../hooks/useApi'
-import { api } from '../../api/client'
+import { api, DEFAULT_USER } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { BrainIcon, ExternalLinkIcon, RefreshIcon } from '../../icons/icons'
 import ExplainabilityPanel from '../../components/explain/ExplainabilityPanel'
 
-const USER_ID = 'user_123'
+const USER_ID = DEFAULT_USER
 
 export default function ChatPage() {
   const { data: history, loading: histLoading, refetch } = useChatHistory(USER_ID)

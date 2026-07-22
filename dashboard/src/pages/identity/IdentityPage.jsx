@@ -8,35 +8,43 @@ import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Responsi
 import IdentityInspector from '../../components/explain/IdentityInspector'
 import IdentityEvolution from '../../components/identity/IdentityEvolution'
 
+const parseJSON = (v) => {
+  if (v == null) return {}
+  if (typeof v === 'object') return v
+  try { return JSON.parse(v) } catch { return {} }
+}
+
 const subProfiles = [
   { key: 'behavior_profile', label: 'Behavior Profile', fields: ['avg_engagement_rate', 'behavior_diversity', 'behavior_stability'] },
-  { key: 'interest_graph', label: 'Interest Graph', fields: ['diversity_score'] },
+  { key: 'interest_graph', label: 'Interest Graph', fields: ['diversity_score', 'total_topics'] },
   { key: 'creator_graph', label: 'Creator Graph', fields: ['creator_diversity_score', 'dependence_score'] },
-  { key: 'learning_style', label: 'Learning Style', fields: ['confidence'] },
-  { key: 'attention_profile', label: 'Attention Profile', fields: ['avg_attention_span'] },
+  { key: 'learning_style', label: 'Learning Style', fields: ['confidence', 'completion_rate'] },
+  { key: 'attention_profile', label: 'Attention Profile', fields: ['avg_attention_span', 'focus_quality'] },
 ]
 
 export default function IdentityPage() {
   const { current: identityData, snapshots, summary: cognitiveSummary, loading } = useIdentity()
-  const { metrics } = useCognitiveMetrics()
   const [inspectingIdentity, setInspectingIdentity] = useState(null)
   const [view, setView] = useState('overview')
 
-  const identity = identityData
+  // /identity/current wraps the identity object.
+  const identity = identityData?.identity || identityData
   const identityId = identity?.identity_id || identityData?.latest_snapshot?.identity_id
   const snapshotList = snapshots || []
-  const radarData = identity?.profile ? [
-    { trait: 'Openness', value: (identity.profile.openness || 0) * 100 },
-    { trait: 'Conscientiousness', value: (identity.profile.conscientiousness || 0) * 100 },
-    { trait: 'Extraversion', value: (identity.profile.extraversion || 0) * 100 },
-    { trait: 'Agreeableness', value: (identity.profile.agreeableness || 0) * 100 },
-    { trait: 'Neuroticism', value: (identity.profile.neuroticism || 0) * 100 },
-  ] : [
-    { trait: 'Openness', value: 0 },
-    { trait: 'Conscientiousness', value: 0 },
-    { trait: 'Extraversion', value: 0 },
-    { trait: 'Agreeableness', value: 0 },
-    { trait: 'Neuroticism', value: 0 },
+
+  const behaviorProfile = parseJSON(identity?.behavior_profile)
+  const interestGraph = parseJSON(identity?.interest_graph)
+  const attentionProfile = parseJSON(identity?.attention_profile)
+  const avgStability = behaviorProfile.behavior_stability
+
+  // Big Five is not modeled; show real cognitive dimensions instead.
+  const radarData = [
+    { trait: 'Confidence', value: Math.round((identity?.overall_confidence || 0) * 100) },
+    { trait: 'Completeness', value: Math.round((identity?.identity_completeness || 0) * 100) },
+    { trait: 'Engagement', value: Math.round((behaviorProfile.avg_engagement_rate || 0) * 100) },
+    { trait: 'Diversity', value: Math.round((behaviorProfile.behavior_diversity ?? interestGraph.diversity_score ?? 0) * 100) },
+    { trait: 'Focus', value: Math.round((attentionProfile.focus_quality || 0) * 100) },
+    { trait: 'Stability', value: Math.round((behaviorProfile.behavior_stability || 0) * 100) },
   ]
 
   const versionHistory = snapshotList.map((s, i) => ({
@@ -75,16 +83,16 @@ export default function IdentityPage() {
               onClick={identityId ? () => setInspectingIdentity(identityId) : undefined} />
             <StatCard label="Completeness" value={identity?.identity_completeness ? `${Math.round(identity.identity_completeness * 100)}%` : '--'} icon={ActivityIcon} accent="violet" loading={loading}
               onClick={identityId ? () => setInspectingIdentity(identityId) : undefined} />
-            <StatCard label="Avg Stability" value={cognitiveSummary?.avg_stability ? `${Math.round(cognitiveSummary.avg_stability * 100)}%` : '--'} icon={BrainIcon} accent="emerald" loading={loading} />
-            <StatCard label="Version" value={identity?.identity_version || cognitiveSummary?.current_version || '--'} icon={LayersIcon} accent="cyan" loading={loading} />
+            <StatCard label="Avg Stability" value={typeof avgStability === 'number' ? `${Math.round(avgStability * 100)}%` : '--'} icon={BrainIcon} accent="emerald" loading={loading} />
+            <StatCard label="Version" value={identity?.identity_version ? `v${identity.identity_version}` : (cognitiveSummary?.current_identity?.identity_version ? `v${cognitiveSummary.current_identity.identity_version}` : '--')} icon={LayersIcon} accent="cyan" loading={loading} />
             <StatCard label="Snapshots" value={snapshotList.length} icon={ClockIcon} accent="amber" loading={loading} />
           </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
         <GlassCard gradient>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Identity Radar</h3>
-            <Badge variant="indigo">Big Five</Badge>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Cognitive Profile</h3>
+            <Badge variant="indigo">Identity dimensions</Badge>
           </div>
           <ResponsiveContainer width="100%" height={320}>
             <RadarChart data={radarData}>
@@ -123,8 +131,8 @@ export default function IdentityPage() {
       <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Sub-Profile Details</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 32 }}>
         {subProfiles.map(sp => {
-          const sub = identity?.[sp.key]
-          if (!sub) return null
+          const sub = parseJSON(identity?.[sp.key])
+          if (!sub || Object.keys(sub).length === 0) return null
           return (
             <GlassCard key={sp.key}>
               <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: 'var(--text-secondary)' }}>{sp.label}</h4>

@@ -4,18 +4,23 @@ Uses sentence-transformers (all-MiniLM-L6-v2) for 384-dim embeddings.
 """
 
 import logging
-from typing import List
+from typing import List, TYPE_CHECKING
 
-from sentence_transformers import SentenceTransformer
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
-_model: SentenceTransformer = None
+_model = None
 
 
-def _get_model() -> SentenceTransformer:
+def _get_model() -> "SentenceTransformer":
+    # Imported lazily so the API can boot (and serve /query, /profile, /explain,
+    # the dashboard) without the heavy torch/sentence-transformers stack. Only
+    # the embedding path (ingest) requires it.
     global _model
     if _model is None:
+        from sentence_transformers import SentenceTransformer
         logger.info("Loading embedding model: all-MiniLM-L6-v2")
         _model = SentenceTransformer("all-MiniLM-L6-v2")
         logger.info("Embedding model loaded (dim=384)")

@@ -343,9 +343,14 @@ class CognitivePipeline:
                     if final_ctx.selected_facts else fused.aggregate_confidence
                 ),
             )
+            # Categorize the character's grounding data (behavior objects,
+            # evidence, inferences) from the FULL retrieval so the context is
+            # not starved by the decision engine's fact-level filtering. The
+            # decision-selected facts still drive the response claims via
+            # filtered_fused below.
             ctx = self.context_builder.build(
                 user_id=user_id,
-                retrieval_result=final_ctx.filtered_retrieval_result,
+                retrieval_result=retrieval_result,
                 character_plan=plan,
                 fused_evidence=filtered_fused,
                 identity_snapshot=final_ctx.identity_snapshot or None,
