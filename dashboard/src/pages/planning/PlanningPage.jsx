@@ -3,7 +3,13 @@ import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { LayersIcon, CpuIcon, TargetIcon, ZapIcon, NetworkIcon } from '../../icons/icons'
 
-const stageNames = ['intent', 'retrieval', 'reasoning', 'response']
+// Map display stage -> the timing field the backend actually records.
+const stages = [
+  { label: 'Planning', field: 'planning_ms' },
+  { label: 'Retrieval', field: 'retrieval_ms' },
+  { label: 'Decision', field: 'decision_ms' },
+  { label: 'Verbalize', field: 'verbalization_ms' },
+]
 
 export default function PlanningPage() {
   const { data: traces, loading } = useTraces()
@@ -69,13 +75,13 @@ export default function PlanningPage() {
                   <Badge variant="neutral">{t.total_ms ? `${Math.round(t.total_ms)}ms` : '--'}</Badge>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                  {stageNames.map(stage => {
-                    const val = t[`${stage}_ms`]
-                    const maxVal = Math.max(t.planning_ms || 0, t.retrieval_ms || 0, t.fusion_ms || 0, t.verbalization_ms || 0, 1)
+                  {stages.map(stage => {
+                    const val = t[stage.field]
+                    const maxVal = Math.max(t.planning_ms || 0, t.retrieval_ms || 0, t.decision_ms || 0, t.verbalization_ms || 0, 1)
                     const pct = val ? (val / maxVal) * 100 : 0
                     return (
-                      <div key={stage}>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'capitalize', marginBottom: 4 }}>{stage}</div>
+                      <div key={stage.field}>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'capitalize', marginBottom: 4 }}>{stage.label}</div>
                         <div style={{ height: 4, borderRadius: 2, background: 'rgba(148,163,184,0.1)', overflow: 'hidden' }}>
                           <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: 'var(--accent-gradient)', transition: 'width 0.5s ease' }} />
                         </div>

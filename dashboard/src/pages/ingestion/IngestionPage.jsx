@@ -1,419 +1,162 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useApi } from '../../hooks/useApi'
+import { api, DEFAULT_USER } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
-import { CheckIcon, XIcon, RefreshIcon } from '../../icons/icons'
-import PipelineAnimation from '../../components/pipeline/PipelineAnimation'
+import Badge from '../../components/ui/Badge'
+import { CheckIcon, RefreshIcon } from '../../icons/icons'
 
-const STEPS = ['Connect', 'Import Content', 'Analyze', 'Complete']
-
-const SOURCES = [
-  { id: 'posts', label: 'Posts', icon: '📷', desc: 'Photos and carousels you\'ve shared' },
-  { id: 'reels', label: 'Reels', icon: '🎬', desc: 'Short-form video content' },
-  { id: 'likes', label: 'Likes', icon: '❤️', desc: 'Content you\'ve engaged with' },
-  { id: 'saves', label: 'Saves', icon: '🔖', desc: 'Bookmarked posts and reels' },
+const PIPELINE_STAGES = [
+  'Behavior Gateway', 'Content Intelligence', 'Knowledge Consolidation',
+  'Behavior Objects', 'Evidence', 'Inference', 'Reflection', 'Identity',
 ]
 
-const IMPORT_PHASES = [
-  { key: 'collecting', label: 'Collecting behavioral data', duration: 2000 },
-  { key: 'normalizing', label: 'Normalizing events', duration: 1500 },
-  { key: 'behavior_gateway', label: 'Behavior Gateway', duration: 1800 },
-  { key: 'knowledge', label: 'Knowledge Consolidation', duration: 2200 },
-  { key: 'behavior_objects', label: 'Building Behavior Objects', duration: 2000 },
-  { key: 'evidence', label: 'Generating Evidence', duration: 2500 },
-  { key: 'inference', label: 'Running Inferences', duration: 2000 },
-  { key: 'reflection', label: 'Generating Reflections', duration: 1800 },
-  { key: 'identity', label: 'Building Identity Profile', duration: 2500 },
-  { key: 'snapshot', label: 'Taking Identity Snapshot', duration: 1500 },
-  { key: 'complete', label: 'Complete!', duration: 1000 },
-]
+function Stat({ label, value, accent }) {
+  return (
+    <div style={{ textAlign: 'center', padding: '18px 8px', background: 'rgba(148,163,184,0.04)', borderRadius: 12, border: '1px solid var(--border-subtle)' }}>
+      <div style={{ fontSize: 26, fontWeight: 800, color: `var(--${accent}-400, #818cf8)` }}>{value}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{label}</div>
+    </div>
+  )
+}
 
 export default function IngestionPage() {
   const navigate = useNavigate()
-  const [step, setStep] = useState(0)
-  const [selectedSources, setSelectedSources] = useState(['posts', 'reels', 'likes', 'saves'])
-  const [importProgress, setImportProgress] = useState(0)
-  const [collectProgress, setCollectProgress] = useState(0)
-  const [pipelinePhase, setPipelinePhase] = useState(0)
-  const [importing, setImporting] = useState(false)
-  const [complete, setComplete] = useState(false)
-  const [collectCounts, setCollectCounts] = useState({})
+  const { data: summary, loading, refetch } = useApi(() => api.getCognitiveSummary(), [])
+  const [seeding, setSeeding] = useState(false)
+  const [seedResult, setSeedResult] = useState(null)
   const [error, setError] = useState(null)
-  const animRef = useRef(null)
 
-  const toggleSource = (id) => {
-    setSelectedSources(prev =>
-      prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
-    )
-  }
+  const cur = summary?.current_identity || {}
 
-  const startImport = async () => {
-    setError(null)
-    setImporting(true)
-    setStep(2)
-
+  const runSeed = async () => {
+    setError(null); setSeeding(true); setSeedResult(null)
     try {
-      // Phase 1: Collect progress
-      setStep(2)
-      for (let i = 0; i <= 100; i += 5) {
-        await new Promise(r => setTimeout(r, 80 + Math.random() * 60))
-        setCollectProgress(i)
-        setCollectCounts({
-          posts: Math.round(i * 2.5),
-          reels: Math.round(i * 3.2),
-          likes: Math.round(i * 5),
-          saves: Math.round(i * 1.2),
-        })
-      }
-
-      // Phase 2: Pipeline processing
-      setStep(3)
-      for (let i = 0; i < IMPORT_PHASES.length; i++) {
-        setPipelinePhase(i)
-        await new Promise(r => setTimeout(r, IMPORT_PHASES[i].duration))
-      }
-
-      setComplete(true)
-      setStep(4)
-
-      await new Promise(r => setTimeout(r, 2500))
-      navigate('/dashboard')
+      const res = await api.seedDemo()
+      setSeedResult(res)
+      refetch()
     } catch (err) {
-      setError(err.message || 'Import failed. Please try again.')
-      setImporting(false)
+      setError(err?.response?.data?.detail || err.message || 'Seeding failed')
+    } finally {
+      setSeeding(false)
     }
   }
 
-  useEffect(() => {
-    window.scrollTo(0, 0)
-  }, [])
-
   return (
-    <div style={{ minHeight: '100vh', padding: '40px 32px', maxWidth: 800, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: 40, textAlign: 'center' }}>
-        <h1 className="gradient-text" style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 8 }}>
-          Import Your Digital Self
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <div style={{ marginBottom: 32 }}>
+        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>
+          Data Ingestion
         </h1>
         <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>
-          Connect your Instagram data to build your cognitive twin
+          How behavioral data flows into your cognitive twin
         </p>
       </div>
 
-      {/* Step indicator */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: 0, marginBottom: 40,
-      }}>
-        {STEPS.map((s, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
-            {i > 0 && (
-              <div style={{
-                width: 40, height: 2,
-                background: i <= step ? 'var(--accent-gradient)' : 'var(--border-subtle)',
-                transition: 'background 0.5s ease',
-              }} />
-            )}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 16px', borderRadius: 20,
-              background: i <= step ? 'rgba(99,102,241,0.15)' : 'transparent',
-              border: `1px solid ${i <= step ? 'rgba(99,102,241,0.3)' : 'var(--border-subtle)'}`,
-              transition: 'all 0.3s ease',
-            }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: 12,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 700,
-                background: i < step ? 'var(--emerald-500)' : i === step ? 'var(--accent-gradient)' : 'var(--border-subtle)',
-                color: 'white',
-              }}>
-                {i < step ? '✓' : i + 1}
-              </div>
-              <span style={{
-                fontSize: 13, fontWeight: 500,
-                color: i <= step ? 'var(--text-primary)' : 'var(--text-muted)',
-              }}>
-                {s}
-              </span>
-            </div>
+      {/* Current twin state — real data */}
+      <GlassCard gradient>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600 }}>Your Twin Right Now</h3>
+          <Badge variant={summary?.behavior_object_count ? 'emerald' : 'neutral'} dot>
+            {summary?.behavior_object_count ? 'Data connected' : 'No data yet'}
+          </Badge>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 12 }}>
+          <Stat label="Behavior Objects" value={loading ? '—' : (summary?.behavior_object_count ?? 0)} accent="indigo" />
+          <Stat label="Evidence" value={loading ? '—' : (summary?.evidence_count ?? 0)} accent="violet" />
+          <Stat label="Snapshots" value={loading ? '—' : (summary?.snapshot_count ?? 0)} accent="pink" />
+          <Stat label="Reflections" value={loading ? '—' : (summary?.reflection_count ?? 0)} accent="amber" />
+          <Stat label="Identity" value={loading ? '—' : (cur.identity_version ? `v${cur.identity_version}` : '—')} accent="cyan" />
+          <Stat label="Confidence" value={loading ? '—' : (cur.overall_confidence != null ? `${Math.round(cur.overall_confidence * 100)}%` : '—')} accent="emerald" />
+        </div>
+      </GlassCard>
+
+      {/* The two real ingestion paths */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, margin: '24px 0' }}>
+        {/* Live extension */}
+        <GlassCard>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ fontSize: 24 }}>🧩</div>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Live tracking (extension)</h3>
           </div>
-        ))}
-      </div>
-
-      {/* Step 0: Connect */}
-      {step === 0 && (
-        <GlassCard gradient padding="2xl">
-          <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{
-              width: 80, height: 80, borderRadius: 24,
-              background: 'linear-gradient(135deg, #f58529, #dd2a7b, #8134af, #515bd4)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 36, margin: '0 auto 24px',
-              boxShadow: '0 0 40px rgba(221,42,123,0.3)',
-            }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
-                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-              </svg>
-            </div>
-            <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Connect Instagram</h2>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 14, maxWidth: 400, margin: '0 auto 32px', lineHeight: 1.6 }}>
-              AIMirror will analyze your Instagram activity to build your cognitive profile.
-              Your data stays private and is processed locally.
-            </p>
-
-            <div style={{
-              background: 'rgba(0,0,0,0.2)', borderRadius: 12, padding: 20,
-              marginBottom: 24, textAlign: 'left', fontSize: 13,
-              color: 'var(--text-tertiary)', lineHeight: 1.6,
-            }}>
-              <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>What happens next:</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {[
-                  'AIMirror scans your selected Instagram data sources',
-                  'Events are normalized and analyzed through the cognitive pipeline',
-                  'Your identity profile is generated from patterns in your behavior',
-                  'You can explore your cognitive data through the dashboard',
-                ].map((item, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 8 }}>
-                    <span style={{ color: 'var(--indigo-400)' }}>→</span>
-                    <span>{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              onClick={() => setStep(1)}
-              className="card card-gradient"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 10,
-                padding: '16px 40px', borderRadius: 14,
-                background: 'linear-gradient(135deg, #f58529, #dd2a7b, #8134af)',
-                color: 'white', fontSize: 16, fontWeight: 600,
-                border: 'none', cursor: 'pointer',
-                boxShadow: '0 4px 20px rgba(221,42,123,0.4)',
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
-                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
-              </svg>
-              Connect Instagram Account
-            </button>
-
-            <div style={{ marginTop: 16 }}>
-              <button
-                onClick={() => navigate('/')}
-                style={{
-                  background: 'none', border: 'none',
-                  color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer',
-                  textDecoration: 'underline',
-                }}
-              >
-                Skip — try demo data instead
-              </button>
-            </div>
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6, marginBottom: 14 }}>
+            The AIMirror browser extension captures each Reel you watch — creator,
+            caption, hashtags, audio, watch time, likes/saves — and streams it here
+            automatically as you browse.
+          </p>
+          <ol style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.9, paddingLeft: 18, margin: 0 }}>
+            <li><code>chrome://extensions</code> → enable Developer mode</li>
+            <li>Load unpacked → the <code>chrome-extension</code> folder</li>
+            <li>Open instagram.com/reels and scroll</li>
+          </ol>
+          <div style={{ marginTop: 14 }}>
+            <Badge variant="indigo">user: {DEFAULT_USER}</Badge>
           </div>
         </GlassCard>
-      )}
 
-      {/* Step 1: Select data sources */}
-      {step === 1 && (
-        <div style={{ animation: 'fadeIn 0.4s ease-out both' }}>
-          <GlassCard gradient padding="2xl">
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Select Data Sources</h2>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 14, marginBottom: 24 }}>
-              Choose what to import from your Instagram account
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {SOURCES.map(source => {
-                const selected = selectedSources.includes(source.id)
-                return (
-                  <button
-                    key={source.id}
-                    onClick={() => toggleSource(source.id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 16,
-                      padding: '16px 20px', borderRadius: 12,
-                      background: selected ? 'rgba(99,102,241,0.1)' : 'rgba(0,0,0,0.2)',
-                      border: `1px solid ${selected ? 'rgba(99,102,241,0.3)' : 'var(--border-subtle)'}`,
-                      cursor: 'pointer', textAlign: 'left',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <div style={{
-                      width: 44, height: 44, borderRadius: 12,
-                      background: selected ? 'rgba(99,102,241,0.15)' : 'rgba(148,163,184,0.1)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 22, flexShrink: 0,
-                    }}>
-                      {source.icon}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 15, fontWeight: 600, color: selected ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                        {source.label}
-                      </div>
-                      <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{source.desc}</div>
-                    </div>
-                    <div style={{
-                      width: 24, height: 24, borderRadius: 12,
-                      border: `2px solid ${selected ? 'var(--indigo-500)' : 'var(--border-strong)'}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'all 0.2s ease',
-                      background: selected ? 'var(--indigo-500)' : 'transparent',
-                    }}>
-                      {selected && <CheckIcon />}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            <div style={{
-              display: 'flex', gap: 12, justifyContent: 'center',
-              marginTop: 28,
-            }}>
-              <button
-                onClick={() => setStep(0)}
-                style={{
-                  padding: '12px 24px', borderRadius: 10,
-                  background: 'transparent', border: '1px solid var(--border-subtle)',
-                  color: 'var(--text-tertiary)', fontSize: 14, cursor: 'pointer',
-                }}
-              >
-                Back
-              </button>
-              <button
-                onClick={startImport}
-                disabled={selectedSources.length === 0}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '12px 32px', borderRadius: 10,
-                  background: selectedSources.length > 0 ? 'var(--accent-gradient)' : 'var(--border-subtle)',
-                  border: 'none',
-                  color: selectedSources.length > 0 ? 'white' : 'var(--text-muted)',
-                  fontSize: 14, fontWeight: 600, cursor: selectedSources.length > 0 ? 'pointer' : 'not-allowed',
-                  boxShadow: selectedSources.length > 0 ? 'var(--shadow-glow)' : 'none',
-                }}
-              >
-                Import {selectedSources.length} Source{selectedSources.length > 1 ? 's' : ''}
-              </button>
-            </div>
-          </GlassCard>
-        </div>
-      )}
-
-      {/* Step 2: Import progress */}
-      {step === 2 && !complete && (
-        <div style={{ animation: 'fadeIn 0.4s ease-out both' }}>
-          <GlassCard gradient padding="2xl">
-            <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Collecting Your Data</h2>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 14, marginBottom: 24 }}>
-              Scanning and normalizing Instagram activity...
-            </p>
-
-            {/* Progress bar */}
-            <div style={{ marginBottom: 28 }}>
-              <div style={{
-                height: 6, borderRadius: 3,
-                background: 'var(--border-subtle)', overflow: 'hidden',
-              }}>
-                <div style={{
-                  height: '100%', borderRadius: 3,
-                  width: `${collectProgress}%`,
-                  background: 'var(--accent-gradient)',
-                  transition: 'width 0.3s ease-out',
-                }} />
+        {/* Demo seed — real backend call */}
+        <GlassCard>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ fontSize: 24 }}>⚡</div>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Generate demo data</h3>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6, marginBottom: 14 }}>
+            Runs synthetic behavioral events through the real V3 pipeline
+            (embeddings → behavior objects → evidence → identity). Takes a
+            moment; results below are returned by the backend.
+          </p>
+          <button
+            onClick={runSeed}
+            disabled={seeding}
+            style={{
+              padding: '10px 20px', borderRadius: 10, border: 'none',
+              background: seeding ? 'rgba(148,163,184,0.15)' : 'var(--accent-gradient)',
+              color: 'white', fontSize: 14, fontWeight: 600,
+              cursor: seeding ? 'wait' : 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+            }}
+          >
+            {seeding ? (<><div style={{ animation: 'spin 1s linear infinite', display: 'flex' }}><RefreshIcon /></div> Running pipeline…</>)
+              : 'Run demo seed'}
+          </button>
+          {error && <div style={{ marginTop: 12, fontSize: 13, color: '#f87171' }}>{error}</div>}
+          {seedResult && (
+            <div style={{ marginTop: 14, padding: 12, borderRadius: 8, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#34d399', marginBottom: 6 }}>
+                <CheckIcon /> Seeded user {seedResult.user_id}
               </div>
-              <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                marginTop: 8, fontSize: 12, color: 'var(--text-muted)',
-              }}>
-                <span>{collectProgress}%</span>
-                <span>{Math.round(collectProgress * 0.12)} items found</span>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+                {seedResult.events_stored} events · {seedResult.pipeline_result?.behavior_object_count ?? 0} behavior objects ·
+                {' '}{seedResult.pipeline_result?.evidence_count ?? 0} evidence · identity v{seedResult.pipeline_result?.identity_version ?? '?'}
               </div>
             </div>
+          )}
+        </GlassCard>
+      </div>
 
-            {/* Live counts */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-              gap: 12,
-            }}>
-              {SOURCES.map(s => (
-                <div key={s.id} style={{
-                  padding: 16, borderRadius: 10,
-                  background: 'rgba(0,0,0,0.2)',
-                  border: '1px solid var(--border-subtle)',
-                  opacity: selectedSources.includes(s.id) ? 1 : 0.3,
-                }}>
-                  <div style={{ fontSize: 24, marginBottom: 8 }}>{s.icon}</div>
-                  <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{s.label}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>
-                    {collectCounts[s.id] || 0}
-                  </div>
-                </div>
-              ))}
+      {/* The real pipeline stages */}
+      <GlassCard gradient>
+        <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Cognitive Pipeline</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 20 }}>
+          Every ingested event flows through these stages before it reaches your identity.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+          {PIPELINE_STAGES.map((s, i) => (
+            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                {s}
+              </div>
+              {i < PIPELINE_STAGES.length - 1 && <span style={{ color: 'var(--text-muted)' }}>→</span>}
             </div>
-          </GlassCard>
+          ))}
         </div>
-      )}
-
-      {/* Step 3: Pipeline processing */}
-      {step === 3 && !complete && (
-        <div style={{ animation: 'fadeIn 0.4s ease-out both' }}>
-          <PipelineAnimation
-            currentPhase={pipelinePhase}
-            phases={IMPORT_PHASES}
-          />
-        </div>
-      )}
-
-      {/* Step 4: Complete */}
-      {complete && (
-        <div style={{ animation: 'scaleIn 0.5s ease-out both', textAlign: 'center' }}>
-          <GlassCard gradient padding="2xl">
-            <div style={{
-              width: 80, height: 80, borderRadius: 40,
-              background: 'var(--emerald-500)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              margin: '0 auto 20px',
-              fontSize: 36,
-              boxShadow: '0 0 40px rgba(16,185,129,0.3)',
-              animation: 'scaleIn 0.5s ease-out 0.2s both',
-            }}>
-              ✓
-            </div>
-            <h2 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>
-              Your Cognitive Twin is Ready
-            </h2>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 15, maxWidth: 400, margin: '0 auto 32px' }}>
-              We've analyzed your behavioral data and built your cognitive profile.
-              Redirecting to your dashboard...
-            </p>
-
-            <div style={{
-              display: 'flex', justifyContent: 'center', gap: 16,
-            }}>
-              {['Identity', 'Evidence', 'Decisions', 'Chat'].map((item, i) => (
-                <div key={i} style={{
-                  padding: '12px 20px', borderRadius: 10,
-                  background: 'rgba(99,102,241,0.1)',
-                  border: '1px solid rgba(99,102,241,0.2)',
-                  fontSize: 13, fontWeight: 500,
-                  color: 'var(--indigo-400)',
-                  animation: `fadeIn 0.4s ease-out ${0.5 + i * 0.1}s both`,
-                }}>
-                  {item}
-                </div>
-              ))}
-            </div>
-          </GlassCard>
-        </div>
-      )}
+        <button
+          onClick={() => navigate('/pipeline')}
+          style={{ marginTop: 20, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer' }}
+        >
+          View live pipeline traces →
+        </button>
+      </GlassCard>
     </div>
   )
 }

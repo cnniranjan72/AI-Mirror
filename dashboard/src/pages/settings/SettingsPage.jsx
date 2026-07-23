@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useHealth, useV3Health } from '../../hooks/useApi'
-import { api } from '../../api/client'
+import { api, DEFAULT_USER } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon } from '../../icons/icons'
@@ -9,7 +9,7 @@ export default function SettingsPage() {
   const { data: health, refetch: refetchHealth } = useHealth()
   const { data: v3Health, refetch: refetchV3 } = useV3Health()
 
-  const [testForm, setTestForm] = useState({ userId: 'user_123' })
+  const [testForm, setTestForm] = useState({ userId: DEFAULT_USER })
   const [testResult, setTestResult] = useState(null)
   const [testLoading, setTestLoading] = useState(false)
 

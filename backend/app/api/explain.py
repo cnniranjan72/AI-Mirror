@@ -160,10 +160,15 @@ async def get_query_traces(
     limit: int = Query(default=20, le=100),
 ):
     rows = await fetch(
-        """SELECT trace_id, user_id, query, intent_type, total_ms,
-                  runtime_load_ms, planning_ms, retrieval_ms,
-                  fusion_ms, decision_ms, verbalization_ms,
-                  success, errors, created_at::text
+        """SELECT trace_id, user_id, query, intent_type, intent_confidence,
+                  reasoning_mode, total_ms, runtime_load_ms, planning_ms,
+                  retrieval_ms, ranking_ms, fusion_ms, decision_ms,
+                  context_build_ms, verbalization_ms,
+                  retrieved_count, evidence_count, behavior_object_count,
+                  facts_generated, citations_created, aggregate_confidence,
+                  decision_input_facts, decision_output_facts, decision_conflicts,
+                  token_count, response_length, snapshot_version, inference_count,
+                  reflection_count, success, errors, created_at::text
            FROM pipeline_traces WHERE user_id = $1
            ORDER BY created_at DESC LIMIT $2""",
         user_id, limit,
