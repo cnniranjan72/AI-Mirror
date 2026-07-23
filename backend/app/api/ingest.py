@@ -360,16 +360,28 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                 metadata={"source": "feature_engineering", "event_count": len(event_dicts)},
             )
 
-        # ── STEP 7: RL alignment (now uses identity-derived persona) ──
+        # ── STEP 7: RL contextual bandit (learns from alignment improvement) ──
         persona_for_rl = persona_data or _empty_persona()
         alignment = rl_layer.compute_alignment(persona_for_rl, features)
-        suggestion = rl_layer.suggest_action(alignment, features)
 
+        # Close the loop: reward the PREVIOUS suggestion by how much alignment
+        # has changed since it was made, updating the policy's Q-values.
+        learn_result = await rl_layer.learn_from_transition(user_id, alignment["overall_score"])
+        if learn_result:
+            logger.info("RL learned: %s", learn_result)
+
+        suggestion = await rl_layer.suggest_action(alignment, features)
+
+        # Log the new action with the context + baseline alignment so the NEXT
+        # ingest can compute this action's reward.
+        log_state = dict(alignment["state"])
+        log_state["alignment_before"] = alignment["overall_score"]
+        log_state["context_key"] = suggestion["context_key"]
         await rl_layer.log_action(
             user_id=user_id,
             action_type=suggestion["action"]["action_id"],
             action_data=suggestion["action"],
-            state=alignment["state"],
+            state=log_state,
             reward=suggestion["expected_reward"],
         )
 

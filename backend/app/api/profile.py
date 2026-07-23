@@ -71,9 +71,9 @@ async def get_profile(user_id: str = Query(default="default")):
 
         features = feature_engineering.compute_features(event_dicts)
 
-        # Compute alignment and suggestion
+        # Compute alignment and suggestion (policy is async now)
         alignment = rl_layer.compute_alignment(persona, features)
-        suggestion = rl_layer.suggest_action(alignment, features)
+        suggestion = await rl_layer.suggest_action(alignment, features)
 
         return ProfileResponse(
             user_id=user_id,
