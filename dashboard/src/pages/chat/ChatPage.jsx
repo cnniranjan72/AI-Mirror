@@ -7,9 +7,10 @@ import { BrainIcon, ExternalLinkIcon, RefreshIcon } from '../../icons/icons'
 import ExplainabilityPanel from '../../components/explain/ExplainabilityPanel'
 
 const USER_ID = DEFAULT_USER
+const CONVERSATION_ID = `conv_${USER_ID}`
 
 export default function ChatPage() {
-  const { data: history, loading: histLoading, refetch } = useChatHistory(USER_ID)
+  const { data: history, loading: histLoading, refetch } = useChatHistory(USER_ID, CONVERSATION_ID)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -40,7 +41,7 @@ export default function ChatPage() {
     setSending(true)
     setStreamingMsg('...')
     try {
-      const res = await api.sendChatMessage(USER_ID, input)
+      const res = await api.sendChatMessage(USER_ID, input, CONVERSATION_ID)
       setStreamingMsg('')
       const reply = res?.response || res?.message || res?.text || JSON.stringify(res)
       setMessages(prev => [...prev, {
@@ -58,8 +59,9 @@ export default function ChatPage() {
     }
   }
 
-  const clearChat = () => {
+  const clearChat = async () => {
     setMessages([])
+    try { await api.clearChatHistory(USER_ID, CONVERSATION_ID) } catch (_) { /* ignore */ }
     refetch()
   }
 

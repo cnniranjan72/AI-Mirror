@@ -166,10 +166,11 @@ class LLMVerbalizer:
         self,
         context: CharacterContext,
         plan: CharacterPlan,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> VerbalizerResponse:
         start = time.perf_counter()
         try:
-            prompt = self._build_prompt(context, plan)
+            prompt = self._build_prompt(context, plan, conversation_history)
             content = ""
 
             if self.llm_call and not self._llm_disabled:
@@ -222,16 +223,30 @@ class LLMVerbalizer:
                 error=str(e),
             )
 
-    def _build_prompt(self, context: CharacterContext, plan: CharacterPlan) -> VerbalizerPrompt:
+    def _build_prompt(
+        self,
+        context: CharacterContext,
+        plan: CharacterPlan,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+    ) -> VerbalizerPrompt:
         system = self._build_system_prompt(plan)
         style_instr = self._build_style_instructions(plan.response_plan.style_vector)
         context_summary = self._summarize_context(context)
 
-        prompt_parts = [
-            "# Character Context",
-            "",
-            context_summary,
-            "",
+        prompt_parts = ["# Character Context", "", context_summary, ""]
+
+        # Prior turns give the character continuity within a conversation.
+        if conversation_history:
+            prompt_parts.append("# Conversation So Far")
+            prompt_parts.append("")
+            for turn in conversation_history[-6:]:
+                who = "User" if turn.get("role") == "user" else "You"
+                text = (turn.get("content") or "").strip().replace("\n", " ")
+                if text:
+                    prompt_parts.append(f"{who}: {text[:400]}")
+            prompt_parts.append("")
+
+        prompt_parts += [
             "# User Query",
             "",
             plan.intent_plan.primary_question,

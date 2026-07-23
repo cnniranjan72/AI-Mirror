@@ -154,6 +154,7 @@ class CognitivePipeline:
         conversation_id: Optional[str] = None,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
     ) -> CognitivePipelineResult:
         start = time.perf_counter()
         trace = PipelineTrace(user_id=user_id, query=query)
@@ -164,7 +165,7 @@ class CognitivePipeline:
         try:
             import asyncio
             result = await asyncio.wait_for(
-                self._execute_pipeline(user_id, query, conversation_id, session_id, request_id, result, trace, errors, start),
+                self._execute_pipeline(user_id, query, conversation_id, session_id, request_id, result, trace, errors, start, conversation_history),
                 timeout=self.pipeline_timeout
             )
             await self._persist_trace(result)
@@ -203,6 +204,7 @@ class CognitivePipeline:
         trace: PipelineTrace,
         errors: List[str],
         start: float,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
     ) -> CognitivePipelineResult:
         try:
             # ── Stage 1: Pre-load identity snapshot from DB ──────────────
@@ -370,7 +372,7 @@ class CognitivePipeline:
 
             # ── Stage 7: Verbalization ────────────────────────────────────
             t0 = time.perf_counter()
-            vresponse = await self.verbalizer.verbalize(context=ctx, plan=plan)
+            vresponse = await self.verbalizer.verbalize(context=ctx, plan=plan, conversation_history=conversation_history)
 
             trace.verbalization_ms = (time.perf_counter() - t0) * 1000
             trace.token_count = vresponse.token_count

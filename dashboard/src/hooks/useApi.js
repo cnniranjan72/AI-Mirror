@@ -78,8 +78,8 @@ export function useSessions() {
   return useApi(() => api.getSessions(), [])
 }
 
-export function useChatHistory(userId) {
-  return useApi(() => api.getChatHistory(userId), [userId])
+export function useChatHistory(userId, conversationId) {
+  return useApi(() => api.getChatHistory(userId, conversationId), [userId, conversationId])
 }
 
 export function useHealth() {

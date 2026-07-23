@@ -20,9 +20,11 @@ export const api = {
     return data;
   },
 
-  // === Chat === (cognitive pipeline: POST /query)
-  sendChatMessage: async (userId = DEFAULT_USER, query) => {
-    const { data } = await client.post('/query', { user_id: userId, query });
+  // === Chat === (cognitive pipeline: POST /query, with persistent memory)
+  sendChatMessage: async (userId = DEFAULT_USER, query, conversationId) => {
+    const { data } = await client.post('/query', {
+      user_id: userId, query, conversation_id: conversationId,
+    });
     return {
       response: data.answer,
       trace_id: data.trace_id,
@@ -33,8 +35,19 @@ export const api = {
     };
   },
 
-  // No server-side chat persistence yet — history lives in component state.
-  getChatHistory: async () => ({ messages: [] }),
+  getChatHistory: async (userId = DEFAULT_USER, conversationId) => {
+    const { data } = await client.get('/chat/history', {
+      params: { user_id: userId, conversation_id: conversationId },
+    });
+    return data;
+  },
+
+  clearChatHistory: async (userId = DEFAULT_USER, conversationId) => {
+    const { data } = await client.delete('/chat/history', {
+      params: { user_id: userId, conversation_id: conversationId },
+    });
+    return data;
+  },
 
   // The cognitive backend has no legacy session store; behavior is modeled as
   // BehaviorObjects. Return empty so pages that still reference sessions render.

@@ -1,10 +1,10 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from app.services import rag, persona as persona_svc
+from app.services import rag, persona as persona_svc, chat_memory
 from backend.cognitive_pipeline.pipeline import get_cognitive_pipeline
 
 logger = logging.getLogger(__name__)
@@ -15,6 +15,7 @@ class QueryRequest(BaseModel):
     user_id: str = "default"
     query: str
     top_k: int = 5
+    conversation_id: Optional[str] = None
 
 
 class SourceItem(BaseModel):
@@ -39,15 +40,32 @@ async def query_insights(req: QueryRequest):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
+    conversation_id = req.conversation_id or f"conv_{req.user_id}"
+
+    # Load prior turns so the character has continuity within the conversation.
+    history = []
+    try:
+        history = await chat_memory.get_recent_turns(req.user_id, conversation_id, max_turns=6)
+    except Exception:
+        logger.warning("Could not load conversation history", exc_info=True)
+
     try:
         pipeline = get_cognitive_pipeline()
         p_result = await pipeline.process_query(
             user_id=req.user_id,
             query=req.query,
+            conversation_id=conversation_id,
+            conversation_history=history,
         )
 
         if p_result.success and p_result.verbalizer_response:
             answer = p_result.verbalizer_response.content
+            # Persist this turn (user + assistant) for future continuity.
+            try:
+                await chat_memory.save_message(req.user_id, conversation_id, "user", req.query)
+                await chat_memory.save_message(req.user_id, conversation_id, "assistant", answer, trace_id=p_result.pipeline_id)
+            except Exception:
+                logger.warning("Could not persist chat turn", exc_info=True)
             sources = []
             if p_result.fused_evidence:
                 for fact in p_result.fused_evidence.facts[:5]:
@@ -91,3 +109,29 @@ async def query_insights(req: QueryRequest):
         except Exception as e2:
             logger.exception("Fallback query also failed")
             raise HTTPException(status_code=500, detail=str(e2))
+
+
+@router.get("/chat/history")
+async def get_chat_history(
+    user_id: str = Query(default="default"),
+    conversation_id: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, le=200),
+):
+    """Persisted conversation turns for the character's continuity."""
+    conv = conversation_id or f"conv_{user_id}"
+    messages = await chat_memory.get_history(user_id, conv, limit=limit)
+    return {"conversation_id": conv, "messages": messages}
+
+
+@router.delete("/chat/history")
+async def clear_chat_history(
+    user_id: str = Query(default="default"),
+    conversation_id: Optional[str] = Query(default=None),
+):
+    from app.db.postgres import execute
+    conv = conversation_id or f"conv_{user_id}"
+    await execute(
+        "DELETE FROM chat_messages WHERE user_id = $1 AND conversation_id = $2",
+        user_id, conv,
+    )
+    return {"success": True, "conversation_id": conv}
