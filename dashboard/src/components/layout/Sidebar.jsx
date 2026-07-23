@@ -5,7 +5,8 @@ import {
   PlanningIcon, DecisionIcon, PipelineIcon, AnalyticsIcon, ChatIcon, SettingsIcon,
   SearchIcon, ChevronLeftIcon, ZapIcon
 } from '../../icons/icons'
-import { api } from '../../api/client'
+import { api, isAuthed, displayName } from '../../api/client'
+import AuthModal from '../auth/AuthModal'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
@@ -24,6 +25,9 @@ const navItems = [
 
 export default function Sidebar({ collapsed, onToggle }) {
   const navigate = useNavigate()
+  const [authOpen, setAuthOpen] = useState(false)
+  const authed = isAuthed()
+  const name = displayName()
   const [cmdOpen, setCmdOpen] = useState(false)
   const [cmdQuery, setCmdQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
@@ -179,6 +183,41 @@ export default function Sidebar({ collapsed, onToggle }) {
           })}
         </nav>
 
+        {/* User / auth */}
+        <div style={{ padding: collapsed ? '8px 0' : '8px 12px', borderTop: '1px solid var(--border-subtle)' }}>
+          {authed ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: collapsed ? 'center' : 'space-between' }}>
+              {!collapsed && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: 'var(--accent-gradient)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 12, fontWeight: 700 }}>
+                    {(name || '?').charAt(0).toUpperCase()}
+                  </div>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                </div>
+              )}
+              <button
+                onClick={() => { api.logout(); window.location.href = '/dashboard' }}
+                title="Sign out"
+                style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}
+              >
+                {collapsed ? '⎋' : 'Sign out'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setAuthOpen(true)}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 8,
+                background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)',
+                color: '#818cf8', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              }}
+            >
+              {collapsed ? '→' : 'Sign in'}
+            </button>
+          )}
+        </div>
+
         {/* Collapse toggle */}
         <div style={{ padding: collapsed ? '8px 0' : '8px 12px', borderTop: '1px solid var(--border-subtle)' }}>
           <button
@@ -198,6 +237,9 @@ export default function Sidebar({ collapsed, onToggle }) {
           </button>
         </div>
       </aside>
+
+      {/* Auth */}
+      {authOpen && <AuthModal onClose={() => setAuthOpen(false)} />}
 
       {/* Command Palette */}
       {cmdOpen && (

@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from app.db.postgres import init_pool, close_pool, run_schema, health as db_health
-from app.api import ingest, query, profile, explain, seed, rl
+from app.api import ingest, query, profile, explain, seed, rl, auth_api
 
 load_dotenv()
 
@@ -72,6 +72,7 @@ app.include_router(profile.router, tags=["Profile"])
 app.include_router(explain.router, tags=["Explainability"])
 app.include_router(seed.router, tags=["Seed"])
 app.include_router(rl.router, tags=["RL"])
+app.include_router(auth_api.router, tags=["Auth"])
 
 
 @app.get("/")
