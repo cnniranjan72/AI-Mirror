@@ -125,38 +125,36 @@ class LearningMotivationRule(Rule):
     Condition: Educational content increasing + High engagement
     """
     
+    _EDU_KEYWORDS = ["learn", "tutorial", "education", "course", "study", "skill",
+                     "how to", "guide", "programming", "coding", "science", "tech"]
+
+    def _educational(self, behavior_objects):
+        out = []
+        for b in behavior_objects:
+            hay = (b.topic or "").lower() + " " + " ".join(getattr(b, "subtopics", []) or []).lower() \
+                  + " " + " ".join(getattr(b, "keywords", []) or []).lower()
+            if any(k in hay for k in self._EDU_KEYWORDS):
+                out.append(b)
+        return out
+
+    def _edu_share(self, behavior_objects, educational):
+        total = sum(b.temporal_statistics.occurrence_count for b in behavior_objects) or 1
+        edu = sum(b.temporal_statistics.occurrence_count for b in educational)
+        return edu / total
+
     def condition(
         self,
         behavior_objects: List[BehaviorObject],
         events: List[BehaviorEvent],
         evidence: List[Evidence]
     ) -> bool:
-        """Check if learning motivation is increasing"""
+        """Fires when educational content is a meaningful share of consumption."""
         try:
-            # Find educational behavior objects
-            educational_behaviors = [
-                b for b in behavior_objects
-                if any(keyword in b.topic.lower() for keyword in ["learn", "tutorial", "education", "course", "study"])
-                or any(keyword in " ".join(b.subtopics).lower() for keyword in ["learn", "tutorial", "education"])
-            ]
-            
-            if not educational_behaviors:
+            educational = self._educational(behavior_objects)
+            if not educational:
                 return False
-            
-            # Check if any are emerging or growing
-            growing = any(
-                b.trend_information.trend_direction in [TrendDirection.EMERGING, TrendDirection.GROWING]
-                for b in educational_behaviors
-            )
-            
-            # Check engagement
-            high_engagement = any(
-                b.engagement_statistics.overall_engagement_rate > 0.6
-                for b in educational_behaviors
-            )
-            
-            return growing and high_engagement
-            
+            # A meaningful learning signal: at least ~10% of activity is educational.
+            return self._edu_share(behavior_objects, educational) >= 0.10
         except Exception as e:
             logger.error(f"Error in LearningMotivationRule condition: {str(e)}", exc_info=True)
             return False
@@ -167,27 +165,14 @@ class LearningMotivationRule(Rule):
         events: List[BehaviorEvent],
         evidence: List[Evidence]
     ) -> float:
-        """Calculate learning motivation score"""
+        """Score = weighted blend of educational share and its engagement."""
         try:
-            educational_behaviors = [
-                b for b in behavior_objects
-                if any(keyword in b.topic.lower() for keyword in ["learn", "tutorial", "education", "course", "study"])
-            ]
-            
-            if not educational_behaviors:
+            educational = self._educational(behavior_objects)
+            if not educational:
                 return 0.0
-            
-            # Average growth rate
-            avg_growth = sum(b.trend_information.growth_rate for b in educational_behaviors) / len(educational_behaviors)
-            
-            # Average engagement
-            avg_engagement = sum(b.engagement_statistics.overall_engagement_rate for b in educational_behaviors) / len(educational_behaviors)
-            
-            # Combined score
-            score = (avg_growth * 0.6 + avg_engagement * 0.4)
-            
-            return min(1.0, max(0.0, score))
-            
+            share = self._edu_share(behavior_objects, educational)
+            avg_engagement = sum(b.engagement_statistics.overall_engagement_rate for b in educational) / len(educational)
+            return min(1.0, max(0.0, share * 0.6 + avg_engagement * 0.4))
         except Exception as e:
             logger.error(f"Error in LearningMotivationRule score: {str(e)}", exc_info=True)
             return 0.0
@@ -198,24 +183,16 @@ class LearningMotivationRule(Rule):
         events: List[BehaviorEvent],
         evidence: List[Evidence]
     ) -> float:
-        """Calculate confidence in learning motivation detection"""
+        """Confidence reflects how strongly the learning pattern holds — driven by
+        the educational SHARE and how many distinct educational topics support it,
+        not the (intentionally conservative) per-object confidence_score."""
         try:
-            educational_behaviors = [
-                b for b in behavior_objects
-                if any(keyword in b.topic.lower() for keyword in ["learn", "tutorial", "education", "course", "study"])
-            ]
-            
-            if not educational_behaviors:
+            educational = self._educational(behavior_objects)
+            if not educational:
                 return 0.0
-            
-            # Average confidence of behavior objects
-            avg_confidence = sum(b.confidence_score for b in educational_behaviors) / len(educational_behaviors)
-            
-            # Boost confidence if multiple behaviors
-            count_factor = min(1.0, len(educational_behaviors) / 3.0)
-            
-            return avg_confidence * count_factor
-            
+            share = self._edu_share(behavior_objects, educational)
+            count_factor = min(1.0, len(educational) / 4.0)
+            return min(0.95, 0.55 + share * 0.3 + count_factor * 0.1)
         except Exception as e:
             logger.error(f"Error in LearningMotivationRule confidence: {str(e)}", exc_info=True)
             return 0.0
@@ -228,22 +205,17 @@ class LearningMotivationRule(Rule):
     ) -> str:
         """Generate explanation for learning motivation"""
         try:
-            educational_behaviors = [
-                b for b in behavior_objects
-                if any(keyword in b.topic.lower() for keyword in ["learn", "tutorial", "education", "course", "study"])
-            ]
-            
-            if not educational_behaviors:
+            educational = self._educational(behavior_objects)
+            if not educational:
                 return "No educational content detected"
-            
-            topics = [b.topic for b in educational_behaviors[:3]]
-            avg_engagement = sum(b.engagement_statistics.overall_engagement_rate for b in educational_behaviors) / len(educational_behaviors)
-            
+            topics = [b.topic for b in sorted(educational, key=lambda b: b.temporal_statistics.occurrence_count, reverse=True)[:3]]
+            share = self._edu_share(behavior_objects, educational)
+            avg_engagement = sum(b.engagement_statistics.overall_engagement_rate for b in educational) / len(educational)
             return (
-                f"Learning motivation increasing: {len(educational_behaviors)} educational topics "
-                f"({', '.join(topics)}) with {avg_engagement:.1%} average engagement"
+                f"Strong learning orientation: {len(educational)} educational topics "
+                f"({', '.join(topics)}) make up {share:.0%} of activity, "
+                f"with {avg_engagement:.0%} average engagement"
             )
-            
         except Exception as e:
             logger.error(f"Error in LearningMotivationRule explanation: {str(e)}", exc_info=True)
             return "Error generating explanation"
@@ -591,10 +563,118 @@ class AttentionImprovementRule(Rule):
             return "Error generating explanation"
 
 
+class PrimaryInterestRule(Rule):
+    """
+    Identifies the user's dominant interest areas.
+
+    Condition: at least 2 behavior objects with recorded activity.
+    """
+
+    def _ranked(self, behavior_objects):
+        return sorted(
+            [b for b in behavior_objects if b.temporal_statistics.occurrence_count > 0],
+            key=lambda b: b.temporal_statistics.occurrence_count, reverse=True,
+        )
+
+    def _top_share(self, behavior_objects, n=3):
+        ranked = self._ranked(behavior_objects)
+        total = sum(b.temporal_statistics.occurrence_count for b in ranked) or 1
+        top = sum(b.temporal_statistics.occurrence_count for b in ranked[:n])
+        return top / total
+
+    def condition(self, behavior_objects, events, evidence):
+        try:
+            return len(self._ranked(behavior_objects)) >= 2
+        except Exception:
+            return False
+
+    def score(self, behavior_objects, events, evidence):
+        try:
+            return min(1.0, self._top_share(behavior_objects))
+        except Exception:
+            return 0.0
+
+    def confidence(self, behavior_objects, events, evidence):
+        try:
+            ranked = self._ranked(behavior_objects)
+            total = sum(b.temporal_statistics.occurrence_count for b in ranked)
+            share = self._top_share(behavior_objects)
+            return min(0.95, 0.55 + share * 0.25 + min(total, 40) / 40 * 0.15)
+        except Exception:
+            return 0.0
+
+    def explanation(self, behavior_objects, events, evidence):
+        try:
+            ranked = self._ranked(behavior_objects)
+            topics = [b.topic for b in ranked[:3]]
+            share = self._top_share(behavior_objects)
+            return (
+                f"Primary interests: {', '.join(topics)} account for "
+                f"{share:.0%} of activity across {len(ranked)} tracked topics"
+            )
+        except Exception:
+            return "Error generating explanation"
+
+
+class CreatorDiversityRule(Rule):
+    """
+    Detects broad creator exploration (the healthy opposite of dependence).
+
+    Condition: many distinct creators AND no small set dominating.
+    """
+
+    def _creator_counts(self, behavior_objects):
+        from collections import Counter
+        counts = Counter()
+        for b in behavior_objects:
+            for c in (b.creators or []):
+                counts[c] += b.temporal_statistics.occurrence_count
+        return counts
+
+    def condition(self, behavior_objects, events, evidence):
+        try:
+            counts = self._creator_counts(behavior_objects)
+            if len(counts) < 6:
+                return False
+            total = sum(counts.values()) or 1
+            top3 = sum(c for _, c in counts.most_common(3))
+            return (top3 / total) < 0.5  # no small clique dominates
+        except Exception:
+            return False
+
+    def score(self, behavior_objects, events, evidence):
+        try:
+            counts = self._creator_counts(behavior_objects)
+            total = sum(counts.values()) or 1
+            top3 = sum(c for _, c in counts.most_common(3))
+            return min(1.0, 1.0 - top3 / total)  # higher = more diverse
+        except Exception:
+            return 0.0
+
+    def confidence(self, behavior_objects, events, evidence):
+        try:
+            unique = len(self._creator_counts(behavior_objects))
+            return min(0.95, 0.55 + min(unique, 20) / 20 * 0.35)
+        except Exception:
+            return 0.0
+
+    def explanation(self, behavior_objects, events, evidence):
+        try:
+            counts = self._creator_counts(behavior_objects)
+            total = sum(counts.values()) or 1
+            top3 = sum(c for _, c in counts.most_common(3))
+            return (
+                f"Broad creator exploration: {len(counts)} distinct creators, "
+                f"top 3 only {top3 / total:.0%} of activity — low creator dependence"
+            )
+        except Exception:
+            return "Error generating explanation"
+
+
 class RuleEngine:
     """
     Rule Engine
-    
+
     Manages and executes behavioral interpretation rules
     """
     
@@ -612,7 +692,9 @@ class RuleEngine:
             LearningMotivationRule(config),
             EntertainmentDominanceRule(config),
             CreatorDependenceRule(config),
-            AttentionImprovementRule(config)
+            CreatorDiversityRule(config),
+            PrimaryInterestRule(config),
+            AttentionImprovementRule(config),
         ]
         
         logger.info(f"RuleEngine initialized with {len(self.rules)} rules")

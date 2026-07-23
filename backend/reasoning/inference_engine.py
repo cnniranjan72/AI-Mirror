@@ -270,16 +270,22 @@ class InferenceEngine:
             confidence = rule_result["confidence"]
             strength = confidence * importance
             
-            # Extract affected entities
+            # Extract affected entities from the most active behaviors (per-object
+            # confidence_score is intentionally conservative, so rank by activity
+            # rather than gating on a high absolute confidence).
             affected_topics = []
             affected_creators = []
             affected_behaviors = []
-            
-            for behavior in context.behavior_objects:
-                if behavior.confidence_score >= 0.6:
-                    affected_topics.append(behavior.topic)
-                    affected_creators.extend(behavior.creators[:3])
-                    affected_behaviors.append(behavior.unique_id)
+
+            ranked = sorted(
+                context.behavior_objects,
+                key=lambda b: b.temporal_statistics.occurrence_count,
+                reverse=True,
+            )[:8]
+            for behavior in ranked:
+                affected_topics.append(behavior.topic)
+                affected_creators.extend(behavior.creators[:3])
+                affected_behaviors.append(behavior.unique_id)
             
             # Generate recommendation seed
             recommendation_seed = self._generate_recommendation_seed(
