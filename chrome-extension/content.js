@@ -241,34 +241,45 @@
     if (watchTime >= CONFIG.MIN_WATCH_TIME) {
       const meta = extractMetadata(state.currentVideo);
 
-      const event = {
-        reel_id: state.currentReelId,
-        username: meta.username,
-        caption: meta.caption,
-        hashtags: meta.hashtags,
-        // Backend normalizer reads `audio_info` (not `audio`).
-        audio_info: meta.audioInfo,
-        audio_id: meta.audioId,
-        watch_time: parseFloat(watchTime.toFixed(2)),
-        // Engagement signal now captured from the DOM.
-        liked: meta.liked,
-        saved: meta.saved,
-        following: meta.following,
-        profile_url: meta.profileUrl,
-        // Content-popularity counts (null when Instagram hides them).
-        like_count: meta.likeCount,
-        comment_count: meta.commentCount,
-        repost_count: meta.repostCount,
-        source_url: window.location.href,
-        timestamp: new Date().toISOString(),
-        session_id: state.sessionId,
-      };
+      // Skip totally-failed extractions: on the first reel of a session the
+      // card DOM may not be rendered yet when watching starts, yielding no
+      // username and no caption. Recording that would pollute the twin with an
+      // "unknown" creator, so drop it — the reel is re-captured on re-watch.
+      const extractionFailed = meta.username === 'unknown' && !meta.caption
+        && !meta.audioId && meta.likeCount == null;
+      if (extractionFailed) {
+        console.log('[AIMirror] ⤫ Skipped (metadata not ready):', state.currentReelId,
+          `(${watchTime.toFixed(1)}s)`);
+      } else {
+        const event = {
+          reel_id: state.currentReelId,
+          username: meta.username,
+          caption: meta.caption,
+          hashtags: meta.hashtags,
+          // Backend normalizer reads `audio_info` (not `audio`).
+          audio_info: meta.audioInfo,
+          audio_id: meta.audioId,
+          watch_time: parseFloat(watchTime.toFixed(2)),
+          // Engagement signal now captured from the DOM.
+          liked: meta.liked,
+          saved: meta.saved,
+          following: meta.following,
+          profile_url: meta.profileUrl,
+          // Content-popularity counts (null when Instagram hides them).
+          like_count: meta.likeCount,
+          comment_count: meta.commentCount,
+          repost_count: meta.repostCount,
+          source_url: window.location.href,
+          timestamp: new Date().toISOString(),
+          session_id: state.sessionId,
+        };
 
-      state.buffer.push(event);
+        state.buffer.push(event);
 
-      console.log('[AIMirror] ■ Stopped:', state.currentReelId,
-        `(${watchTime.toFixed(1)}s)`, meta.username,
-        `liked=${meta.liked} saved=${meta.saved}`);
+        console.log('[AIMirror] ■ Stopped:', state.currentReelId,
+          `(${watchTime.toFixed(1)}s)`, meta.username,
+          `liked=${meta.liked} saved=${meta.saved}`);
+      }
 
       checkBatch();
     }
