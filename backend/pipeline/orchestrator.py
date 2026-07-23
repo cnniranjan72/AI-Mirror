@@ -392,7 +392,12 @@ class V3Pipeline:
             
             for ev in result.evidence:
                 await self._insert_evidence(user_id, ev)
-            
+
+            # Inferences are the twin's CURRENT reasoning state (re-derived from
+            # all behavior objects each run), not append-only events — so replace
+            # the prior set instead of accumulating stale duplicates.
+            if result.inferences:
+                await execute("DELETE FROM inferences WHERE user_id = $1", user_id)
             for inf in result.inferences:
                 await self._insert_inference(user_id, inf)
             

@@ -338,10 +338,14 @@ class InferenceEngine:
         """
         if "Motivation" in rule_name:
             return "motivation"
+        elif "Habit" in rule_name or "Temporal" in rule_name:
+            return "habit"
+        elif "Depth" in rule_name or "Engagement" in rule_name or "Improvement" in rule_name:
+            return "preference"
+        elif "Interest" in rule_name or "Diversity" in rule_name:
+            return "preference"
         elif "Dominance" in rule_name or "Dependence" in rule_name:
             return "pattern"
-        elif "Improvement" in rule_name:
-            return "preference"
         else:
             return "general"
     

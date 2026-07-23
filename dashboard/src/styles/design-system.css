@@ -69,6 +69,15 @@ body {
   overflow-x: hidden;
 }
 
+/* The app is a dark UI: force dark form-control rendering so typed text stays
+   high-contrast even when the OS/browser is in light mode. */
+:root { color-scheme: dark; }
+input, textarea, select {
+  color: var(--text-primary);
+  color-scheme: dark;
+}
+input::placeholder, textarea::placeholder { color: var(--text-muted); }
+
 body::before {
   content: '';
   position: fixed;

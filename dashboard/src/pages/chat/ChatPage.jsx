@@ -181,8 +181,12 @@ export default function ChatPage() {
               rows={1}
               style={{
                 flex: 1, padding: '10px 14px', borderRadius: 10,
-                background: 'rgba(30,41,59,0.5)', border: '1px solid var(--border-subtle)',
-                color: 'var(--text-primary)', fontSize: 14, outline: 'none',
+                // Solid dark bg + explicit light text + dark color-scheme so the
+                // typed text is always high-contrast, regardless of the OS/browser
+                // light-mode form-control defaults.
+                background: '#1e293b', border: '1px solid var(--border-strong, rgba(148,163,184,0.25))',
+                color: '#f8fafc', caretColor: '#818cf8', colorScheme: 'dark',
+                fontSize: 14, outline: 'none',
                 resize: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5,
               }}
               onInput={e => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px' }}

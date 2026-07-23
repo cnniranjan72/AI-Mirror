@@ -671,6 +671,117 @@ class CreatorDiversityRule(Rule):
             return "Error generating explanation"
 
 
+class TemporalHabitRule(Rule):
+    """
+    Detects consistent, routine viewing habits.
+
+    Condition: sustained behaviors (active over multiple days / recurring),
+    signalling routine rather than one-off consumption.
+    """
+
+    def _habitual(self, behavior_objects):
+        out = []
+        for b in behavior_objects:
+            ts = b.temporal_statistics
+            if getattr(ts, "days_active", 0) >= 2 or ts.occurrence_count >= 3:
+                out.append(b)
+        return out
+
+    def _avg_consistency(self, behaviors):
+        if not behaviors:
+            return 0.0
+        return sum(getattr(b.temporal_statistics, "consistency_score", 0.0) for b in behaviors) / len(behaviors)
+
+    def condition(self, behavior_objects, events, evidence):
+        try:
+            return len(self._habitual(behavior_objects)) >= 2
+        except Exception:
+            return False
+
+    def score(self, behavior_objects, events, evidence):
+        try:
+            return min(1.0, self._avg_consistency(self._habitual(behavior_objects)))
+        except Exception:
+            return 0.0
+
+    def confidence(self, behavior_objects, events, evidence):
+        try:
+            hab = self._habitual(behavior_objects)
+            cons = self._avg_consistency(hab)
+            return min(0.95, 0.55 + cons * 0.25 + min(len(hab), 6) / 6 * 0.15)
+        except Exception:
+            return 0.0
+
+    def explanation(self, behavior_objects, events, evidence):
+        try:
+            hab = sorted(self._habitual(behavior_objects),
+                         key=lambda b: getattr(b.temporal_statistics, "days_active", 0), reverse=True)
+            if not hab:
+                return "No recurring viewing habits detected"
+            top = hab[0]
+            topics = [b.topic for b in hab[:3]]
+            days = getattr(top.temporal_statistics, "days_active", 0)
+            return (
+                f"Consistent viewing habit: {len(hab)} recurring topics "
+                f"({', '.join(topics)}), '{top.topic}' active across {days} days"
+            )
+        except Exception:
+            return "Error generating explanation"
+
+
+class EngagementDepthRule(Rule):
+    """
+    Characterises HOW the user engages — deep/attentive vs quick/passive —
+    from watch completion and interaction quality.
+    """
+
+    def _stats(self, behavior_objects):
+        active = [b for b in behavior_objects if b.temporal_statistics.occurrence_count > 0]
+        if not active:
+            return None
+        completion = sum(getattr(b.watch_statistics, "completion_rate", 0.0) for b in active) / len(active)
+        quality = sum(getattr(b.engagement_statistics, "engagement_quality_score",
+                              b.engagement_statistics.overall_engagement_rate) for b in active) / len(active)
+        interactions = sum(getattr(b.engagement_statistics, "total_interactions", 0) for b in active)
+        return {"completion": completion, "quality": quality, "interactions": interactions, "n": len(active)}
+
+    def condition(self, behavior_objects, events, evidence):
+        try:
+            s = self._stats(behavior_objects)
+            return bool(s and s["n"] >= 2)
+        except Exception:
+            return False
+
+    def score(self, behavior_objects, events, evidence):
+        try:
+            s = self._stats(behavior_objects)
+            return min(1.0, (s["completion"] * 0.6 + s["quality"] * 0.4)) if s else 0.0
+        except Exception:
+            return 0.0
+
+    def confidence(self, behavior_objects, events, evidence):
+        try:
+            s = self._stats(behavior_objects)
+            if not s:
+                return 0.0
+            return min(0.95, 0.55 + min(s["interactions"], 60) / 60 * 0.3 + min(s["n"], 8) / 8 * 0.1)
+        except Exception:
+            return 0.0
+
+    def explanation(self, behavior_objects, events, evidence):
+        try:
+            s = self._stats(behavior_objects)
+            if not s:
+                return "Insufficient engagement data"
+            style = "deep, attentive" if s["completion"] >= 0.55 else ("selective" if s["completion"] >= 0.35 else "quick, scanning")
+            return (
+                f"Engagement style is {style}: {s['completion']:.0%} average watch completion "
+                f"and {s['quality']:.0%} engagement quality across {s['n']} topics"
+            )
+        except Exception:
+            return "Error generating explanation"
+
+
 class RuleEngine:
     """
     Rule Engine
@@ -694,6 +805,8 @@ class RuleEngine:
             CreatorDependenceRule(config),
             CreatorDiversityRule(config),
             PrimaryInterestRule(config),
+            TemporalHabitRule(config),
+            EngagementDepthRule(config),
             AttentionImprovementRule(config),
         ]
         
