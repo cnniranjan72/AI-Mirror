@@ -43,52 +43,76 @@
 
   // ==================== METADATA EXTRACTION ====================
 
+  // Instagram renders the <video> and its metadata (username, caption) in
+  // SEPARATE sibling subtrees, and the action rail (like/save/audio) in yet
+  // another. So we can't rely on closest('[role=presentation]') or a fixed
+  // number of parents. Instead, walk UP from the video until we reach the
+  // smallest ancestor that contains BOTH a profile/reels link AND an action
+  // control — that ancestor is the whole reel "card".
+  function findReelCard(video) {
+    let el = video.parentElement;
+    for (let i = 0; i < 15 && el; i++) {
+      try {
+        const hasLink = el.querySelector('a[href*="/reels/"], a[href*="/audio/"]');
+        const hasAction = el.querySelector(
+          'svg[aria-label="Like"], svg[aria-label="Unlike"], a[href*="/audio/"]'
+        );
+        if (hasLink && hasAction) return el;
+      } catch (_) { /* keep walking */ }
+      el = el.parentElement;
+    }
+    // Fallback: broadest reasonable ancestor.
+    return video.closest('article')
+      || video.parentElement?.parentElement?.parentElement
+      || document.body;
+  }
+
   function extractMetadata(video) {
-    const container = video.closest('[role="presentation"]')
-      || video.closest('article')
-      || video.parentElement?.parentElement?.parentElement;
+    const card = findReelCard(video);
 
     let username = 'unknown';
     let caption = '';
     let hashtags = [];
-    let audio = '';
+    let audioInfo = '';
+    let audioId = '';
+    let liked = false;
+    let saved = false;
+    let following = true;
+    let profileUrl = '';
 
-    if (!container) {
-      return { username, caption, hashtags, audio };
+    if (!card) {
+      return { username, caption, hashtags, audioInfo, audioId, liked, saved, following, profileUrl };
     }
 
-    // --- Username ---
+    // --- Username: from the profile link href (stable across redesigns) ---
     try {
-      const link = container.querySelector('a[href*="/reels/"] span');
-      if (link && link.textContent) {
-        username = link.textContent.trim();
-      }
-      if (username === 'unknown') {
-        const profileLink = container.querySelector('a[href*="/reels/"]');
-        if (profileLink) {
-          const href = profileLink.getAttribute('href') || '';
-          const parts = href.split('/').filter(Boolean);
-          if (parts.length >= 1 && parts[0] !== 'reels') {
-            username = parts[0];
-          }
+      const links = card.querySelectorAll('a[href*="/reels/"]');
+      for (const a of links) {
+        const parts = (a.getAttribute('href') || '').split('/').filter(Boolean);
+        if (parts.length && !['reels', 'reel', 'explore', 'p'].includes(parts[0])) {
+          username = parts[0];
+          break;
         }
       }
+      if (username !== 'unknown') profileUrl = `https://instagram.com/${username}`;
     } catch (e) {
       console.warn('[AIMirror] Username extraction error:', e.message);
     }
 
-    // --- Caption ---
+    // --- Caption: the dir="auto" text block, minus a trailing "… more" ---
     try {
-      const candidates = container.querySelectorAll('div[role="button"] span');
-      for (const el of candidates) {
-        const txt = (el.innerText || '').trim();
-        if (
-          txt.length > 10 &&
-          txt.split(/\s+/).length >= 3 &&
-          !/^\d+$/.test(txt) &&
-          txt.toLowerCase() !== username.toLowerCase()
-        ) {
-          caption = txt;
+      const blocks = card.querySelectorAll('div[dir="auto"]');
+      for (const d of blocks) {
+        const spans = d.querySelectorAll('span');
+        let text = '';
+        spans.forEach((s) => {
+          const t = (s.innerText || '').trim();
+          if (!t || /^(…?\s*more)$/i.test(t)) return;
+          text = text ? `${text} ${t}` : t;
+        });
+        if (!text) text = (d.innerText || '').replace(/…?\s*more$/i, '').trim();
+        if (text.length > 3 && text.toLowerCase() !== username.toLowerCase()) {
+          caption = text;
           break;
         }
       }
@@ -102,15 +126,30 @@
       if (matches) hashtags = matches;
     }
 
-    // --- Audio ---
+    // --- Audio: the audio link href → id (no text span in current DOM) ---
     try {
-      const audioLink = container.querySelector('a[href*="/audio/"] span');
+      const audioLink = card.querySelector('a[href*="/audio/"]');
       if (audioLink) {
-        audio = (audioLink.textContent || '').trim();
+        const href = audioLink.getAttribute('href') || '';
+        const m = href.match(/\/audio\/(\d+)/);
+        if (m) audioId = m[1];
+        // Prefer a text label if one exists, else fall back to the id.
+        const span = audioLink.querySelector('span');
+        audioInfo = (span && span.textContent.trim()) || (audioId ? `audio_${audioId}` : '');
       }
     } catch (_) { /* optional */ }
 
-    return { username, caption, hashtags, audio };
+    // --- Engagement state (net-new signal) ---
+    try {
+      liked = !!card.querySelector('svg[aria-label="Unlike"]');
+      saved = !!card.querySelector('svg[aria-label="Remove"]');
+      // A visible "Follow" button means we do NOT follow this creator.
+      const followBtn = Array.from(card.querySelectorAll('div[role="button"]'))
+        .find((b) => (b.textContent || '').trim() === 'Follow');
+      following = !followBtn;
+    } catch (_) { /* optional */ }
+
+    return { username, caption, hashtags, audioInfo, audioId, liked, saved, following, profileUrl };
   }
 
   // ==================== VIEWPORT DETECTION ====================
@@ -157,8 +196,16 @@
         username: meta.username,
         caption: meta.caption,
         hashtags: meta.hashtags,
-        audio: meta.audio,
+        // Backend normalizer reads `audio_info` (not `audio`).
+        audio_info: meta.audioInfo,
+        audio_id: meta.audioId,
         watch_time: parseFloat(watchTime.toFixed(2)),
+        // Engagement signal now captured from the DOM.
+        liked: meta.liked,
+        saved: meta.saved,
+        following: meta.following,
+        profile_url: meta.profileUrl,
+        source_url: window.location.href,
         timestamp: new Date().toISOString(),
         session_id: state.sessionId,
       };
@@ -166,7 +213,8 @@
       state.buffer.push(event);
 
       console.log('[AIMirror] ■ Stopped:', state.currentReelId,
-        `(${watchTime.toFixed(1)}s)`, meta.username);
+        `(${watchTime.toFixed(1)}s)`, meta.username,
+        `liked=${meta.liked} saved=${meta.saved}`);
 
       checkBatch();
     }
@@ -270,6 +318,8 @@
 
   // ==================== DEBUG ====================
 
+  // Run `aimirrorDebug()` in the Instagram tab's console to see exactly what
+  // the extractor reads from the currently-visible reel.
   window.aimirrorDebug = function () {
     const active = getActiveVideo();
     const meta = active ? extractMetadata(active) : null;
@@ -279,8 +329,9 @@
       watchingSince: state.startTime ? `${((Date.now() - state.startTime) / 1000).toFixed(1)}s` : '-',
       bufferSize: state.buffer.length,
       activeVideo: !!active,
+      backend: CONFIG.BACKEND_URL,
     });
-    if (meta) console.log('[AIMirror] Current metadata:', meta);
+    if (meta) console.table(meta);
     return { state, meta };
   };
 

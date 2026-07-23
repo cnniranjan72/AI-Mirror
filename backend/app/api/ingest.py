@@ -50,8 +50,17 @@ class EventItem(BaseModel):
     username: str = "unknown"
     caption: str = ""
     hashtags: List[str] = Field(default_factory=list)
-    audio: str = ""
+    audio: str = ""            # legacy field name
+    audio_info: str = ""       # current extension field name
+    audio_id: str = ""
     watch_time: float = 0
+    # Engagement signal captured by the extension from the DOM.
+    liked: bool = False
+    saved: bool = False
+    shared: bool = False
+    commented: bool = False
+    following: bool = True
+    profile_url: str = ""
     timestamp: str = ""
     session_id: str = ""
     source_url: str = ""
@@ -160,9 +169,16 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                     "username": ev.username,
                     "caption": ev.caption,
                     "hashtags": ev.hashtags,
-                    "audio_info": ev.audio,
+                    # Prefer the current field name, fall back to the legacy one.
+                    "audio_info": ev.audio_info or ev.audio,
+                    "audio_id": ev.audio_id,
                     "watch_time": ev.watch_time,
-                    "liked": False,
+                    "liked": ev.liked,
+                    "saved": ev.saved,
+                    "shared": ev.shared,
+                    "commented": ev.commented,
+                    "following": ev.following,
+                    "profile_url": ev.profile_url,
                     "timestamp": ev.timestamp or datetime.utcnow().isoformat(),
                     "session_id": ev.session_id,
                     "source_url": ev.source_url or "",
@@ -187,8 +203,11 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
             row = await fetchrow(
                 """
                 INSERT INTO events (user_id, reel_id, username, caption, hashtags,
-                                    audio, watch_time, timestamp, session_id)
-                VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9)
+                                    audio, watch_time, timestamp, session_id,
+                                    liked, saved, shared, commented, following,
+                                    audio_id, profile_url)
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9,
+                        $10, $11, $12, $13, $14, $15, $16)
                 RETURNING id
                 """,
                 user_id,
@@ -200,6 +219,13 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                 bev.watch_time,
                 bev.timestamp,
                 bev.session_id,
+                bool(raw_ev.liked),
+                bool(raw_ev.saved),
+                bool(raw_ev.shared),
+                bool(raw_ev.commented),
+                bool(raw_ev.following),
+                raw_ev.audio_id or "",
+                raw_ev.profile_url or "",
             )
             event_id = row["id"]
             stored_count += 1
