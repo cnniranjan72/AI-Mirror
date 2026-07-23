@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   DashboardIcon, IdentityIcon, MemoryIcon, EvidenceIcon, BehaviorIcon,
   PlanningIcon, DecisionIcon, PipelineIcon, AnalyticsIcon, ChatIcon, SettingsIcon,
-  SearchIcon, ChevronLeftIcon
+  SearchIcon, ChevronLeftIcon, ZapIcon
 } from '../../icons/icons'
 import { api } from '../../api/client'
 
@@ -15,6 +15,7 @@ const navItems = [
   { path: '/behavior', label: 'Behavior', icon: BehaviorIcon },
   { path: '/planning', label: 'Planning', icon: PlanningIcon },
   { path: '/decision', label: 'Decision', icon: DecisionIcon },
+  { path: '/learning', label: 'Learning', icon: ZapIcon },
   { path: '/pipeline', label: 'Pipeline', icon: PipelineIcon },
   { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
   { path: '/chat', label: 'Chat', icon: ChatIcon },

@@ -13,6 +13,7 @@ import EvidencePage from '../../pages/evidence/EvidencePage'
 import BehaviorPage from '../../pages/behavior/BehaviorPage'
 import PlanningPage from '../../pages/planning/PlanningPage'
 import DecisionPage from '../../pages/decision/DecisionPage'
+import LearningPage from '../../pages/learning/LearningPage'
 import PipelinePage from '../../pages/pipeline/PipelinePage'
 import TracePage from '../../pages/trace/TracePage'
 import AnalyticsPage from '../../pages/analytics/AnalyticsPage'
@@ -61,6 +62,7 @@ export default function AppShell() {
                 <Route path="/behavior" element={<BehaviorPage />} />
                 <Route path="/planning" element={<PlanningPage />} />
                 <Route path="/decision" element={<DecisionPage />} />
+                <Route path="/learning" element={<LearningPage />} />
                 <Route path="/pipeline" element={<PipelinePage />} />
                 <Route path="/trace/:traceId" element={<TracePage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />

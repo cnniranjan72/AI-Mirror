@@ -110,6 +110,20 @@ export const api = {
     return data;
   },
 
+  // === Reinforcement Learning ===
+  getRlPolicy: async () => {
+    const { data } = await client.get('/rl/policy');
+    return data;
+  },
+  getRlHistory: async (userId = DEFAULT_USER, limit = 30) => {
+    const { data } = await client.get('/rl/history', { params: { user_id: userId, limit } });
+    return data;
+  },
+  sendRlFeedback: async (contextKey, actionId, reward) => {
+    const { data } = await client.post('/rl/feedback', { context_key: contextKey, action_id: actionId, reward });
+    return data;
+  },
+
   // === Seed (demo data) ===
   seedDemo: async () => {
     const { data } = await client.post('/seed');
