@@ -37,8 +37,49 @@
   // ==================== UTILITIES ====================
 
   function reelIdFromUrl() {
-    const m = window.location.pathname.match(/\/reel\/([A-Za-z0-9_-]+)/);
-    return m ? m[1] : `reel_${Date.now().toString(36)}`;
+    // Match both /reel/{id} and the feed's /reels/{id} form. When focused on a
+    // reel, Instagram puts the real shortcode here — far better for dedup than
+    // a timestamp fallback.
+    const m = window.location.pathname.match(/\/reels?\/([A-Za-z0-9_-]+)/);
+    if (m && !['audio'].includes(m[1])) return m[1];
+    return `reel_${Date.now().toString(36)}`;
+  }
+
+  // Parse "1,234" / "12.3K" / "5M" -> integer; null for non-numeric ("Likes").
+  function parseCount(txt) {
+    if (!txt) return null;
+    const m = txt.replace(/,/g, '').match(/^([\d.]+)\s*([KkMm]?)$/);
+    if (!m) return null;
+    let n = parseFloat(m[1]);
+    if (isNaN(n)) return null;
+    const u = m[2].toUpperCase();
+    if (u === 'K') n *= 1e3; else if (u === 'M') n *= 1e6;
+    return Math.round(n);
+  }
+
+  // Best-effort count next to an action icon. Instagram renders these lazily and
+  // inconsistently (like counts are often hidden), so this returns null freely.
+  function countForAction(card, labels) {
+    for (const lbl of labels) {
+      const svg = card.querySelector(`svg[aria-label="${lbl}"]`);
+      if (!svg) continue;
+      const btn = svg.closest('[role="button"]') || svg.parentElement;
+      let hop = btn;
+      for (let up = 0; up < 3 && hop; up++) {
+        const t = (hop.innerText || '').trim().split('\n')[0];
+        const n = parseCount(t);
+        if (n !== null) return n;
+        let sib = hop.nextElementSibling, s = 0;
+        while (sib && s < 2) {
+          const n2 = parseCount((sib.innerText || '').trim().split('\n')[0]);
+          if (n2 !== null) return n2;
+          sib = sib.nextElementSibling; s++;
+        }
+        hop = hop.parentElement;
+      }
+      return null;
+    }
+    return null;
   }
 
   // ==================== METADATA EXTRACTION ====================
@@ -140,6 +181,7 @@
     } catch (_) { /* optional */ }
 
     // --- Engagement state (net-new signal) ---
+    let likeCount = null, commentCount = null, repostCount = null;
     try {
       liked = !!card.querySelector('svg[aria-label="Unlike"]');
       saved = !!card.querySelector('svg[aria-label="Remove"]');
@@ -147,9 +189,17 @@
       const followBtn = Array.from(card.querySelectorAll('div[role="button"]'))
         .find((b) => (b.textContent || '').trim() === 'Follow');
       following = !followBtn;
+      // Content-popularity counts (best-effort; frequently hidden/lazy).
+      likeCount = countForAction(card, ['Like', 'Unlike']);
+      commentCount = countForAction(card, ['Comment']);
+      repostCount = countForAction(card, ['Repost']);
     } catch (_) { /* optional */ }
 
-    return { username, caption, hashtags, audioInfo, audioId, liked, saved, following, profileUrl };
+    return {
+      username, caption, hashtags, audioInfo, audioId,
+      liked, saved, following, profileUrl,
+      likeCount, commentCount, repostCount,
+    };
   }
 
   // ==================== VIEWPORT DETECTION ====================
@@ -205,6 +255,10 @@
         saved: meta.saved,
         following: meta.following,
         profile_url: meta.profileUrl,
+        // Content-popularity counts (null when Instagram hides them).
+        like_count: meta.likeCount,
+        comment_count: meta.commentCount,
+        repost_count: meta.repostCount,
         source_url: window.location.href,
         timestamp: new Date().toISOString(),
         session_id: state.sessionId,
@@ -262,22 +316,33 @@
       events: events,
     };
 
-    console.log(`[AIMirror] → Sending ${events.length} events to backend`);
+    console.log(`[AIMirror] → Sending ${events.length} events via background worker`);
 
-    fetch(CONFIG.BACKEND_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        console.log('[AIMirror] ✓ Batch sent:', data.message || data);
-      })
-      .catch((err) => {
-        console.error('[AIMirror] ✗ Send failed:', err.message);
-        // Put events back in buffer for retry
-        state.buffer = [...events, ...state.buffer];
-      });
+    // IMPORTANT: Instagram's Content-Security-Policy (connect-src) blocks a
+    // direct fetch() from the content script to our backend. So we hand the
+    // batch to the background service worker, whose network requests use the
+    // extension's host_permissions and are NOT subject to the page CSP.
+    try {
+      chrome.runtime.sendMessage(
+        { type: 'SEND_EVENTS', payload },
+        (resp) => {
+          if (chrome.runtime.lastError) {
+            console.error('[AIMirror] ✗ Send failed:', chrome.runtime.lastError.message);
+            state.buffer = [...events, ...state.buffer];
+            return;
+          }
+          if (resp && resp.success) {
+            console.log('[AIMirror] ✓ Batch sent:', resp.data?.message || resp.data);
+          } else {
+            console.error('[AIMirror] ✗ Backend error:', resp && resp.error);
+            state.buffer = [...events, ...state.buffer]; // retry next cycle
+          }
+        }
+      );
+    } catch (err) {
+      console.error('[AIMirror] ✗ sendMessage threw:', err.message);
+      state.buffer = [...events, ...state.buffer];
+    }
   }
 
   // ==================== INITIALIZATION ====================

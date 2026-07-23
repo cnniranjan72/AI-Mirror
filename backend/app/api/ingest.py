@@ -61,6 +61,10 @@ class EventItem(BaseModel):
     commented: bool = False
     following: bool = True
     profile_url: str = ""
+    # Content-popularity counts (nullable — Instagram frequently hides them).
+    like_count: Optional[int] = None
+    comment_count: Optional[int] = None
+    repost_count: Optional[int] = None
     timestamp: str = ""
     session_id: str = ""
     source_url: str = ""
@@ -205,9 +209,10 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                 INSERT INTO events (user_id, reel_id, username, caption, hashtags,
                                     audio, watch_time, timestamp, session_id,
                                     liked, saved, shared, commented, following,
-                                    audio_id, profile_url)
+                                    audio_id, profile_url,
+                                    like_count, comment_count, repost_count)
                 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9,
-                        $10, $11, $12, $13, $14, $15, $16)
+                        $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
                 RETURNING id
                 """,
                 user_id,
@@ -226,6 +231,9 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                 bool(raw_ev.following),
                 raw_ev.audio_id or "",
                 raw_ev.profile_url or "",
+                raw_ev.like_count,
+                raw_ev.comment_count,
+                raw_ev.repost_count,
             )
             event_id = row["id"]
             stored_count += 1

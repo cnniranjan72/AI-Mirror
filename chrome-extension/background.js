@@ -40,6 +40,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ success: true });
       break;
 
+    case 'SEND_EVENTS':
+      // Content scripts can't fetch our backend directly (blocked by
+      // Instagram's page CSP). The background worker fetches instead — its
+      // requests use the extension host_permissions, not the page CSP.
+      sendEventsToBackend(message.payload).then(sendResponse);
+      return true; // async response
+
     case 'GET_SESSION_INFO':
       getSessionInfo().then(sendResponse);
       return true; // Keep channel open for async response
@@ -84,6 +91,30 @@ async function getSessionInfo() {
 }
 
 // ==================== DATA SYNC ====================
+
+// Receives a batch from the content script and POSTs it to the backend.
+// Runs in the extension (background) context, so it bypasses the host page's
+// Content-Security-Policy that blocks direct content-script fetches.
+async function sendEventsToBackend(payload) {
+  try {
+    const response = await fetch(CONFIG.BACKEND_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('[AIMirror Background] Backend error:', response.status, text);
+      return { success: false, error: `Backend ${response.status}: ${text}` };
+    }
+    const data = await response.json();
+    console.log(`[AIMirror Background] ✓ Sent ${payload.events?.length || 0} events:`, data);
+    return { success: true, data };
+  } catch (error) {
+    console.error('[AIMirror Background] Send error:', error);
+    return { success: false, error: error.message };
+  }
+}
 
 async function syncDataToBackend() {
   try {
