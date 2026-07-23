@@ -8,11 +8,10 @@ import PipelineStage from '../../components/pipeline/PipelineStage'
 import { RefreshIcon } from '../../icons/icons'
 import ExplainabilityPanel from '../../components/explain/ExplainabilityPanel'
 
+// A query trace records the QUERY pipeline (not the ingest pipeline), so show
+// exactly those stages with their real per-stage timings.
 const pipelineStages = [
-  'Behavior Gateway', 'Content Intelligence', 'Knowledge Consolidation',
-  'Behavior Objects', 'Evidence', 'Inference', 'Reflection', 'Memory',
-  'Identity', 'Snapshot', 'Runtime', 'Planner', 'Retriever', 'Fusion',
-  'Decision', 'Context', 'LLM', 'Response',
+  'Runtime', 'Planner', 'Retriever', 'Fusion', 'Decision', 'Context', 'LLM',
 ]
 
 export default function PipelinePage() {
@@ -32,16 +31,6 @@ export default function PipelinePage() {
   const getStageLatency = (stage) => {
     if (!activeTrace) return undefined
     const mapping = {
-      'Behavior Gateway': activeTrace.runtime_load_ms,
-      'Content Intelligence': activeTrace.runtime_load_ms,
-      'Knowledge Consolidation': activeTrace.runtime_load_ms,
-      'Behavior Objects': activeTrace.runtime_load_ms,
-      'Evidence': activeTrace.runtime_load_ms,
-      'Inference': activeTrace.runtime_load_ms,
-      'Reflection': activeTrace.runtime_load_ms,
-      'Memory': activeTrace.context_build_ms,
-      'Identity': activeTrace.runtime_load_ms,
-      'Snapshot': activeTrace.runtime_load_ms,
       'Runtime': activeTrace.runtime_load_ms,
       'Planner': activeTrace.planning_ms,
       'Retriever': activeTrace.retrieval_ms,
@@ -49,7 +38,6 @@ export default function PipelinePage() {
       'Decision': activeTrace.decision_ms,
       'Context': activeTrace.context_build_ms,
       'LLM': activeTrace.verbalization_ms,
-      'Response': activeTrace.verbalization_ms,
     }
     return mapping[stage]
   }
