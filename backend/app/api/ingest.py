@@ -201,8 +201,29 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
         metadatas = []
         event_dicts = []
 
+        # Idempotency: a batch can be re-sent (the extension re-buffers events on
+        # a failed/uncertain send). Skip events already stored, and intra-batch
+        # duplicates, keyed by (reel_id, session_id, timestamp) — a genuine
+        # re-watch has a different timestamp and is still stored.
+        seen_keys = set()
+        skipped_dupes = 0
+
         for i, bev in enumerate(normalized_events):
             raw_ev = req.events[min(i, len(req.events) - 1)]
+
+            dedup_key = (bev.content_id, bev.session_id, str(bev.timestamp))
+            if dedup_key in seen_keys:
+                skipped_dupes += 1
+                continue
+            seen_keys.add(dedup_key)
+            already = await fetchrow(
+                "SELECT 1 FROM events WHERE user_id=$1 AND reel_id=$2 "
+                "AND session_id=$3 AND timestamp=$4 LIMIT 1",
+                user_id, bev.content_id, bev.session_id, bev.timestamp,
+            )
+            if already:
+                skipped_dupes += 1
+                continue
 
             row = await fetchrow(
                 """
@@ -262,6 +283,9 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                 "watch_time": bev.watch_time,
                 "session_id": bev.session_id,
             })
+
+        if skipped_dupes:
+            logger.info(f"Skipped {skipped_dupes} duplicate event(s) (idempotency)")
 
         # ── STEP 2.5: URL-based content enrichment (if source_url provided) ──
         for ev in req.events:
