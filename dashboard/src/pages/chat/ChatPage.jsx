@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
-import { useChatHistory } from '../../hooks/useApi'
+import { useChatHistory, useCharacterState } from '../../hooks/useApi'
 import { api, DEFAULT_USER } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { BrainIcon, ExternalLinkIcon, RefreshIcon } from '../../icons/icons'
 import ExplainabilityPanel from '../../components/explain/ExplainabilityPanel'
+import CharacterOrb from '../../components/character/CharacterOrb'
 
 const USER_ID = DEFAULT_USER
 const CONVERSATION_ID = `conv_${USER_ID}`
@@ -17,6 +18,7 @@ export default function ChatPage() {
   const [streamingMsg, setStreamingMsg] = useState('')
   const [explainTrace, setExplainTrace] = useState(null)
   const messagesEndRef = useRef(null)
+  const { data: charState, refetch: refetchCharState } = useCharacterState(USER_ID)
 
   useEffect(() => {
     if (history?.messages) {
@@ -58,6 +60,7 @@ export default function ChatPage() {
       }])
     } finally {
       setSending(false)
+      refetchCharState()
     }
   }
 
@@ -86,13 +89,23 @@ export default function ChatPage() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#818cf8' }}>
-              <BrainIcon />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CharacterOrb
+                size={40}
+                confidence={charState?.identity_snapshot?.overall_confidence ?? 0.3}
+                topics={charState?.identity_snapshot?.dominant_topics ?? []}
+                inferenceCount={charState?.inference_count ?? 0}
+                thinking={sending}
+              />
             </div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 600 }}>Cognitive Chat</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>AI-powered behavioral insights</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                {charState?.identity_snapshot
+                  ? `${Math.round((charState.identity_snapshot.overall_confidence ?? 0) * 100)}% confidence · ${charState.inference_count ?? 0} active inferences`
+                  : 'AI-powered behavioral insights'}
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>

@@ -89,3 +89,13 @@ export function useHealth() {
 export function useV3Health() {
   return useApi(() => api.v3Health(), [])
 }
+
+export function useCharacterState(userId, pollMs = 0) {
+  const { data, loading, error, refetch } = useApi(() => api.getCharacterState(userId), [userId])
+  useEffect(() => {
+    if (!pollMs) return
+    const id = setInterval(refetch, pollMs)
+    return () => clearInterval(id)
+  }, [pollMs, refetch])
+  return { data, loading, error, refetch }
+}

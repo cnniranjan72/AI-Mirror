@@ -4,11 +4,21 @@ import GlassCard from '../../components/ui/GlassCard'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
 import { CpuIcon, BrainIcon, TargetIcon, LayersIcon, ZapIcon } from '../../icons/icons'
+import CharacterOrb from '../../components/character/CharacterOrb'
 
 function qColor(q) {
   if (q >= 0.66) return '#10b981'
   if (q >= 0.4) return '#f59e0b'
   return '#f43f5e'
+}
+
+// Tint the character orb by the RL policy's average learned Q-value — a
+// genuine (if coarse) proxy for "how well is the character's behavior
+// currently performing", not an arbitrary color choice.
+function avgQColor(policy) {
+  if (!policy || policy.length === 0) return null
+  const avg = policy.reduce((sum, p) => sum + (p.q_value || 0), 0) / policy.length
+  return qColor(avg)
 }
 
 export default function CharacterPage() {
@@ -38,7 +48,33 @@ export default function CharacterPage() {
 
       {(loading || state?.built) && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
+          <GlassCard gradient>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 28, padding: '8px 4px' }}>
+              <CharacterOrb
+                size={140}
+                confidence={state?.identity_snapshot?.overall_confidence ?? 0.3}
+                topics={state?.identity_snapshot?.dominant_topics ?? []}
+                inferenceCount={state?.inference_count ?? 0}
+                moodColor={avgQColor(learning?.policy)}
+                thinking={loading}
+              />
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                  Live character state
+                </div>
+                <div style={{ fontSize: 15, color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 480 }}>
+                  This orb is not decorative — its brightness tracks identity confidence
+                  ({Math.round((state?.identity_snapshot?.overall_confidence || 0) * 100)}%),
+                  its orbiting motes are the {(state?.identity_snapshot?.dominant_topics || []).length || state?.inference_count || 0} dominant
+                  topics/active inferences currently shaping the character, and its color tint reflects
+                  the average learned Q-value across the RL policy. It pulses faster whenever a runtime
+                  rebuild or chat query is in flight.
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, margin: '24px 0 32px' }}>
             <StatCard label="Identity Version" value={state ? `v${state.identity_snapshot?.version}` : '--'} icon={LayersIcon} accent="indigo" loading={loading} />
             <StatCard label="Confidence" value={state ? `${Math.round((state.identity_snapshot?.overall_confidence || 0) * 100)}%` : '--'} icon={TargetIcon} accent="violet" loading={loading} />
             <StatCard label="Active Inferences" value={state?.inference_count ?? '--'} icon={BrainIcon} accent="emerald" loading={loading} />
