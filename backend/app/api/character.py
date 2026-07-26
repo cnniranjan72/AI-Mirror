@@ -35,12 +35,18 @@ async def get_character_state(user_id: str = Query(default="default")):
         # this by loading the latest snapshot from DB first and passing it in
         # — reuse that exact loader here so this endpoint doesn't duplicate its
         # ~50 lines of row-to-model reconstruction.
-        identity_snapshot = await get_cognitive_pipeline()._load_latest_snapshot_from_db(user_id)
+        pipeline = get_cognitive_pipeline()
+        identity_snapshot = await pipeline._load_latest_snapshot_from_db(user_id)
+        recent_inferences = await pipeline._load_recent_inferences_from_db(user_id)
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None,
-            lambda: builder.build_runtime(user_id=user_id, identity_snapshot=identity_snapshot),
+            lambda: builder.build_runtime(
+                user_id=user_id,
+                identity_snapshot=identity_snapshot,
+                recent_inferences=recent_inferences,
+            ),
         )
 
         if not result.success or not result.character_core:

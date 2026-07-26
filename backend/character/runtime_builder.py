@@ -87,7 +87,8 @@ class RuntimeBuilder:
         current_query: Optional[str] = None,
         conversation_id: Optional[str] = None,
         session_id: Optional[str] = None,
-        request_id: Optional[str] = None
+        request_id: Optional[str] = None,
+        recent_inferences: Optional[List[Inference]] = None,
     ) -> RuntimeBuildResult:
         """
         Build complete character runtime
@@ -150,9 +151,15 @@ class RuntimeBuilder:
             reasoning_context = self._load_reasoning_context(user_id)
             context_time = (time.time() - context_start) * 1000
             
-            # Step 5: Load recent Inferences
+            # Step 5: Load recent Inferences. Prefer a pre-loaded list (passed
+            # by an async caller) — the fallback sync loader below calls
+            # asyncio.get_running_loop() internally, which raises when
+            # build_runtime is (as it usually is) executed inside a plain
+            # threadpool worker with no event loop of its own, so it silently
+            # returns [] in that case. Passing inferences in avoids that.
             inference_start = time.time()
-            recent_inferences = self._load_recent_inferences(user_id)
+            if recent_inferences is None:
+                recent_inferences = self._load_recent_inferences(user_id)
             inference_time = (time.time() - inference_start) * 1000
             self.metrics.record_inference_count(len(recent_inferences))
             
@@ -502,25 +509,44 @@ class RuntimeBuilder:
                     
                     rows = asyncio.run_coroutine_threadsafe(
                         fetch(
-                            "SELECT inference_id, inference_text, inference_type, confidence, "
-                            "source_evidence_ids, source_inference_ids, metadata, created_at "
-                            "FROM inferences WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+                            "SELECT * FROM inferences WHERE user_id = $1 "
+                            "ORDER BY created_at DESC LIMIT $2",
                             user_id, self.max_inferences
                         ),
                         loop
                     ).result(timeout=5)
-                    
+
+                    def _j(v, default):
+                        if isinstance(v, str):
+                            try:
+                                return json.loads(v)
+                            except Exception:
+                                return default
+                        return v if v is not None else default
+
                     inferences = []
                     for row in rows:
                         inferences.append(Inference(
                             inference_id=row["inference_id"],
-                            inference_text=row["inference_text"],
                             inference_type=row["inference_type"],
-                            confidence=float(row["confidence"] or 0.0) if row["confidence"] else 0.0,
-                            source_evidence_ids=json.loads(row["source_evidence_ids"]) if isinstance(row["source_evidence_ids"], str) else (row["source_evidence_ids"] or []),
-                            source_inference_ids=json.loads(row["source_inference_ids"]) if isinstance(row["source_inference_ids"], str) else (row["source_inference_ids"] or []),
-                            metadata=json.loads(row["metadata"]) if isinstance(row.get("metadata"), str) else (row.get("metadata") or {}),
-                            created_at=row["created_at"]
+                            label=row["label"],
+                            description=row["description"],
+                            confidence=float(row["confidence"] or 0.0),
+                            importance=float(row["importance"] or 0.0),
+                            strength=float(row["strength"] or 0.0),
+                            supporting_evidence=_j(row.get("supporting_evidence"), []),
+                            evidence_summary=row.get("evidence_summary") or "",
+                            affected_topics=_j(row.get("affected_topics"), []),
+                            affected_creators=_j(row.get("affected_creators"), []),
+                            affected_behaviors=_j(row.get("affected_behaviors"), []),
+                            recommendation_seed=row.get("recommendation_seed"),
+                            suggested_actions=_j(row.get("suggested_actions"), []),
+                            inferred_at=row.get("inferred_at") or row["created_at"],
+                            valid_from=row.get("valid_from") or row["created_at"],
+                            valid_until=row.get("valid_until"),
+                            rule_name=row.get("rule_name"),
+                            context_id=row.get("context_id"),
+                            metadata=_j(row.get("metadata"), {}),
                         ))
                     
                     logger.debug(f"Loaded {len(inferences)} inferences for user {user_id}")

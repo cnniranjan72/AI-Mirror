@@ -207,10 +207,14 @@ class CognitivePipeline:
         conversation_history: Optional[List[Dict[str, Any]]] = None,
     ) -> CognitivePipelineResult:
         try:
-            # ── Stage 1: Pre-load identity snapshot from DB ──────────────
-            # RuntimeBuilder's snapshot manager only has in-memory cache,
-            # so we load from DB first and pass it in to avoid miss.
+            # ── Stage 1: Pre-load identity snapshot + inferences from DB ──
+            # RuntimeBuilder's snapshot manager only has in-memory cache, and
+            # its inference loader calls asyncio.get_running_loop() internally
+            # (which raises inside the plain threadpool worker used below, so
+            # it always silently returned [] there) — load both from DB first
+            # and pass them in to avoid both misses.
             identity_snapshot = await self._load_latest_snapshot_from_db(user_id)
+            recent_inferences = await self._load_recent_inferences_from_db(user_id)
 
             # ── Stage 2: Runtime Builder (offloaded to thread executor) ──
             # build_runtime internally uses asyncio.run_coroutine_threadsafe
@@ -228,6 +232,7 @@ class CognitivePipeline:
                     conversation_id=conversation_id,
                     session_id=session_id,
                     request_id=request_id,
+                    recent_inferences=recent_inferences,
                 )
             )
             trace.runtime_load_ms = (time.perf_counter() - t0) * 1000
@@ -485,6 +490,59 @@ class CognitivePipeline:
         except Exception as e:
             logger.warning(f"Error loading identity snapshot from DB: {e}")
             return None
+
+    async def _load_recent_inferences_from_db(self, user_id: str, limit: int = 20):
+        """Load the user's recent Inference rows for CharacterCore.inference_history.
+        See RuntimeBuilder._load_recent_inferences docstring for why this must be
+        pre-loaded here rather than left to that method's internal (broken inside
+        a threadpool worker) DB bridge."""
+        try:
+            from app.db.postgres import fetch
+            import json
+            from backend.reasoning.inference_engine import Inference
+
+            rows = await fetch(
+                "SELECT * FROM inferences WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+                user_id, limit,
+            )
+
+            def _j(v, default):
+                if isinstance(v, str):
+                    try:
+                        return json.loads(v)
+                    except Exception:
+                        return default
+                return v if v is not None else default
+
+            inferences = []
+            for row in rows:
+                d = dict(row)
+                inferences.append(Inference(
+                    inference_id=d["inference_id"],
+                    inference_type=d["inference_type"],
+                    label=d["label"],
+                    description=d["description"],
+                    confidence=float(d["confidence"] or 0.0),
+                    importance=float(d["importance"] or 0.0),
+                    strength=float(d["strength"] or 0.0),
+                    supporting_evidence=_j(d.get("supporting_evidence"), []),
+                    evidence_summary=d.get("evidence_summary") or "",
+                    affected_topics=_j(d.get("affected_topics"), []),
+                    affected_creators=_j(d.get("affected_creators"), []),
+                    affected_behaviors=_j(d.get("affected_behaviors"), []),
+                    recommendation_seed=d.get("recommendation_seed"),
+                    suggested_actions=_j(d.get("suggested_actions"), []),
+                    inferred_at=d.get("inferred_at") or d["created_at"],
+                    valid_from=d.get("valid_from") or d["created_at"],
+                    valid_until=d.get("valid_until"),
+                    rule_name=d.get("rule_name"),
+                    context_id=d.get("context_id"),
+                    metadata=_j(d.get("metadata"), {}),
+                ))
+            return inferences
+        except Exception as e:
+            logger.warning(f"Error loading recent inferences from DB: {e}")
+            return []
 
     def _ensure_str_ids(self, row_dict: dict) -> dict:
         for col in ("id",):
