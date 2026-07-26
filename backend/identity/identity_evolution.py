@@ -196,7 +196,15 @@ class IdentityEvolutionEngine:
             all_behaviors = self._merge_behaviors(identity, new_behaviors)
             all_inferences = self._merge_inferences(identity, new_inferences)
             all_evidence = self._merge_evidence(identity, new_evidence)
-            
+
+            # construct_identity's evolve path mutates `identity` IN PLACE and
+            # returns the same object (see identity_engine.py) — so it must be
+            # snapshotted BEFORE that call, or "old" and "new" below would be
+            # the same object post-mutation and every diff would trivially be
+            # zero (identity_shift would never exceed the Eq.2 threshold, so
+            # snapshots would silently stop being created after the first one).
+            old_identity_snapshot_for_diff = identity.model_copy(deep=True) if hasattr(identity, "model_copy") else identity.copy(deep=True)
+
             # Reconstruct identity
             updated_identity = self.identity_engine.construct_identity(
                 user_id=identity.user_id,
@@ -207,15 +215,17 @@ class IdentityEvolutionEngine:
                 goals=goals,
                 existing_identity=identity
             )
-            
+
             # Detect changes
-            changes = self._detect_changes(identity, updated_identity, new_evidence, new_inferences)
+            changes = self._detect_changes(old_identity_snapshot_for_diff, updated_identity, new_evidence, new_inferences)
             
             # Detect shifts
             shifts = self._detect_shifts(changes)
             
-            # Compute identity shift (Paper Eq. 2)
-            identity_shift = self._compute_identity_shift(identity, updated_identity)
+            # Compute identity shift (Paper Eq. 2) — must diff against the
+            # pre-mutation snapshot, not `identity` (now the same object as
+            # updated_identity; see note above _detect_changes).
+            identity_shift = self._compute_identity_shift(old_identity_snapshot_for_diff, updated_identity)
             threshold_exceeded = identity_shift > self.config.get("snapshot_threshold", 0.15)
             updated_identity.metadata["identity_shift"] = identity_shift
             updated_identity.metadata["snapshot_threshold_exceeded"] = threshold_exceeded
