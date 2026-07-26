@@ -266,10 +266,14 @@ class LLMVerbalizer:
             "",
             "- Use ONLY the information provided above.",
             "- Do NOT add external knowledge or assumptions.",
-            "- Do NOT reason, infer, or make decisions.",
+            "- Do NOT reason, infer, or make decisions — that has already been done upstream.",
             "- Present the information clearly following the requested structure.",
             "- Use citations [source_type:source_id] where applicable.",
             "- If uncertainty is indicated, reflect it honestly.",
+            "- Format for readability: start with a ONE-SENTENCE direct answer, then "
+            "back it up with 2-5 short bullet points citing the specific evidence/topics/"
+            "confidence numbers from the context above. Keep it skimmable, not a wall of text.",
+            "- Do NOT invent follow-up questions or next steps yourself — those are handled separately.",
         ]
 
         if plan.response_plan.include_uncertainty:

@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.services import rag, persona as persona_svc, chat_memory
 from backend.cognitive_pipeline.pipeline import get_cognitive_pipeline
+from backend.verbalizer.followups import generate_follow_ups
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -31,6 +32,7 @@ class QueryResponse(BaseModel):
     docs_retrieved: int
     trace_id: Optional[str] = None
     llm_used: bool = False
+    follow_ups: list = []
     pipeline_stages: Optional[dict] = None
     pipeline_time_ms: Optional[float] = None
 
@@ -72,6 +74,16 @@ async def query_insights(req: QueryRequest):
                     sources.append({"text": fact.claim, "score": fact.confidence})
             vr = p_result.verbalizer_response
             llm_used = bool(vr and vr.success and not getattr(vr, "used_fallback", False))
+
+            # Deterministically derived from the same context the answer was
+            # built from — never invented by the LLM.
+            follow_ups = []
+            try:
+                if p_result.character_context and p_result.character_plan:
+                    follow_ups = generate_follow_ups(p_result.character_context, p_result.character_plan)
+            except Exception:
+                logger.warning("Follow-up generation failed", exc_info=True)
+
             return QueryResponse(
                 answer=answer,
                 sources=sources,
@@ -80,6 +92,7 @@ async def query_insights(req: QueryRequest):
                 docs_retrieved=len(p_result.fused_evidence.facts) if p_result.fused_evidence else 0,
                 trace_id=p_result.pipeline_id,
                 llm_used=llm_used,
+                follow_ups=follow_ups,
                 pipeline_stages=p_result.stages,
                 pipeline_time_ms=p_result.total_time_ms,
             )

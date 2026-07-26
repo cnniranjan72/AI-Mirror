@@ -82,6 +82,7 @@ export const api = {
       trace_id: data.trace_id,
       sources: data.sources || [],
       llm_used: data.llm_used,
+      follow_ups: data.follow_ups || [],
       pipeline_stages: data.pipeline_stages,
       pipeline_time_ms: data.pipeline_time_ms,
     };

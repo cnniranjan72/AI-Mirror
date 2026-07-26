@@ -33,20 +33,22 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingMsg])
 
-  const sendMessage = async () => {
-    if (!input.trim() || sending) return
-    const userMsg = { id: Date.now(), role: 'user', content: input.trim(), timestamp: new Date().toISOString() }
+  const sendMessage = async (overrideText) => {
+    const text = (overrideText ?? input).trim()
+    if (!text || sending) return
+    const userMsg = { id: Date.now(), role: 'user', content: text, timestamp: new Date().toISOString() }
     setMessages(prev => [...prev, userMsg])
     setInput('')
     setSending(true)
     setStreamingMsg('...')
     try {
-      const res = await api.sendChatMessage(USER_ID, input, CONVERSATION_ID)
+      const res = await api.sendChatMessage(USER_ID, text, CONVERSATION_ID)
       setStreamingMsg('')
       const reply = res?.response || res?.message || res?.text || JSON.stringify(res)
       setMessages(prev => [...prev, {
         id: Date.now() + 1, role: 'assistant', content: typeof reply === 'string' ? reply : JSON.stringify(reply),
         timestamp: new Date().toISOString(), trace_id: res?.trace_id || res?.pipeline_id,
+        followUps: res?.follow_ups || [],
       }])
     } catch (err) {
       setStreamingMsg('')
@@ -112,7 +114,9 @@ export default function ChatPage() {
             </div>
           )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {messages.map((msg) => (
+            {messages.map((msg, idx) => {
+              const isLastAssistant = msg.role === 'assistant' && idx === messages.length - 1
+              return (
               <div key={msg.id} style={{
                 display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
                 animation: 'fadeIn 0.3s ease-out',
@@ -151,9 +155,33 @@ export default function ChatPage() {
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
                     {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ''}
                   </div>
+
+                  {isLastAssistant && msg.followUps?.length > 0 && !sending && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(148,163,184,0.12)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        Continue the thread
+                      </div>
+                      {msg.followUps.map((q, i) => (
+                        <button
+                          key={i}
+                          onClick={() => sendMessage(q)}
+                          style={{
+                            textAlign: 'left', padding: '7px 12px', borderRadius: 8,
+                            background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+                            color: '#a5b4fc', fontSize: 12.5, cursor: 'pointer', transition: 'all 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.16)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.08)' }}
+                        >
+                          {q} →
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
+              )
+            })}
             {sending && streamingMsg && (
               <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                 <div style={{
@@ -194,7 +222,7 @@ export default function ChatPage() {
               onInput={e => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px' }}
             />
             <button
-              onClick={sendMessage}
+              onClick={() => sendMessage()}
               disabled={!input.trim() || sending}
               style={{
                 padding: '10px 16px', borderRadius: 10,
