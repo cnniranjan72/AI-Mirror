@@ -12,8 +12,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const dashboardBtn = document.getElementById('dashboardBtn');
   const clearBtn = document.getElementById('clearBtn');
 
+  // Backend elements
+  const backendEventCountEl = document.getElementById('backendEventCount');
+  const personaLabelEl = document.getElementById('personaLabel');
+  const personaLabelSub = document.getElementById('personaLabelSub');
+  const backendIndicator = document.getElementById('backendIndicator');
+  const backendStatusText = document.getElementById('backendStatusText');
+
   // Load initial stats
   loadStats();
+  loadBackendStatus();
 
   // Event listeners
   syncBtn.addEventListener('click', handleSync);
@@ -45,6 +53,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function loadBackendStatus() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_BACKEND_STATUS' });
+
+      if (response.connected) {
+        backendIndicator.className = 'status-indicator-backend connected';
+        backendStatusText.textContent = 'Connected';
+
+        backendEventCountEl.textContent = response.backendEvents || 0;
+
+        if (response.persona) {
+          personaLabelEl.textContent = response.persona.label;
+          const pct = Math.round((response.persona.confidence || 0) * 100);
+          personaLabelSub.textContent = `Persona · ${pct}% confidence`;
+        } else if (response.identityConfidence) {
+          personaLabelEl.textContent = 'Identity';
+          const pct = Math.round(response.identityConfidence * 100);
+          personaLabelSub.textContent = `v${response.identityVersion || '?'} · ${pct}%`;
+        } else {
+          personaLabelEl.textContent = '--';
+          personaLabelSub.textContent = 'No data yet';
+        }
+      } else {
+        backendIndicator.className = 'status-indicator-backend disconnected';
+        backendStatusText.textContent = 'Offline';
+        backendEventCountEl.textContent = '?';
+        personaLabelEl.textContent = '--';
+        personaLabelSub.textContent = 'Offline';
+      }
+    } catch (_) {
+      backendIndicator.className = 'status-indicator-backend disconnected';
+      backendStatusText.textContent = 'Error';
+    }
+  }
+
   async function handleSync() {
     syncBtn.disabled = true;
     syncBtn.innerHTML = '<span class="btn-icon">⏳</span> Syncing...';
@@ -58,6 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
           syncBtn.innerHTML = '<span class="btn-icon">🔄</span> Sync Now';
           syncBtn.disabled = false;
           loadStats();
+          loadBackendStatus();
         }, 2000);
       } else {
         syncBtn.innerHTML = '<span class="btn-icon">❌</span> Sync Failed';

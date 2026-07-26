@@ -7,6 +7,7 @@ console.log('[AIMirror Background] Service worker loaded');
 const CONFIG = {
   // Keep in sync with content.js. Backend is on :8001 in local dev.
   BACKEND_URL: 'http://localhost:8001/ingest',
+  API_BASE_URL: 'http://localhost:8000',
   SYNC_INTERVAL: 30000, // Sync every 30 seconds
   MAX_STORAGE_EVENTS: 1000 // Maximum events to keep in storage
 };
@@ -55,6 +56,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       syncDataToBackend().then(sendResponse);
       return true;
 
+    case 'GET_BACKEND_STATUS':
+      getBackendStatus(sender.tab?.id).then(sendResponse);
+      return true;
+
     case 'CLEAR_DATA':
       clearAllData().then(sendResponse);
       return true;
@@ -88,6 +93,58 @@ async function getSessionInfo() {
     totalEvents: sessions.reduce((sum, s) => sum + (s.events?.length || 0), 0),
     activeSessions: activeSessions.size
   };
+}
+
+async function getBackendStatus(activeTabId) {
+  const result = await chrome.storage.local.get(['sessions', 'userId']);
+  const userId = result.userId || 'default';
+  const sessions = result.sessions || [];
+  const localEvents = sessions.reduce((sum, s) => sum + (s.events?.length || 0), 0);
+  const isOnInstagram = activeTabId ? activeSessions.has(activeTabId) : false;
+
+  const status = {
+    connected: false,
+    persona: null,
+    backendEvents: 0,
+    identityConfidence: null,
+    identityVersion: null,
+    synced: false,
+  };
+
+  try {
+    const healthResp = await fetch(`${CONFIG.API_BASE_URL}/health`, { signal: AbortSignal.timeout(5000) });
+    if (!healthResp.ok) return { ...status, localEvents, isOnInstagram, activeSessions: activeSessions.size };
+    status.connected = true;
+
+    const [summaryResp, profileResp] = await Promise.allSettled([
+      fetch(`${CONFIG.API_BASE_URL}/cognitive/summary?user_id=${userId}`, { signal: AbortSignal.timeout(5000) }),
+      fetch(`${CONFIG.API_BASE_URL}/profile?user_id=${userId}`, { signal: AbortSignal.timeout(5000) }),
+    ]);
+
+    if (summaryResp.status === 'fulfilled' && summaryResp.value.ok) {
+      const summary = await summaryResp.value.json();
+      status.backendEvents = summary.evidence_count || 0;
+      status.identityVersion = summary.current_identity?.identity_version || null;
+      status.identityConfidence = summary.current_identity?.overall_confidence || null;
+    }
+
+    if (profileResp.status === 'fulfilled' && profileResp.value.ok) {
+      const profile = await profileResp.value.json();
+      if (profile.persona_label && profile.persona_label !== 'No Data') {
+        status.persona = {
+          label: profile.persona_label,
+          confidence: profile.confidence,
+          traits: profile.traits || {},
+        };
+      }
+    }
+
+    status.synced = true;
+  } catch (_) {
+    // Backend unreachable — status.connected stays false
+  }
+
+  return { ...status, localEvents, isOnInstagram, activeSessions: activeSessions.size };
 }
 
 // ==================== DATA SYNC ====================
