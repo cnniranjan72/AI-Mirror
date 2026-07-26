@@ -14,6 +14,9 @@ import BehaviorPage from '../../pages/behavior/BehaviorPage'
 import PlanningPage from '../../pages/planning/PlanningPage'
 import DecisionPage from '../../pages/decision/DecisionPage'
 import LearningPage from '../../pages/learning/LearningPage'
+import GuardianPage from '../../pages/guardian/GuardianPage'
+import CharacterPage from '../../pages/character/CharacterPage'
+import InsightsPage from '../../pages/insights/InsightsPage'
 import PipelinePage from '../../pages/pipeline/PipelinePage'
 import TracePage from '../../pages/trace/TracePage'
 import AnalyticsPage from '../../pages/analytics/AnalyticsPage'
@@ -63,6 +66,9 @@ export default function AppShell() {
                 <Route path="/planning" element={<PlanningPage />} />
                 <Route path="/decision" element={<DecisionPage />} />
                 <Route path="/learning" element={<LearningPage />} />
+                <Route path="/guardian" element={<GuardianPage />} />
+                <Route path="/character" element={<CharacterPage />} />
+                <Route path="/insights" element={<InsightsPage />} />
                 <Route path="/pipeline" element={<PipelinePage />} />
                 <Route path="/trace/:traceId" element={<TracePage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />

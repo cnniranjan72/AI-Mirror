@@ -201,6 +201,34 @@ export const api = {
     const { data } = await client.get('/search', { params: { q, limit } });
     return data;
   },
+
+  // === Guardian / Wellbeing ===
+  getGuardianReport: async (userId = activeUser()) => {
+    const { data } = await client.get('/guardian/report', { params: { user_id: userId } });
+    return data;
+  },
+
+  // === Character ===
+  getCharacterState: async (userId = activeUser()) => {
+    const { data } = await client.get('/character/state', { params: { user_id: userId } });
+    return data;
+  },
+  getCharacterActivity: async (userId = activeUser(), limit = 10) => {
+    const { data } = await client.get('/character/activity', { params: { user_id: userId, limit } });
+    return data;
+  },
+  getCharacterLearningSummary: async (userId = activeUser()) => {
+    const { data } = await client.get('/character/learning-summary', { params: { user_id: userId } });
+    return data;
+  },
+
+  // === Insights / Export ===
+  getInsightsProfile: async (userId = activeUser()) => {
+    const { data } = await client.get('/insights/profile', { params: { user_id: userId } });
+    return data;
+  },
+  exportCsvUrl: (userId = activeUser(), table = 'behavior_objects') =>
+    `${API_BASE_URL}/insights/export.csv?user_id=${encodeURIComponent(userId)}&table=${encodeURIComponent(table)}`,
 };
 
 export default client;
