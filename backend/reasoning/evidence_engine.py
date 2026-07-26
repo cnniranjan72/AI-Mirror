@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
 import logging
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 from backend.shared.contracts import BehaviorEvent, BehaviorCluster
 

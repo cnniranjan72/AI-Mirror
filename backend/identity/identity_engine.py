@@ -302,8 +302,35 @@ class IdentityEngine:
             
             # Create or update identity
             if existing_identity:
+                # CRITICAL: every freshly-computed field below must be written onto
+                # the existing identity object. Previously this branch only called
+                # update_version() and returned — every profile, topic list, and
+                # overall_confidence/identity_completeness value computed above was
+                # silently discarded, so the identity was frozen at whatever its
+                # very first construction produced and never actually evolved
+                # (confidence/completeness/topics stayed identical release after
+                # release; only identity_version incremented).
                 identity = existing_identity
                 identity.update_version()
+                identity.behavior_profile = behavior_profile
+                identity.interest_graph = interest_graph
+                identity.creator_graph = creator_graph
+                identity.learning_style = learning_style
+                identity.attention_profile = attention_profile
+                identity.exploration_profile = exploration_profile
+                identity.consistency_profile = consistency_profile
+                identity.habit_profile = habit_profile
+                identity.motivation_signals = motivation_signals
+                identity.behavior_timeline = behavior_timeline
+                identity.dominant_topics = dominant_topics
+                identity.emerging_topics = emerging_topics
+                identity.declining_topics = declining_topics
+                identity.overall_confidence = overall_confidence
+                identity.identity_completeness = identity_completeness
+                identity.updated_at = datetime.utcnow()
+                identity.source_behavior_objects = [b.unique_id for b in behavior_objects]
+                identity.source_inferences = [i.inference_id for i in inferences]
+                identity.source_evidence = [e.evidence_id for e in evidence]
             else:
                 identity = Identity(
                     identity_id=f"identity_{user_id}_{uuid.uuid4().hex[:8]}",

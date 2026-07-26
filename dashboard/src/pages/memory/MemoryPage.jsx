@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useReflections, useInferences } from '../../hooks/useApi'
+import { useReflections, useInferences, useBehaviorObjects } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { BrainIcon, LayersIcon, SearchIcon } from '../../icons/icons'
@@ -10,14 +10,29 @@ const memoryTypes = [
   { key: 'patterns', label: 'Pattern Memory', icon: BrainIcon, color: '#ec4899' },
 ]
 
+// A "pattern" is a behavior object with an established lifecycle trend — a
+// recurring/growing/declining topic, not a one-off. Derived from real
+// behavior-object data (no separate pattern store exists in the backend).
+const PATTERN_STATES = new Set(['growing', 'stable', 'mature', 'declining'])
+
 export default function MemoryPage() {
   const { data: reflections, loading: refLoading } = useReflections()
   const { data: inferences, loading: infLoading } = useInferences()
+  const { data: behaviorObjects, loading: patLoading } = useBehaviorObjects()
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('all')
 
   const refs = Array.isArray(reflections) ? reflections : (reflections?.reflections || [])
   const infs = Array.isArray(inferences) ? inferences : (inferences?.inferences || [])
+  const bos = Array.isArray(behaviorObjects) ? behaviorObjects : (behaviorObjects?.objects || [])
+  const patterns = bos
+    .filter(b => PATTERN_STATES.has(b.lifecycle_state))
+    .sort((a, b) => (b.importance_score || 0) - (a.importance_score || 0))
+    .map(b => ({
+      pattern_id: b.unique_id,
+      summary: `${b.topic}: ${b.lifecycle_state} pattern, ${Math.round((b.confidence_score || 0) * 100)}% confidence`,
+      confidence: b.confidence_score,
+    }))
 
   const filterItems = (items) => {
     if (!search) return items
@@ -27,11 +42,13 @@ export default function MemoryPage() {
 
   const filteredRefs = filterItems(refs)
   const filteredInfs = filterItems(infs)
+  const filteredPatterns = filterItems(patterns)
 
   const tabs = [
-    { id: 'all', label: 'All Memory', count: refs.length + infs.length },
+    { id: 'all', label: 'All Memory', count: refs.length + infs.length + patterns.length },
     { id: 'reflections', label: 'Reflections', count: refs.length },
     { id: 'inferences', label: 'Inferences', count: infs.length },
+    { id: 'patterns', label: 'Patterns', count: patterns.length },
   ]
 
   return (
@@ -79,14 +96,14 @@ export default function MemoryPage() {
               <div>
                 <h4 style={{ fontSize: 14, fontWeight: 600 }}>{mt.label}</h4>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {mt.key === 'reflections' ? filteredRefs.length : mt.key === 'inferences' ? filteredInfs.length : 0} entries
+                  {mt.key === 'reflections' ? filteredRefs.length : mt.key === 'inferences' ? filteredInfs.length : filteredPatterns.length} entries
                 </div>
               </div>
             </div>
             <div style={{ maxHeight: 240, overflow: 'auto' }}>
-              {(mt.key === 'reflections' ? filteredRefs : mt.key === 'inferences' ? filteredInfs : [])
+              {(mt.key === 'reflections' ? filteredRefs : mt.key === 'inferences' ? filteredInfs : filteredPatterns)
                 .slice(0, 10).map((item, i) => (
-                  <div key={item.reflection_id || item.inference_id || i} style={{
+                  <div key={item.reflection_id || item.inference_id || item.pattern_id || i} style={{
                     padding: '8px 0', borderBottom: '1px solid var(--border-subtle)',
                     animation: `fadeIn 0.3s ease-out ${i * 0.05}s both`,
                   }}>
@@ -94,13 +111,16 @@ export default function MemoryPage() {
                       {item.summary || item.description || `Entry ${i + 1}`}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 8 }}>
-                      {item.confidence && <span>Conf: {Math.round(item.confidence * 100)}%</span>}
+                      {item.confidence != null && <span>Conf: {Math.round(item.confidence * 100)}%</span>}
                       {item.event_count && <span>{item.event_count} events</span>}
                     </div>
                   </div>
                 ))}
               {mt.key === 'reflections' && filteredRefs.length === 0 && (
                 <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No reflections</div>
+              )}
+              {mt.key === 'patterns' && filteredPatterns.length === 0 && (
+                <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No established patterns yet</div>
               )}
             </div>
           </GlassCard>

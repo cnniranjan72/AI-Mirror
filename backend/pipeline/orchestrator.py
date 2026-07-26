@@ -19,7 +19,7 @@ from backend.reasoning.inference_engine import InferenceEngine, Inference
 from backend.reasoning.reflection_engine import ReflectionEngine, Reflection
 from backend.reasoning.reasoning_context import ReasoningContext, TemporalContext
 from backend.reasoning.rules import RuleEngine
-from backend.engines.knowledge_consolidation import KnowledgeConsolidationEngine
+from backend.engines.knowledge_consolidation import KnowledgeConsolidationEngine, CONFIDENCE_SATURATION_COUNT
 from backend.identity.identity_engine import IdentityEngine, Identity
 from backend.identity.identity_evolution import IdentityEvolutionEngine, IdentityEvolution
 from backend.identity.identity_snapshot import IdentitySnapshot, SnapshotManager
@@ -28,6 +28,13 @@ from backend.identity.self_model import SelfModelEngine, SelfModel
 from app.db.postgres import fetch, fetchrow, execute
 
 logger = logging.getLogger(__name__)
+
+# Occurrence counts at which these scores saturate to 1.0. Previously 100/50,
+# calibrated for power-user volumes — realistic per-topic occurrence is single
+# digits to low tens, so these never rose above ~0.05-0.20. See
+# knowledge_consolidation.CONFIDENCE_SATURATION_COUNT for the matching rationale.
+IMPORTANCE_SATURATION_COUNT = 20.0
+STABILITY_SATURATION_COUNT = 10.0
 
 
 class V3PipelineResult:
@@ -113,9 +120,17 @@ class V3Pipeline:
             result.reflection = step4_reflection
 
             # Step 5: Identity Construction/Update (inferences + evidence → identity)
+            # Identity confidence must reflect ALL evidence ever collected for this
+            # user, not just this batch's few items — otherwise it's dominated by
+            # whatever small slice of evidence happened to be generated in the
+            # latest ingest. Load the full accumulated set (mirrors how behavior
+            # objects are already loaded in full in _consolidate_events).
+            all_evidence_for_identity = await self._load_all_evidence(user_id, exclude_ids={e.evidence_id for e in result.evidence})
+            all_evidence_for_identity += result.evidence
+
             step5_result = await self._construct_identity(
                 user_id, result.behavior_objects, result.inferences,
-                result.evidence, existing_identity, existing_evolution
+                all_evidence_for_identity, existing_identity, existing_evolution
             )
             result.identity = step5_result["identity"]
             result.snapshot = step5_result["snapshot"]
@@ -166,12 +181,25 @@ class V3Pipeline:
                 
                 if existing:
                     existing.update_version()
-                    existing.temporal_statistics.occurrence_count = cluster.occurrence_count
-                    existing.temporal_statistics.last_seen = cluster.last_seen
-                    existing.stability_score = min(1.0, cluster.occurrence_count / 50.0)
                     existing.supporting_event_ids = list(set(
                         existing.supporting_event_ids + cluster.event_ids
                     ))
+                    # occurrence_count must reflect ALL events ever consolidated into
+                    # this topic, not just the latest batch — supporting_event_ids is
+                    # the accumulated (deduped) set, so its length is the true count.
+                    # Previously this was overwritten with cluster.occurrence_count
+                    # (the new batch's size alone), so a topic revisited many times
+                    # over many ingests never accumulated past a handful.
+                    true_occurrence_count = len(existing.supporting_event_ids)
+                    existing.temporal_statistics.occurrence_count = true_occurrence_count
+                    existing.temporal_statistics.last_seen = cluster.last_seen
+                    # confidence/importance/stability were also frozen at whatever the
+                    # topic's FIRST tiny batch produced — recompute from the true
+                    # accumulated count so an established, recurring pattern actually
+                    # reads as confident.
+                    existing.confidence_score = min(1.0, true_occurrence_count / CONFIDENCE_SATURATION_COUNT)
+                    existing.importance_score = min(1.0, true_occurrence_count / IMPORTANCE_SATURATION_COUNT)
+                    existing.stability_score = min(1.0, true_occurrence_count / STABILITY_SATURATION_COUNT)
                     if cluster.creators:
                         existing.creators = list(set(existing.creators + cluster.creators))
                 else:
@@ -192,9 +220,9 @@ class V3Pipeline:
                         temporal_statistics=stats["temporal"],
                         trend_information=stats["trend"],
                         lifecycle_state=self._lifecycle_from_cluster(cluster),
-                        importance_score=min(1.0, cluster.occurrence_count / 100.0),
+                        importance_score=min(1.0, cluster.occurrence_count / IMPORTANCE_SATURATION_COUNT),
                         confidence_score=cluster.confidence,
-                        stability_score=min(1.0, cluster.occurrence_count / 50.0),
+                        stability_score=min(1.0, cluster.occurrence_count / STABILITY_SATURATION_COUNT),
                         evidence_references=[],
                         supporting_event_ids=cluster.event_ids,
                         supporting_cluster_ids=[cluster.cluster_id],
@@ -406,12 +434,35 @@ class V3Pipeline:
 
             if result.identity:
                 await self._upsert_identity(result.identity)
-            
-            if result.snapshot and result.snapshot.metadata.get("snapshot_threshold_exceeded", True):
-                await self._insert_snapshot(result.snapshot)
-            
+
+            # Snapshots are only persisted when identity shift crosses the
+            # Eq.2 threshold (paper-faithful — avoids a snapshot row per
+            # ingest). self_model has a FK to identity_snapshots, so when the
+            # in-memory snapshot was NOT persisted this round, it must point
+            # at the latest snapshot that actually exists in storage instead
+            # (the identity truly hasn't shifted enough to warrant a new one).
+            persisted_snapshot_id = None
+            if result.snapshot:
+                if result.snapshot.metadata.get("snapshot_threshold_exceeded", True):
+                    await self._insert_snapshot(result.snapshot)
+                    persisted_snapshot_id = result.snapshot.snapshot_id
+                else:
+                    row = await fetchrow(
+                        "SELECT snapshot_id FROM identity_snapshots "
+                        "WHERE identity_id = $1 ORDER BY created_at DESC LIMIT 1",
+                        result.snapshot.identity_id,
+                    )
+                    persisted_snapshot_id = row["snapshot_id"] if row else None
+
             if result.self_model:
-                await self._upsert_self_model(result.self_model)
+                if persisted_snapshot_id:
+                    result.self_model.identity_snapshot_id = persisted_snapshot_id
+                    await self._upsert_self_model(result.self_model)
+                else:
+                    logger.warning(
+                        "Skipping self_model upsert: no persisted snapshot exists yet for identity %s",
+                        result.snapshot.identity_id if result.snapshot else "?",
+                    )
             
             logger.info(f"Persisted pipeline results for user {user_id}")
             
@@ -771,9 +822,9 @@ class V3Pipeline:
                 self_model.self_model_id,
                 self_model.user_id,
                 self_model.identity_snapshot_id,
-                json.dumps(beliefs_data),
-                json.dumps(self_model.strong_beliefs),
-                json.dumps(self_model.uncertain_beliefs),
+                json.dumps(beliefs_data, default=str),
+                json.dumps(self_model.strong_beliefs, default=str),
+                json.dumps(self_model.uncertain_beliefs, default=str),
                 json.dumps(self_model.uncertainty_map.dict(), default=str),
                 self_model.overall_confidence,
                 self_model.model_completeness
@@ -883,7 +934,58 @@ class V3Pipeline:
         except Exception as e:
             logger.error(f"Error loading behavior objects: {str(e)}", exc_info=True)
             return []
-    
+
+    async def _load_all_evidence(self, user_id: str, exclude_ids: Optional[set] = None) -> List[Evidence]:
+        """Load all previously-collected evidence for a user (for identity
+        confidence, which must reflect the full accumulated picture, not just
+        the current ingest batch)."""
+        exclude_ids = exclude_ids or set()
+        try:
+            rows = await fetch(
+                "SELECT * FROM evidence WHERE user_id = $1 ORDER BY created_at DESC LIMIT 500",
+                user_id,
+            )
+            items: List[Evidence] = []
+            for row in rows:
+                if row["evidence_id"] in exclude_ids:
+                    continue
+                try:
+                    def _j(key, default):
+                        v = row.get(key)
+                        if isinstance(v, str):
+                            try:
+                                return json.loads(v)
+                            except Exception:
+                                return default
+                        return v if v is not None else default
+
+                    items.append(Evidence(
+                        evidence_id=row["evidence_id"],
+                        evidence_type=row["evidence_type"],
+                        supporting_events=_j("supporting_events", []),
+                        supporting_clusters=_j("supporting_clusters", []),
+                        supporting_behavior_objects=_j("supporting_behavior_objects", []),
+                        confidence=float(row["confidence"] or 0),
+                        weight=float(row["weight"] or 0),
+                        counter_evidence_ids=_j("counter_evidence_ids", []),
+                        conflicting_observations=_j("conflicting_observations", []),
+                        conflict_resolution=row.get("conflict_resolution"),
+                        net_confidence=row.get("net_confidence"),
+                        explanation=row["explanation"] or "",
+                        key_metrics=_j("key_metrics", {}),
+                        time_window_start=row["time_window_start"] or row["created_at"],
+                        time_window_end=row["time_window_end"] or row["created_at"],
+                        created_at=row["created_at"],
+                        metadata=_j("metadata", {}),
+                    ))
+                except Exception as e:
+                    logger.warning(f"Error loading evidence {row.get('evidence_id')}: {e}")
+                    continue
+            return items
+        except Exception as e:
+            logger.error(f"Error loading evidence: {str(e)}", exc_info=True)
+            return []
+
     async def load_identity(self, user_id: str) -> Optional[Identity]:
         """Load identity from database"""
         try:
@@ -995,7 +1097,7 @@ class V3Pipeline:
                 "daily_frequency": cluster.occurrence_count / days_span,
                 "weekly_frequency": cluster.occurrence_count / max(1, days_span // 7),
                 "recency_score": max(0.0, 1.0 - (now - cluster.last_seen).days / 30.0),
-                "consistency_score": min(1.0, cluster.occurrence_count / 50.0)
+                "consistency_score": min(1.0, cluster.occurrence_count / STABILITY_SATURATION_COUNT)
             },
             "trend": {
                 "trend_direction": "growing" if cluster.growth_rate > 0.5 else "stable",

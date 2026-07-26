@@ -15,6 +15,18 @@ from backend.shared.contracts import BehaviorEvent, BehaviorCluster
 
 logger = logging.getLogger(__name__)
 
+# Occurrence count at which cluster confidence saturates to 1.0. Previously 100,
+# which is calibrated for power-user volumes — a typical user's per-topic
+# occurrence count is single digits to low tens, so confidence never rose above
+# ~0.05-0.10 and crushed every downstream score (identity confidence, avg
+# stability, etc). 15 recurring views of a topic is a genuinely established
+# pattern and should read as confident.
+CONFIDENCE_SATURATION_COUNT = 15.0
+
+
+def _confidence_from_count(occurrence_count: float) -> float:
+    return min(1.0, occurrence_count / CONFIDENCE_SATURATION_COUNT)
+
 
 class KnowledgeConsolidationEngine:
     """
@@ -229,7 +241,7 @@ class KnowledgeConsolidationEngine:
             existing_cluster.temporal_weight = avg_temporal_weight
             
             # Update confidence (increases with more data)
-            existing_cluster.confidence = min(1.0, existing_cluster.occurrence_count / 100.0)
+            existing_cluster.confidence = _confidence_from_count(existing_cluster.occurrence_count)
             
             # Add new event IDs
             existing_cluster.event_ids.extend([e.event_id for e in events])
@@ -258,7 +270,7 @@ class KnowledgeConsolidationEngine:
                 avg_watch_time=avg_watch_time,
                 engagement_rate=engagement_rate,
                 growth_rate=len(events) / max(1, (last_seen - first_seen).days or 1),
-                confidence=min(1.0, len(events) / 100.0),
+                confidence=_confidence_from_count(len(events)),
                 temporal_weight=avg_temporal_weight,
                 event_ids=[e.event_id for e in events],
                 creators=creators,
@@ -332,7 +344,7 @@ class KnowledgeConsolidationEngine:
             existing_cluster.growth_rate = existing_cluster.occurrence_count / days_since_first
             
             existing_cluster.temporal_weight = avg_temporal_weight
-            existing_cluster.confidence = min(1.0, existing_cluster.occurrence_count / 50.0)
+            existing_cluster.confidence = _confidence_from_count(existing_cluster.occurrence_count)
             existing_cluster.event_ids.extend([e.event_id for e in events])
             existing_cluster.related_topics = list(set(existing_cluster.related_topics + topics))[:10]
             existing_cluster.updated_at = datetime.utcnow()
@@ -355,7 +367,7 @@ class KnowledgeConsolidationEngine:
                 avg_watch_time=avg_watch_time,
                 engagement_rate=engagement_rate,
                 growth_rate=len(events) / max(1, (last_seen - first_seen).days or 1),
-                confidence=min(1.0, len(events) / 50.0),
+                confidence=_confidence_from_count(len(events)),
                 temporal_weight=avg_temporal_weight,
                 event_ids=[e.event_id for e in events],
                 creators=[creator],
@@ -598,7 +610,7 @@ class KnowledgeConsolidationEngine:
             cluster.growth_rate = cluster.occurrence_count / days_since_first
             
             # Update confidence
-            cluster.confidence = min(1.0, cluster.occurrence_count / 100.0)
+            cluster.confidence = _confidence_from_count(cluster.occurrence_count)
             
             # Update temporal weight
             now = datetime.utcnow()
@@ -764,7 +776,7 @@ class KnowledgeConsolidationEngine:
                 avg_watch_time=avg_watch_time,
                 engagement_rate=engagement_rate,
                 growth_rate=growth_rate,
-                confidence=min(1.0, len(events) / 100.0),
+                confidence=_confidence_from_count(len(events)),
                 temporal_weight=1.0,
                 event_ids=[e.event_id for e in events],
                 creators=creators,

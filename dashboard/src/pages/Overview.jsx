@@ -52,11 +52,13 @@ export default function Overview() {
     { trait: 'Stability', value: Math.round((behaviorProfile.behavior_stability || 0) * 100) },
   ]
 
+  // dominant_interests items carry `strength` (0-1), not `weight`/`score` — this
+  // was the mismatch that made the pie always fall back to an equal split.
   const topicData = dominantTopics.length
     ? dominantTopics.slice(0, 6).map((name) => {
         const di = domInterests.find(d => d.topic === name)
-        const w = di?.weight ?? di?.score
-        return { name, value: typeof w === 'number' ? Math.max(5, Math.round(w * 100)) : Math.round(100 / Math.min(dominantTopics.length, 6)) }
+        const s = di?.strength
+        return { name, value: typeof s === 'number' ? Math.max(3, Math.round(s * 100)) : Math.round(100 / Math.min(dominantTopics.length, 6)) }
       })
     : [{ name: 'No data', value: 100 }]
 
