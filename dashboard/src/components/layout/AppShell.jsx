@@ -22,6 +22,8 @@ import TracePage from '../../pages/trace/TracePage'
 import AnalyticsPage from '../../pages/analytics/AnalyticsPage'
 import ChatPage from '../../pages/chat/ChatPage'
 import SettingsPage from '../../pages/settings/SettingsPage'
+import GuidePage from '../../pages/guide/GuidePage'
+import DocumentationPage from '../../pages/documentation/DocumentationPage'
 
 const PageLoading = () => (
   <div style={{ padding: '32px' }}>
@@ -73,6 +75,8 @@ export default function AppShell() {
                 <Route path="/trace/:traceId" element={<TracePage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/chat" element={<ChatPage />} />
+                <Route path="/guide" element={<GuidePage />} />
+                <Route path="/documentation" element={<DocumentationPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
             </Suspense>
