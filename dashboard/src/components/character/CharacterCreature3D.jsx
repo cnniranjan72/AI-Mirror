@@ -95,6 +95,93 @@ function Creature({ colorHex, glowIntensity, thinking }) {
   )
 }
 
+/**
+ * A small holographic robot — Android-mascot silhouette (domed head, two
+ * splayed antennae, cylindrical body, stub arms/legs) for surfaces about
+ * the system/AI core itself rather than the conversational companion.
+ * Same real-state contract as Creature above.
+ */
+function Robot({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const matRefs = useRef([])
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.6 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (group.current) {
+      group.current.rotation.y = t * 0.3 * speed
+      group.current.position.y = Math.sin(t * 1.3 * speed) * 0.07
+    }
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+  const mat = (i) => ({ ref: setRef(i), uColor: colorHex, uOpacity: glowIntensity, transparent: true, depthWrite: false, side: THREE.DoubleSide })
+
+  return (
+    <group ref={group}>
+      {/* body */}
+      <mesh position={[0, -0.32, 0]}>
+        <cylinderGeometry args={[0.42, 0.5, 0.75, 24]} />
+        <holoMaterial {...mat(0)} />
+      </mesh>
+      {/* head (dome) */}
+      <mesh position={[0, 0.32, 0]}>
+        <sphereGeometry args={[0.46, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <holoMaterial {...mat(1)} />
+      </mesh>
+      <mesh position={[0, 0.32, 0]} rotation={[Math.PI, 0, 0]}>
+        <cylinderGeometry args={[0.46, 0.46, 0.02, 24]} />
+        <holoMaterial {...mat(2)} />
+      </mesh>
+      {/* antennae */}
+      <mesh position={[-0.16, 0.86, 0]} rotation={[0, 0, 0.25]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.3, 8]} />
+        <holoMaterial {...mat(3)} />
+      </mesh>
+      <mesh position={[0.16, 0.86, 0]} rotation={[0, 0, -0.25]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.3, 8]} />
+        <holoMaterial {...mat(4)} />
+      </mesh>
+      <mesh position={[-0.235, 1.02, 0]}>
+        <sphereGeometry args={[0.05, 12, 12]} />
+        <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity} />
+      </mesh>
+      <mesh position={[0.235, 1.02, 0]}>
+        <sphereGeometry args={[0.05, 12, 12]} />
+        <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity} />
+      </mesh>
+      {/* arms */}
+      <mesh position={[-0.56, -0.25, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.08, 0.08, 0.42, 12]} />
+        <holoMaterial {...mat(5)} />
+      </mesh>
+      <mesh position={[0.56, -0.25, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.08, 0.08, 0.42, 12]} />
+        <holoMaterial {...mat(6)} />
+      </mesh>
+      {/* legs */}
+      <mesh position={[-0.2, -0.85, 0]}>
+        <cylinderGeometry args={[0.09, 0.09, 0.32, 12]} />
+        <holoMaterial {...mat(7)} />
+      </mesh>
+      <mesh position={[0.2, -0.85, 0]}>
+        <cylinderGeometry args={[0.09, 0.09, 0.32, 12]} />
+        <holoMaterial {...mat(8)} />
+      </mesh>
+      {/* eyes */}
+      <mesh position={[-0.16, 0.32, 0.42]}>
+        <sphereGeometry args={[0.08, 16, 16]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={glowIntensity} />
+      </mesh>
+      <mesh position={[0.16, 0.32, 0.42]}>
+        <sphereGeometry args={[0.08, 16, 16]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={glowIntensity} />
+      </mesh>
+    </group>
+  )
+}
+
 function OrbitingLabels({ topics, colorHex }) {
   const items = useMemo(() => topics.slice(0, 6).map((t, i, arr) => ({
     label: t.length > 18 ? t.slice(0, 16) + '…' : t,
@@ -138,9 +225,11 @@ export default function CharacterCreature3D({
   thinking = false,
   size = 160,
   showLabels = true,
+  variant = 'creature',
 }) {
   const colorHex = moodColor || '#818cf8'
   const glowIntensity = 0.45 + confidence * 0.55
+  const Being = variant === 'robot' ? Robot : Creature
 
   return (
     <div style={{ width: size, height: size }}>
@@ -150,7 +239,7 @@ export default function CharacterCreature3D({
         dpr={[1, 2]}
       >
         <ambientLight intensity={0.3} />
-        <Creature colorHex={colorHex} glowIntensity={glowIntensity} thinking={thinking} />
+        <Being colorHex={colorHex} glowIntensity={glowIntensity} thinking={thinking} />
         {showLabels && topics.length > 0 && <OrbitingLabels topics={topics} colorHex={colorHex} />}
         <Sparkles
           count={thinking ? 60 : 28}

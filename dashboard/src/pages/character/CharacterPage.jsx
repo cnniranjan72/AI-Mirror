@@ -53,6 +53,7 @@ export default function CharacterPage() {
               <div style={{ flex: '0 0 auto' }}>
                 <CharacterCreature3D
                   size={260}
+                  variant="robot"
                   confidence={state?.identity_snapshot?.overall_confidence ?? 0.3}
                   topics={state?.identity_snapshot?.dominant_topics ?? []}
                   moodColor={avgQColor(learning?.policy)}
