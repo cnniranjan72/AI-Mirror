@@ -13,6 +13,15 @@ from backend.shared.contracts import BehaviorEvent, EventSource, ContentType
 logger = logging.getLogger(__name__)
 
 
+def _content_type_for(platform: str, surface: str) -> ContentType:
+    """Extension events were Instagram-Reels-only, so content_type was
+    hardcoded. With YouTube in the mix, long-form watch pages are VIDEO
+    while Shorts are structurally reels."""
+    if platform == "youtube":
+        return ContentType.REEL if surface == "shorts" else ContentType.VIDEO
+    return ContentType.REEL
+
+
 class EventNormalizer:
     """
     Normalizes events from different sources into BehaviorEvent schema
@@ -57,7 +66,10 @@ class EventNormalizer:
                 timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
             except:
                 timestamp = datetime.utcnow()
-            
+
+            platform = (raw_event.get("platform") or "instagram").strip().lower()
+            surface = (raw_event.get("surface") or "").strip().lower()
+
             # Create normalized event
             behavior_event = BehaviorEvent(
                 # Core identification
@@ -65,10 +77,10 @@ class EventNormalizer:
                 source=EventSource.CHROME_EXTENSION,
                 timestamp=timestamp,
                 session_id=raw_event.get("session_id", f"sess_{uuid.uuid4().hex[:12]}"),
-                
+
                 # Content identification
                 content_id=raw_event.get("reel_id", f"content_{uuid.uuid4().hex[:12]}"),
-                content_type=ContentType.REEL,
+                content_type=_content_type_for(platform, surface),
                 
                 # Content metadata
                 creator=raw_event.get("username"),
@@ -87,7 +99,7 @@ class EventNormalizer:
                 
                 # Context
                 device_type=raw_event.get("device_type", "unknown"),
-                platform=raw_event.get("platform", "instagram"),
+                platform=platform,
                 
                 # Raw data (pass through any extra fields)
                 raw_metadata={

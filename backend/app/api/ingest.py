@@ -68,6 +68,10 @@ class EventItem(BaseModel):
     timestamp: str = ""
     session_id: str = ""
     source_url: str = ""
+    # Multi-platform (V10). Defaults keep the Instagram extension unchanged.
+    platform: str = "instagram"            # instagram | youtube
+    surface: str = ""                      # youtube: "watch" | "shorts"
+    video_length: Optional[float] = None   # seconds; YouTube exposes this, IG does not
 
 
 class IngestRequest(BaseModel):
@@ -186,6 +190,8 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                     "timestamp": ev.timestamp or datetime.utcnow().isoformat(),
                     "session_id": ev.session_id,
                     "source_url": ev.source_url or "",
+                    "platform": ev.platform,
+                    "surface": ev.surface,
                 }]
             }
             batch_events = gateway.process_batch(raw_payload, EventSource.CHROME_EXTENSION)
@@ -231,9 +237,11 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                                     audio, watch_time, timestamp, session_id,
                                     liked, saved, shared, commented, following,
                                     audio_id, profile_url,
-                                    like_count, comment_count, repost_count)
+                                    like_count, comment_count, repost_count,
+                                    platform, surface)
                 VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9,
-                        $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+                        $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
+                        $20, $21)
                 RETURNING id
                 """,
                 user_id,
@@ -255,6 +263,8 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                 raw_ev.like_count,
                 raw_ev.comment_count,
                 raw_ev.repost_count,
+                raw_ev.platform,
+                raw_ev.surface,
             )
             event_id = row["id"]
             stored_count += 1

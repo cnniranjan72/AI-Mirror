@@ -5,8 +5,8 @@ console.log('[AIMirror Background] Service worker loaded');
 
 // Configuration
 const CONFIG = {
-  // Keep in sync with content.js. Backend is on :8001 in local dev.
-  BACKEND_URL: 'http://localhost:8001/ingest',
+  // Keep in sync with content.js and API_BASE_URL below.
+  BACKEND_URL: 'http://localhost:8000/ingest',
   API_BASE_URL: 'http://localhost:8000',
   SYNC_INTERVAL: 30000, // Sync every 30 seconds
   MAX_STORAGE_EVENTS: 1000 // Maximum events to keep in storage
