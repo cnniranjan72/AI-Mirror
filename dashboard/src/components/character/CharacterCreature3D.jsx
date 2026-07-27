@@ -237,6 +237,55 @@ function Shield({ colorHex, glowIntensity, thinking }) {
   )
 }
 
+/**
+ * A holographic data-crystal cluster — for surfaces about the exportable
+ * identity data itself (Insights Export), not a character. A large core
+ * gem plus smaller satellite shards, all rotating independently, evoking
+ * "crystallized/structured data" rather than a companion or a guard.
+ */
+function Crystal({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const matRefs = useRef([])
+  const shardRefs = useRef([])
+  const SHARDS = [
+    { pos: [0.55, 0.3, 0.1], scale: 0.28, speed: 1.4 },
+    { pos: [-0.5, -0.15, 0.25], scale: 0.22, speed: 1.9 },
+    { pos: [0.1, -0.5, -0.3], scale: 0.24, speed: 1.1 },
+  ]
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.4 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (group.current) {
+      group.current.rotation.y = t * 0.28 * speed
+      group.current.rotation.x = Math.sin(t * 0.3) * 0.15
+    }
+    shardRefs.current.forEach((s, i) => {
+      if (!s) return
+      s.rotation.y = t * SHARDS[i].speed * speed
+      s.rotation.x = t * SHARDS[i].speed * 0.6
+    })
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      <mesh>
+        <octahedronGeometry args={[0.62, 0]} />
+        <holoMaterial ref={setRef(0)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      {SHARDS.map((s, i) => (
+        <mesh key={i} ref={(r) => { shardRefs.current[i] = r }} position={s.pos}>
+          <octahedronGeometry args={[s.scale, 0]} />
+          <holoMaterial ref={setRef(i + 1)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 function OrbitingLabels({ topics, colorHex }) {
   const items = useMemo(() => topics.slice(0, 6).map((t, i, arr) => ({
     label: t.length > 18 ? t.slice(0, 16) + '…' : t,
@@ -284,7 +333,8 @@ export default function CharacterCreature3D({
 }) {
   const colorHex = moodColor || '#818cf8'
   const glowIntensity = 0.45 + confidence * 0.55
-  const Being = variant === 'robot' ? Robot : variant === 'shield' ? Shield : Creature
+  const BEINGS = { robot: Robot, shield: Shield, crystal: Crystal, creature: Creature }
+  const Being = BEINGS[variant] || Creature
 
   return (
     <div style={{ width: size, height: size }}>

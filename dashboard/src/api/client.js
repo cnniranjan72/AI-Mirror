@@ -225,6 +225,10 @@ export const api = {
   },
   exportCsvUrl: (userId = activeUser(), table = 'behavior_objects') =>
     `${API_BASE_URL}/insights/export.csv?user_id=${encodeURIComponent(userId)}&table=${encodeURIComponent(table)}`,
+  postCampaignResonance: async (campaignText, userId = activeUser()) => {
+    const { data } = await client.post('/insights/campaign-resonance', { user_id: userId, campaign_text: campaignText });
+    return data;
+  },
 };
 
 export default client;

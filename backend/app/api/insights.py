@@ -6,11 +6,17 @@ academic behavioral research. See app/services/insights_export.py.
 import logging
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
 
-from app.services import insights_export
+from app.services import insights_export, campaign_resonance
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class CampaignRequest(BaseModel):
+    user_id: str = "default"
+    campaign_text: str
 
 
 @router.get("/insights/profile")
@@ -34,3 +40,16 @@ async def export_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{user_id}_{table}.csv"'},
     )
+
+
+@router.post("/insights/campaign-resonance")
+async def post_campaign_resonance(req: CampaignRequest):
+    """Score a hypothetical campaign/product description against this user's
+    real algorithmic identity — the pre-outreach fit check an ad agency or
+    creator-partnerships team would actually want."""
+    if not req.campaign_text.strip():
+        raise HTTPException(status_code=400, detail="campaign_text is required")
+    result = await campaign_resonance.score_campaign(req.user_id, req.campaign_text)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result

@@ -4,6 +4,7 @@ import { api, activeUser } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { DownloadIcon, TargetIcon, NetworkIcon, LayersIcon } from '../../icons/icons'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const USE_CASES = [
   {
@@ -32,6 +33,27 @@ export default function InsightsPage() {
   const { data: profile, loading } = useApi(() => api.getInsightsProfile(), [])
   const [expanded, setExpanded] = useState(null)
 
+  const [campaignText, setCampaignText] = useState('')
+  const [resonance, setResonance] = useState(null)
+  const [resonanceLoading, setResonanceLoading] = useState(false)
+  const [resonanceError, setResonanceError] = useState(null)
+
+  const runResonance = async () => {
+    if (!campaignText.trim()) return
+    setResonanceLoading(true)
+    setResonanceError(null)
+    try {
+      const res = await api.postCampaignResonance(campaignText)
+      setResonance(res)
+    } catch (err) {
+      setResonanceError(err?.response?.data?.detail || err.message)
+    } finally {
+      setResonanceLoading(false)
+    }
+  }
+
+  const resonanceColor = (pct) => (pct >= 60 ? '#10b981' : pct >= 30 ? '#f59e0b' : '#f43f5e')
+
   const downloadJson = () => {
     const blob = new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -43,11 +65,23 @@ export default function InsightsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Insights Export</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>
-          The algorithmic identity profile — structured, source-cited, and exportable
-        </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 72, height: 72, flexShrink: 0, margin: '-10px 0' }}>
+          <CharacterCreature3D
+            size={72}
+            variant="crystal"
+            confidence={profile?.identity?.overall_confidence ?? 0.3}
+            topics={profile?.audience_segment?.tags ?? []}
+            thinking={loading}
+            showLabels={false}
+          />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Insights Export</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>
+            The algorithmic identity profile — structured, source-cited, and exportable
+          </p>
+        </div>
       </div>
 
       {/* Use case cards */}
@@ -109,6 +143,80 @@ export default function InsightsPage() {
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{profile.audience_segment.note}</p>
         </GlassCard>
       )}
+
+      {/* Campaign resonance simulator */}
+      <GlassCard gradient style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600 }}>Campaign Resonance Simulator</h3>
+          <Badge variant="neutral">deterministic, no LLM</Badge>
+        </div>
+        <p style={{ fontSize: 12.5, color: 'var(--text-tertiary)', marginBottom: 16, lineHeight: 1.6 }}>
+          Describe a hypothetical product, content piece, or outreach message. It's scored against
+          this user's real dominant topics, creator affinity, and motivation signals — a pre-spend
+          fit check, not a guess.
+        </p>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <textarea
+            value={campaignText}
+            onChange={e => setCampaignText(e.target.value)}
+            placeholder="e.g. New Rust systems-programming course — build advanced projects, learn from ai_explained-style teaching"
+            rows={2}
+            style={{
+              flex: 1, padding: '10px 14px', borderRadius: 10,
+              background: '#1e293b', border: '1px solid var(--border-strong, rgba(148,163,184,0.25))',
+              color: '#f8fafc', caretColor: '#818cf8', colorScheme: 'dark',
+              fontSize: 13, outline: 'none', resize: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5,
+            }}
+          />
+          <button onClick={runResonance} disabled={!campaignText.trim() || resonanceLoading} style={{
+            padding: '10px 18px', borderRadius: 10, border: 'none',
+            background: campaignText.trim() && !resonanceLoading ? 'var(--accent-gradient)' : 'rgba(148,163,184,0.1)',
+            color: 'white', fontSize: 13, fontWeight: 600,
+            cursor: campaignText.trim() && !resonanceLoading ? 'pointer' : 'not-allowed',
+            opacity: campaignText.trim() && !resonanceLoading ? 1 : 0.5, flexShrink: 0,
+          }}>
+            {resonanceLoading ? 'Scoring…' : 'Simulate'}
+          </button>
+        </div>
+
+        {resonanceError && (
+          <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', fontSize: 13, marginBottom: 12 }}>
+            {resonanceError}
+          </div>
+        )}
+
+        {resonance && !resonanceError && (
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+            <div style={{
+              width: 84, height: 84, borderRadius: '50%', display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              background: `${resonanceColor(resonance.resonance_pct)}18`, border: `2px solid ${resonanceColor(resonance.resonance_pct)}`,
+            }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: resonanceColor(resonance.resonance_pct) }}>{resonance.resonance_pct}%</div>
+              <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase' }}>resonance</div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+                {Object.entries(resonance.breakdown).map(([k, v]) => (
+                  <div key={k} style={{ minWidth: 130 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'capitalize' }}>{k.replace('_', ' ')}</div>
+                    <div style={{ height: 6, background: 'rgba(148,163,184,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.round(v * 100)}%`, height: '100%', background: resonanceColor(Math.round(v * 100)) }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {resonance.explanation.map((e, i) => (
+                  <div key={i} style={{ fontSize: 12.5, color: 'var(--text-secondary)', display: 'flex', gap: 6 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>•</span> {e}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </GlassCard>
 
       {/* Raw schema browser */}
       {profile && (
