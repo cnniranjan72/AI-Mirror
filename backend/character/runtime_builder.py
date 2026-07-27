@@ -89,6 +89,8 @@ class RuntimeBuilder:
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         recent_inferences: Optional[List[Inference]] = None,
+        recent_reflections: Optional[List[ReflectionReference]] = None,
+        identity_source_ids: Optional[Dict[str, List[str]]] = None,
     ) -> RuntimeBuildResult:
         """
         Build complete character runtime
@@ -104,7 +106,10 @@ class RuntimeBuilder:
             conversation_id: Conversation ID
             session_id: Session ID
             request_id: Request ID
-            
+            recent_reflections: Optional pre-loaded reflections (see recent_inferences note above)
+            identity_source_ids: Optional pre-loaded {"behavior_objects": [...], "evidence": [...]}
+                from the identities table, used to populate memory reference IDs
+
         Returns:
             RuntimeBuildResult
         """
@@ -140,40 +145,54 @@ class RuntimeBuilder:
             model_time = (time.time() - model_start) * 1000
             self.metrics.record_model_load(model_time)
             
-            # Step 3: Load Memories
-            memory_start = time.time()
-            memory_ids = self._load_memory_ids(user_id)
-            memory_time = (time.time() - memory_start) * 1000
-            self.metrics.record_memory_load(memory_time)
-            
-            # Step 4: Load ReasoningContext
+            # Step 3: Load ReasoningContext
             context_start = time.time()
             reasoning_context = self._load_reasoning_context(user_id)
             context_time = (time.time() - context_start) * 1000
-            
-            # Step 5: Load recent Inferences. Prefer a pre-loaded list (passed
-            # by an async caller) — the fallback sync loader below calls
-            # asyncio.get_running_loop() internally, which raises when
-            # build_runtime is (as it usually is) executed inside a plain
-            # threadpool worker with no event loop of its own, so it silently
-            # returns [] in that case. Passing inferences in avoids that.
+
+            # Step 4: Load recent Inferences, Reflections. Prefer pre-loaded
+            # lists (passed by an async caller) — the fallback sync loaders
+            # below call asyncio.get_running_loop() internally, which raises
+            # when build_runtime is (as it usually is) executed inside a
+            # plain threadpool worker with no event loop of its own, so they
+            # silently return [] in that case. Passing lists in avoids that.
             inference_start = time.time()
             if recent_inferences is None:
                 recent_inferences = self._load_recent_inferences(user_id)
             inference_time = (time.time() - inference_start) * 1000
             self.metrics.record_inference_count(len(recent_inferences))
-            
-            # Step 6: Load Goals
+
+            # Step 5: Load Goals
             goals_start = time.time()
             active_goals = self._load_active_goals(user_id)
             goals_time = (time.time() - goals_start) * 1000
-            
-            # Step 7: Load Reflections
+
+            # Step 6: Load Reflections
             reflections_start = time.time()
-            recent_reflections = self._load_recent_reflections(user_id)
+            if recent_reflections is None:
+                recent_reflections = self._load_recent_reflections(user_id)
             reflections_time = (time.time() - reflections_start) * 1000
             self.metrics.record_reflection_count(len(recent_reflections))
-            
+
+            # Step 7: Assemble memory reference IDs. There is no separate
+            # "memories" table with a writer anywhere in the system (verified
+            # — nothing ever inserts into it), so memory references are
+            # derived from the real objects the character already has on
+            # hand: the identity's source behavior objects/evidence
+            # (pre-loaded by an async caller, same reasoning as above),
+            # this turn's reflections, and this turn's inferences.
+            memory_start = time.time()
+            src = identity_source_ids or {}
+            memory_ids = {
+                "behavior": src.get("behavior_objects", []),
+                "reflection": [r.reflection_id for r in recent_reflections],
+                "goal": [g.goal_id for g in active_goals],
+                "episodic": src.get("evidence", []),
+                "semantic": [i.inference_id for i in recent_inferences],
+            }
+            memory_time = (time.time() - memory_start) * 1000
+            self.metrics.record_memory_load(memory_time)
+
             # Step 8: Load Recent Retrievals (placeholder)
             recent_retrievals = []  # Would be populated from retrieval history
             
@@ -359,54 +378,6 @@ class RuntimeBuilder:
             updated_at=datetime.utcnow()
         )
     
-    def _load_memory_ids(self, user_id: str) -> Dict[str, List[str]]:
-        """Load memory IDs for user from V3 memories table"""
-        try:
-            import asyncio
-            try:
-                loop = asyncio.get_running_loop()
-                if loop.is_running():
-                    from app.db.postgres import fetch
-                    
-                    rows = asyncio.run_coroutine_threadsafe(
-                        fetch(
-                            "SELECT memory_id, memory_type FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT 100",
-                            user_id
-                        ),
-                        loop
-                    ).result(timeout=5)
-                    
-                    result = {
-                        "behavior": [],
-                        "reflection": [],
-                        "goal": [],
-                        "episodic": [],
-                        "semantic": []
-                    }
-                    for row in rows:
-                        mtype = row["memory_type"]
-                        mid = row["memory_id"]
-                        if mtype in result:
-                            result[mtype].append(mid)
-                        else:
-                            result.setdefault(mtype, []).append(mid)
-                    
-                    logger.debug(f"Loaded {sum(len(v) for v in result.values())} memory IDs for user {user_id}")
-                    return result
-            except Exception as inner:
-                logger.debug(f"Could not load memory IDs from DB: {inner}")
-            
-            return {
-                "behavior": [],
-                "reflection": [],
-                "goal": [],
-                "episodic": [],
-                "semantic": []
-            }
-        except Exception as e:
-            logger.error(f"Error loading memory IDs: {str(e)}", exc_info=True)
-            return {}
-    
     def _load_reasoning_context(self, user_id: str) -> Optional[ReasoningContext]:
         """Load reasoning context for user from V3 tables"""
         try:
@@ -571,30 +542,24 @@ class RuntimeBuilder:
                     
                     rows = asyncio.run_coroutine_threadsafe(
                         fetch(
-                            "SELECT goal_id, goal_description, goal_status, priority, "
-                            "goal_type, milestones, progress, metadata, created_at "
-                            "FROM goals WHERE user_id = $1 AND goal_status = 'active' "
-                            "ORDER BY priority ASC, created_at DESC LIMIT 10",
+                            "SELECT goal_id, goal_description, status, progress, alignment_score "
+                            "FROM goals WHERE user_id = $1 AND status = 'active' "
+                            "ORDER BY alignment_score DESC, created_at DESC LIMIT 10",
                             user_id
                         ),
                         loop
                     ).result(timeout=5)
-                    
-                    import json
+
                     goals = []
                     for row in rows:
                         goals.append(GoalReference(
                             goal_id=row["goal_id"],
-                            description=row["goal_description"],
-                            status=row["goal_status"],
-                            priority=int(row["priority"]) if row["priority"] else 0,
-                            goal_type=row.get("goal_type", "general"),
-                            milestones=json.loads(row["milestones"]) if isinstance(row.get("milestones"), str) else (row.get("milestones") or []),
-                            progress=float(row["progress"] or 0.0) if row.get("progress") else 0.0,
-                            metadata=json.loads(row["metadata"]) if isinstance(row.get("metadata"), str) else (row.get("metadata") or {}),
-                            created_at=row["created_at"]
+                            goal_description=row["goal_description"],
+                            goal_status=row["status"],
+                            progress=float(row["progress"] or 0.0),
+                            relevance_score=float(row["alignment_score"] or 0.0),
                         ))
-                    
+
                     logger.debug(f"Loaded {len(goals)} active goals for user {user_id}")
                     return goals
             except Exception as inner:
@@ -618,27 +583,24 @@ class RuntimeBuilder:
                     
                     rows = asyncio.run_coroutine_threadsafe(
                         fetch(
-                            "SELECT reflection_id, reflection_text, reflection_type, significance, "
-                            "source_evidence_ids, source_inference_ids, metadata, created_at "
+                            "SELECT reflection_id, reflection_type, key_insights, "
+                            "confidence, created_at "
                             "FROM reflections WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
                             user_id, self.max_reflections
                         ),
                         loop
                     ).result(timeout=5)
-                    
+
                     reflections = []
                     for row in rows:
                         reflections.append(ReflectionReference(
                             reflection_id=row["reflection_id"],
-                            content=row["reflection_text"],
                             reflection_type=row["reflection_type"],
-                            significance=float(row["significance"] or 0.0) if row["significance"] else 0.0,
-                            source_evidence_ids=json.loads(row["source_evidence_ids"]) if isinstance(row["source_evidence_ids"], str) else (row["source_evidence_ids"] or []),
-                            source_inference_ids=json.loads(row["source_inference_ids"]) if isinstance(row["source_inference_ids"], str) else (row["source_inference_ids"] or []),
-                            metadata=json.loads(row["metadata"]) if isinstance(row.get("metadata"), str) else (row.get("metadata") or {}),
-                            created_at=row["created_at"]
+                            reflection_date=row["created_at"],
+                            key_insights=json.loads(row["key_insights"]) if isinstance(row["key_insights"], str) else (row["key_insights"] or []),
+                            relevance_score=float(row["confidence"] or 0.0),
                         ))
-                    
+
                     logger.debug(f"Loaded {len(reflections)} reflections for user {user_id}")
                     return reflections
             except Exception as inner:

@@ -215,6 +215,8 @@ class CognitivePipeline:
             # and pass them in to avoid both misses.
             identity_snapshot = await self._load_latest_snapshot_from_db(user_id)
             recent_inferences = await self._load_recent_inferences_from_db(user_id)
+            recent_reflections = await self._load_recent_reflections_from_db(user_id)
+            identity_source_ids = await self._load_identity_source_ids_from_db(user_id)
 
             # ── Stage 2: Runtime Builder (offloaded to thread executor) ──
             # build_runtime internally uses asyncio.run_coroutine_threadsafe
@@ -233,6 +235,8 @@ class CognitivePipeline:
                     session_id=session_id,
                     request_id=request_id,
                     recent_inferences=recent_inferences,
+                    recent_reflections=recent_reflections,
+                    identity_source_ids=identity_source_ids,
                 )
             )
             trace.runtime_load_ms = (time.perf_counter() - t0) * 1000
@@ -543,6 +547,72 @@ class CognitivePipeline:
         except Exception as e:
             logger.warning(f"Error loading recent inferences from DB: {e}")
             return []
+
+    async def _load_recent_reflections_from_db(self, user_id: str, limit: int = 5):
+        """Load the user's recent Reflection rows for CharacterCore.reflection_memory_ids.
+        Same pre-load reasoning as _load_recent_inferences_from_db above — RuntimeBuilder's
+        internal loader can't reach a running event loop from inside a threadpool worker."""
+        try:
+            from app.db.postgres import fetch
+            import json
+            from backend.reasoning.reasoning_context import ReflectionReference
+
+            rows = await fetch(
+                "SELECT reflection_id, reflection_type, key_insights, confidence, created_at "
+                "FROM reflections WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+                user_id, limit,
+            )
+
+            reflections = []
+            for row in rows:
+                key_insights = row["key_insights"]
+                if isinstance(key_insights, str):
+                    try:
+                        key_insights = json.loads(key_insights)
+                    except Exception:
+                        key_insights = []
+                reflections.append(ReflectionReference(
+                    reflection_id=row["reflection_id"],
+                    reflection_type=row["reflection_type"],
+                    reflection_date=row["created_at"],
+                    key_insights=key_insights or [],
+                    relevance_score=float(row["confidence"] or 0.0),
+                ))
+            return reflections
+        except Exception as e:
+            logger.warning(f"Error loading recent reflections from DB: {e}")
+            return []
+
+    async def _load_identity_source_ids_from_db(self, user_id: str) -> Dict[str, list]:
+        """Load the live identity's source behavior-object/evidence IDs, used to
+        populate the character's memory reference IDs (there is no separate
+        'memories' table with a writer anywhere in the system)."""
+        try:
+            from app.db.postgres import fetchrow
+            import json
+
+            row = await fetchrow(
+                "SELECT source_behavior_objects, source_evidence FROM identities WHERE user_id = $1",
+                user_id,
+            )
+            if not row:
+                return {"behavior_objects": [], "evidence": []}
+
+            def _j(v):
+                if isinstance(v, str):
+                    try:
+                        return json.loads(v)
+                    except Exception:
+                        return []
+                return v or []
+
+            return {
+                "behavior_objects": _j(row["source_behavior_objects"]),
+                "evidence": _j(row["source_evidence"]),
+            }
+        except Exception as e:
+            logger.warning(f"Error loading identity source IDs from DB: {e}")
+            return {"behavior_objects": [], "evidence": []}
 
     def _ensure_str_ids(self, row_dict: dict) -> dict:
         for col in ("id",):

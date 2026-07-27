@@ -38,6 +38,8 @@ async def get_character_state(user_id: str = Query(default="default")):
         pipeline = get_cognitive_pipeline()
         identity_snapshot = await pipeline._load_latest_snapshot_from_db(user_id)
         recent_inferences = await pipeline._load_recent_inferences_from_db(user_id)
+        recent_reflections = await pipeline._load_recent_reflections_from_db(user_id)
+        identity_source_ids = await pipeline._load_identity_source_ids_from_db(user_id)
 
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
@@ -46,6 +48,8 @@ async def get_character_state(user_id: str = Query(default="default")):
                 user_id=user_id,
                 identity_snapshot=identity_snapshot,
                 recent_inferences=recent_inferences,
+                recent_reflections=recent_reflections,
+                identity_source_ids=identity_source_ids,
             ),
         )
 

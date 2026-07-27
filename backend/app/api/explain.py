@@ -173,7 +173,7 @@ async def get_query_traces(
            ORDER BY created_at DESC LIMIT $2""",
         user_id, limit,
     )
-    return [dict(r) for r in rows]
+    return [_parse_json_fields(dict(r), ["errors"]) for r in rows]
 
 
 @router.get("/query/traces/{trace_id}", response_model=Optional[dict])
@@ -181,7 +181,9 @@ async def get_trace_detail(trace_id: str):
     row = await fetchrow(
         "SELECT * FROM pipeline_traces WHERE trace_id = $1", trace_id
     )
-    return dict(row) if row else None
+    if not row:
+        return None
+    return _parse_json_fields(dict(row), ["errors", "trace_data"])
 
 
 @router.get("/cognitive/metrics", response_model=list)
