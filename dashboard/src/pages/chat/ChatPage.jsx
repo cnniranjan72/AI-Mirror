@@ -5,7 +5,7 @@ import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { BrainIcon, ExternalLinkIcon, RefreshIcon } from '../../icons/icons'
 import ExplainabilityPanel from '../../components/explain/ExplainabilityPanel'
-import CharacterOrb from '../../components/character/CharacterOrb'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const USER_ID = DEFAULT_USER
 const CONVERSATION_ID = `conv_${USER_ID}`
@@ -89,14 +89,14 @@ export default function ChatPage() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '16px 20px', borderBottom: '1px solid var(--border-subtle)',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <CharacterOrb
-                size={40}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '-8px 0' }}>
+              <CharacterCreature3D
+                size={56}
                 confidence={charState?.identity_snapshot?.overall_confidence ?? 0.3}
                 topics={charState?.identity_snapshot?.dominant_topics ?? []}
-                inferenceCount={charState?.inference_count ?? 0}
                 thinking={sending}
+                showLabels={false}
               />
             </div>
             <div>

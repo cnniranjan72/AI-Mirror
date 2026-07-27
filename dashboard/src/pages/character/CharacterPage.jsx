@@ -4,7 +4,7 @@ import GlassCard from '../../components/ui/GlassCard'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
 import { CpuIcon, BrainIcon, TargetIcon, LayersIcon, ZapIcon } from '../../icons/icons'
-import CharacterOrb from '../../components/character/CharacterOrb'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 function qColor(q) {
   if (q >= 0.66) return '#10b981'
@@ -49,26 +49,27 @@ export default function CharacterPage() {
       {(loading || state?.built) && (
         <>
           <GlassCard gradient>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 28, padding: '8px 4px' }}>
-              <CharacterOrb
-                size={140}
-                confidence={state?.identity_snapshot?.overall_confidence ?? 0.3}
-                topics={state?.identity_snapshot?.dominant_topics ?? []}
-                inferenceCount={state?.inference_count ?? 0}
-                moodColor={avgQColor(learning?.policy)}
-                thinking={loading}
-              />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 4px' }}>
+              <div style={{ flex: '0 0 auto' }}>
+                <CharacterCreature3D
+                  size={260}
+                  confidence={state?.identity_snapshot?.overall_confidence ?? 0.3}
+                  topics={state?.identity_snapshot?.dominant_topics ?? []}
+                  moodColor={avgQColor(learning?.policy)}
+                  thinking={loading}
+                  showLabels
+                />
+              </div>
               <div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
                   Live character state
                 </div>
                 <div style={{ fontSize: 15, color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 480 }}>
-                  This orb is not decorative — its brightness tracks identity confidence
+                  This isn't a decorative avatar — its glow tracks identity confidence
                   ({Math.round((state?.identity_snapshot?.overall_confidence || 0) * 100)}%),
-                  its orbiting motes are the {(state?.identity_snapshot?.dominant_topics || []).length || state?.inference_count || 0} dominant
-                  topics/active inferences currently shaping the character, and its color tint reflects
-                  the average learned Q-value across the RL policy. It pulses faster whenever a runtime
-                  rebuild or chat query is in flight.
+                  the swirling labels are its {(state?.identity_snapshot?.dominant_topics || []).length || 0} dominant
+                  topics, and its hologram tint reflects the average learned Q-value across the RL policy.
+                  It pulses and spins faster whenever a runtime rebuild or chat query is in flight.
                 </div>
               </div>
             </div>
