@@ -6,6 +6,7 @@ import Badge from '../../components/ui/Badge'
 import { LayersIcon, BrainIcon, TargetIcon } from '../../icons/icons'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import EvidenceDrawer from '../../components/explain/EvidenceDrawer'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const evidenceTypes = ['behavioral', 'temporal', 'topical', 'creator', 'interaction']
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b']
@@ -27,12 +28,20 @@ export default function EvidencePage() {
     name: t,
     count: evidenceList.filter(e => e.evidence_type === t).length,
   }))
+  const avgConfidence = evidenceList.length
+    ? evidenceList.reduce((s, e) => s + (e.confidence || 0), 0) / evidenceList.length
+    : 0.3
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Evidence</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Reasoning evidence and inference analysis</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="archive" confidence={avgConfidence} thinking={evLoading} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Evidence</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Reasoning evidence and inference analysis</p>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>

@@ -3,6 +3,7 @@ import { useBehaviorObjects, useIdentity } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const parseJSON = (v) => {
   if (v == null) return {}
@@ -47,12 +48,20 @@ export default function BehaviorPage() {
   objects.forEach(o => (o.creators || []).forEach(c => { creatorCounts[c] = (creatorCounts[c] || 0) + 1 }))
   const topCreators = Object.entries(creatorCounts)
     .sort((a, b) => b[1] - a[1]).slice(0, 12)
+  const avgImportance = objects.length
+    ? objects.reduce((s, o) => s + (o.importance_score || 0), 0) / objects.length
+    : 0.3
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Behavior</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Consolidated behavior objects and cluster analysis</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="orbital" confidence={avgImportance} topics={states} thinking={loading} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Behavior</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Consolidated behavior objects and cluster analysis</p>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>

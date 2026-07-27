@@ -353,6 +353,519 @@ function NeuralNet({ colorHex, glowIntensity, thinking }) {
   )
 }
 
+/** Dashboard: aggregate twin state as a core pulse with expanding rings — a heartbeat, not a character. */
+function Pulse({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const coreMatRef = useRef(null)
+  const ringRefs = useRef([])
+  const RING_COUNT = 3
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.5 : 1
+    if (coreMatRef.current) coreMatRef.current.uTime = t
+    if (group.current) group.current.rotation.y = t * 0.15
+    ringRefs.current.forEach((r, i) => {
+      if (!r) return
+      const phase = ((t * speed * 0.5) + i / RING_COUNT) % 1
+      const s = 0.35 + phase * 1.3
+      r.scale.set(s, s, s)
+      r.material.opacity = (1 - phase) * 0.55 * glowIntensity
+    })
+  })
+
+  return (
+    <group ref={group}>
+      <mesh>
+        <sphereGeometry args={[0.4, 32, 32]} />
+        <holoMaterial ref={coreMatRef} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      {Array.from({ length: RING_COUNT }).map((_, i) => (
+        <mesh key={i} ref={(r) => { ringRefs.current[i] = r }} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.55, 0.015, 8, 48]} />
+          <meshBasicMaterial color={colorHex} transparent opacity={0} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Identity: a double helix of small nodes — evolution across versions, not a static object. */
+function Helix({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const STRAND_COUNT = 10
+  const strand = useMemo(() => {
+    const a = [], b = [], rungs = []
+    for (let i = 0; i < STRAND_COUNT; i++) {
+      const yy = (i / (STRAND_COUNT - 1) - 0.5) * 1.4
+      const angle = i * 0.9
+      const r = 0.35
+      const pa = [Math.cos(angle) * r, yy, Math.sin(angle) * r]
+      const pb = [Math.cos(angle + Math.PI) * r, yy, Math.sin(angle + Math.PI) * r]
+      a.push(pa); b.push(pb)
+      if (i % 2 === 0) rungs.push([pa, pb])
+    }
+    return { a, b, rungs }
+  }, [])
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.2 : 1
+    if (group.current) group.current.rotation.y = t * 0.3 * speed
+  })
+
+  return (
+    <group ref={group}>
+      {[...strand.a, ...strand.b].map((p, i) => (
+        <mesh key={i} position={p}>
+          <sphereGeometry args={[0.07, 12, 12]} />
+          <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity} />
+        </mesh>
+      ))}
+      {strand.rungs.map(([pa, pb], i) => (
+        <Line key={i} points={[pa, pb]} color={colorHex} transparent opacity={0.3 * glowIntensity + 0.1} lineWidth={1} />
+      ))}
+    </group>
+  )
+}
+
+/** Evidence: a small cluster of floating flat cards — the raw observational record. */
+function Archive({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const matRefs = useRef([])
+  const CARDS = [
+    { pos: [0, 0.25, 0], rot: [0.1, 0.3, 0.05] },
+    { pos: [0.15, 0.05, 0.1], rot: [-0.05, -0.2, 0.1] },
+    { pos: [-0.12, -0.1, -0.08], rot: [0.15, 0.5, -0.1] },
+    { pos: [0.05, -0.28, 0.05], rot: [-0.1, 0.1, 0.15] },
+  ]
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.3 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (group.current) group.current.rotation.y = t * 0.25 * speed
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      {CARDS.map((c, i) => (
+        <mesh key={i} position={c.pos} rotation={c.rot}>
+          <boxGeometry args={[0.55, 0.7, 0.03]} />
+          <holoMaterial ref={setRef(i)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Behavior: a core with topics orbiting like planets, at distances that read as "importance". */
+function Orbital({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const coreMatRef = useRef(null)
+  const planetRefs = useRef([])
+  const PLANETS = [
+    { radius: 0.85, size: 0.09, speed: 0.6 },
+    { radius: 1.15, size: 0.06, speed: 0.4 },
+    { radius: 1.4, size: 0.11, speed: 0.28 },
+  ]
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.4 : 1
+    if (coreMatRef.current) coreMatRef.current.uTime = t
+    planetRefs.current.forEach((p, i) => {
+      if (!p) return
+      const a = t * PLANETS[i].speed * speed
+      p.position.set(Math.cos(a) * PLANETS[i].radius, Math.sin(a * 0.6) * 0.2, Math.sin(a) * PLANETS[i].radius)
+    })
+  })
+
+  return (
+    <group ref={group}>
+      <mesh>
+        <sphereGeometry args={[0.42, 32, 32]} />
+        <holoMaterial ref={coreMatRef} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      {PLANETS.map((p, i) => (
+        <mesh key={i} ref={(r) => { planetRefs.current[i] = r }}>
+          <sphereGeometry args={[p.size, 16, 16]} />
+          <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Planning: connected waypoints with a traveling light — the planner's execution path. */
+function Pathway({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const matRefs = useRef([])
+  const pulseRef = useRef(null)
+  const SEGMENTS = 6
+  const points = useMemo(() => {
+    const pts = []
+    for (let i = 0; i < SEGMENTS; i++) {
+      const a = (i / (SEGMENTS - 1)) * Math.PI * 1.3 - Math.PI * 0.65
+      pts.push([Math.sin(a) * 0.9, (i / (SEGMENTS - 1) - 0.5) * 1.1, Math.cos(a) * 0.3 - 0.3])
+    }
+    return pts
+  }, [])
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.5 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (group.current) group.current.rotation.y = t * 0.2
+    if (pulseRef.current) {
+      const phase = (t * speed * 0.35) % 1
+      const idx = phase * (SEGMENTS - 1)
+      const i0 = Math.floor(idx), i1 = Math.min(SEGMENTS - 1, i0 + 1)
+      const f = idx - i0
+      const p0 = points[i0], p1 = points[i1]
+      pulseRef.current.position.set(
+        p0[0] + (p1[0] - p0[0]) * f,
+        p0[1] + (p1[1] - p0[1]) * f,
+        p0[2] + (p1[2] - p0[2]) * f,
+      )
+    }
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      {points.map((p, i) => (
+        <mesh key={i} position={p}>
+          <sphereGeometry args={[0.09, 16, 16]} />
+          <holoMaterial ref={setRef(i)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+      ))}
+      {points.slice(0, -1).map((p, i) => (
+        <Line key={`l${i}`} points={[p, points[i + 1]]} color={colorHex} transparent opacity={0.3 * glowIntensity + 0.15} lineWidth={1.5} />
+      ))}
+      <mesh ref={pulseRef}>
+        <sphereGeometry args={[0.05, 12, 12]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={glowIntensity} />
+      </mesh>
+    </group>
+  )
+}
+
+/** Decision: a balance scale tilting — fact fusion weighing evidence against conflicts. */
+function Scale({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const beamRef = useRef(null)
+  const panLRef = useRef(null)
+  const panRRef = useRef(null)
+  const matRefs = useRef([])
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 3 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    const tilt = Math.sin(t * speed * 0.7) * 0.18
+    if (beamRef.current) beamRef.current.rotation.z = tilt
+    if (panLRef.current) panLRef.current.position.y = 0.3 - Math.sin(tilt) * 0.55
+    if (panRRef.current) panRRef.current.position.y = 0.3 + Math.sin(tilt) * 0.55
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      <mesh position={[0, -0.1, 0]}>
+        <cylinderGeometry args={[0.03, 0.05, 0.85, 12]} />
+        <holoMaterial ref={setRef(0)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, -0.52, 0]}>
+        <cylinderGeometry args={[0.22, 0.22, 0.04, 24]} />
+        <holoMaterial ref={setRef(1)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      <group ref={beamRef} position={[0, 0.32, 0]}>
+        <mesh rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.02, 0.02, 1.3, 8]} />
+          <holoMaterial ref={setRef(2)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+      <mesh ref={panLRef} position={[-0.62, 0.3, 0]}>
+        <cylinderGeometry args={[0.16, 0.16, 0.02, 20]} />
+        <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity * 0.8} />
+      </mesh>
+      <mesh ref={panRRef} position={[0.62, 0.3, 0]}>
+        <cylinderGeometry args={[0.16, 0.16, 0.02, 20]} />
+        <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity * 0.8} />
+      </mesh>
+    </group>
+  )
+}
+
+/** Learning: a compass whose needle sweeps toward the best learned action. */
+function Compass({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const needleRef = useRef(null)
+  const matRefs = useRef([])
+  const TICK_COUNT = 12
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 3 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (group.current) group.current.rotation.x = 0.5
+    if (needleRef.current) needleRef.current.rotation.y = t * speed * 0.5 + Math.sin(t * 0.3) * 0.4
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.6, 0.02, 8, 48]} />
+        <holoMaterial ref={setRef(0)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      {Array.from({ length: TICK_COUNT }).map((_, i) => {
+        const a = (i / TICK_COUNT) * Math.PI * 2
+        return (
+          <mesh key={i} position={[Math.cos(a) * 0.6, 0, Math.sin(a) * 0.6]}>
+            <sphereGeometry args={[0.02, 6, 6]} />
+            <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity * 0.7} />
+          </mesh>
+        )
+      })}
+      <group ref={needleRef}>
+        <mesh position={[0.22, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
+          <coneGeometry args={[0.06, 0.36, 3]} />
+          <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity} />
+        </mesh>
+        <mesh position={[-0.22, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+          <coneGeometry args={[0.06, 0.36, 3]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={glowIntensity * 0.6} />
+        </mesh>
+      </group>
+    </group>
+  )
+}
+
+/** Pipeline: interlocking rings — the stage-by-stage execution chain. */
+function Chain({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const matRefs = useRef([])
+  const LINKS = 5
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.6 : 1
+    matRefs.current.forEach((m, i) => { if (m) m.uTime = t + i * 0.3 })
+    if (group.current) group.current.rotation.y = t * 0.2 * speed
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      {Array.from({ length: LINKS }).map((_, i) => {
+        const x = (i - (LINKS - 1) / 2) * 0.32
+        const alt = i % 2 === 0
+        return (
+          <mesh key={i} position={[x, Math.sin(i * 1.3) * 0.1, 0]} rotation={[0, alt ? 0 : Math.PI / 2, 0]}>
+            <torusGeometry args={[0.22, 0.045, 12, 32]} />
+            <holoMaterial ref={setRef(i)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+          </mesh>
+        )
+      })}
+    </group>
+  )
+}
+
+/** Analytics: an equalizer of oscillating bars — trend lines rendered as motion. */
+function Equalizer({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const barRefs = useRef([])
+  const BAR_COUNT = 9
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.8 : 1
+    if (group.current) group.current.rotation.y = Math.sin(t * 0.25) * 0.3
+    barRefs.current.forEach((b, i) => {
+      if (!b) return
+      const h = 0.3 + (0.5 + 0.5 * Math.sin(t * speed * (1.3 + i * 0.17) + i)) * 0.7
+      b.scale.y = h
+      b.position.y = h * 0.35 - 0.3
+    })
+  })
+
+  return (
+    <group ref={group}>
+      {Array.from({ length: BAR_COUNT }).map((_, i) => (
+        <mesh key={i} ref={(r) => { barRefs.current[i] = r }} position={[(i - (BAR_COUNT - 1) / 2) * 0.16, 0, 0]}>
+          <boxGeometry args={[0.09, 0.7, 0.09]} />
+          <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity * 0.85} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Settings: two counter-rotating gears — configuration, systems working in sync. */
+function Gear({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const outerRef = useRef(null)
+  const innerRef = useRef(null)
+  const matRefs = useRef([])
+  const TEETH = 10
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.6 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (outerRef.current) outerRef.current.rotation.z = t * 0.5 * speed
+    if (innerRef.current) innerRef.current.rotation.z = -t * 0.9 * speed
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      <group ref={outerRef} rotation={[Math.PI / 2, 0, 0]}>
+        <mesh>
+          <cylinderGeometry args={[0.5, 0.5, 0.1, 32]} />
+          <holoMaterial ref={setRef(0)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+        </mesh>
+        {Array.from({ length: TEETH }).map((_, i) => {
+          const a = (i / TEETH) * Math.PI * 2
+          return (
+            <mesh key={i} position={[Math.cos(a) * 0.55, 0, Math.sin(a) * 0.55]} rotation={[0, -a, 0]}>
+              <boxGeometry args={[0.1, 0.1, 0.08]} />
+              <holoMaterial ref={setRef(i + 1)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+            </mesh>
+          )
+        })}
+      </group>
+      <group ref={innerRef} rotation={[Math.PI / 2, 0, 0]} position={[0, 0, 0.15]}>
+        <mesh>
+          <cylinderGeometry args={[0.22, 0.22, 0.08, 20]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={glowIntensity * 0.7} />
+        </mesh>
+      </group>
+    </group>
+  )
+}
+
+/** Import: a gateway ring with particles flowing inward — data entering the twin. */
+function Portal({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const ringRef = useRef(null)
+  const matRefs = useRef([])
+  const PARTICLE_COUNT = 10
+  const particleRefs = useRef([])
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.6 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (ringRef.current) ringRef.current.rotation.z = t * 0.3 * speed
+    particleRefs.current.forEach((p, i) => {
+      if (!p) return
+      const phase = ((t * speed * 0.3) + i / PARTICLE_COUNT) % 1
+      const angle = (i / PARTICLE_COUNT) * Math.PI * 2
+      const r = 1.0 * (1 - phase)
+      p.position.set(Math.cos(angle) * r, Math.sin(angle) * r * 0.4, (1 - phase) * 0.6 - 0.3)
+      p.material.opacity = phase < 0.9 ? glowIntensity * 0.8 : glowIntensity * 0.8 * (1 - (phase - 0.9) * 10)
+    })
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      <mesh ref={ringRef}>
+        <torusGeometry args={[0.65, 0.05, 12, 40]} />
+        <holoMaterial ref={setRef(0)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      {Array.from({ length: PARTICLE_COUNT }).map((_, i) => (
+        <mesh key={i} ref={(r) => { particleRefs.current[i] = r }}>
+          <sphereGeometry args={[0.04, 8, 8]} />
+          <meshBasicMaterial color={colorHex} transparent opacity={0} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Documentation: an open book with glowing lines of text — the reference material. */
+function Tome({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const matRefs = useRef([])
+  const LINES = 4
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.3 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (group.current) group.current.rotation.y = Math.sin(t * 0.3 * speed) * 0.4
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group} rotation={[0.3, 0, 0]}>
+      <mesh position={[-0.32, 0, 0]} rotation={[0, 0.5, 0]}>
+        <boxGeometry args={[0.6, 0.8, 0.02]} />
+        <holoMaterial ref={setRef(0)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0.32, 0, 0]} rotation={[0, -0.5, 0]}>
+        <boxGeometry args={[0.6, 0.8, 0.02]} />
+        <holoMaterial ref={setRef(1)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      {Array.from({ length: LINES }).map((_, i) => (
+        <mesh key={i} position={[0.32, 0.22 - i * 0.14, 0.012]} rotation={[0, -0.5, 0]}>
+          <boxGeometry args={[0.4 - i * 0.05, 0.03, 0.005]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={glowIntensity * 0.5} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** Guide: a beacon spire with a sweeping rotating light — wayfinding. */
+function Beacon({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const beamRef = useRef(null)
+  const matRefs = useRef([])
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 3 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (beamRef.current) beamRef.current.rotation.y = t * speed * 1.2
+    if (group.current) group.current.position.y = Math.sin(t * 1.2) * 0.04
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      <mesh position={[0, -0.1, 0]}>
+        <coneGeometry args={[0.28, 1.0, 20]} />
+        <holoMaterial ref={setRef(0)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, 0.45, 0]}>
+        <sphereGeometry args={[0.12, 16, 16]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={glowIntensity} />
+      </mesh>
+      <group ref={beamRef} position={[0, 0.45, 0]}>
+        <mesh position={[0.5, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
+          <coneGeometry args={[0.25, 1.3, 3, 1, true]} />
+          <meshBasicMaterial color={colorHex} transparent opacity={glowIntensity * 0.25} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+    </group>
+  )
+}
+
 function OrbitingLabels({ topics, colorHex }) {
   const items = useMemo(() => topics.slice(0, 6).map((t, i, arr) => ({
     label: t.length > 18 ? t.slice(0, 16) + '…' : t,
@@ -400,7 +913,12 @@ export default function CharacterCreature3D({
 }) {
   const colorHex = moodColor || '#818cf8'
   const glowIntensity = 0.45 + confidence * 0.55
-  const BEINGS = { robot: Robot, shield: Shield, crystal: Crystal, neural: NeuralNet, creature: Creature }
+  const BEINGS = {
+    robot: Robot, shield: Shield, crystal: Crystal, neural: NeuralNet, creature: Creature,
+    pulse: Pulse, helix: Helix, archive: Archive, orbital: Orbital, pathway: Pathway,
+    scale: Scale, compass: Compass, chain: Chain, equalizer: Equalizer, gear: Gear,
+    portal: Portal, tome: Tome, beacon: Beacon,
+  }
   const Being = BEINGS[variant] || Creature
 
   return (

@@ -8,6 +8,7 @@ import {
   AreaChart, Area, PieChart, Pie, Cell, Legend,
   XAxis, YAxis,
 } from 'recharts'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#f43f5e', '#a78bfa']
 
@@ -59,9 +60,14 @@ export default function AnalyticsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Analytics</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive metrics and trends</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="equalizer" confidence={currentValue('identity_confidence') || 0.4} thinking={loading} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Analytics</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive metrics and trends</p>
+        </div>
       </div>
 
       {loading ? (

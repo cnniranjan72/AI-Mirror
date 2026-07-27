@@ -7,6 +7,7 @@ import LoadingSkeleton from '../../components/ui/LoadingSkeleton'
 import PipelineStage from '../../components/pipeline/PipelineStage'
 import { RefreshIcon } from '../../icons/icons'
 import ExplainabilityPanel from '../../components/explain/ExplainabilityPanel'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 // A query trace records the QUERY pipeline (not the ingest pipeline), so show
 // exactly those stages with their real per-stage timings.
@@ -57,9 +58,14 @@ export default function PipelinePage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Pipeline</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Animated cognitive processing pipeline</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="chain" confidence={activeTrace?.aggregate_confidence ?? 0.4} thinking={loading || autoRefresh} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Pipeline</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Animated cognitive processing pipeline</p>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>

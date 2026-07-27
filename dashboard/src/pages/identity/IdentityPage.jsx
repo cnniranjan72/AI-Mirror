@@ -7,6 +7,7 @@ import { TargetIcon, ActivityIcon, BrainIcon, ClockIcon, LayersIcon } from '../.
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from 'recharts'
 import IdentityInspector from '../../components/explain/IdentityInspector'
 import IdentityEvolution from '../../components/identity/IdentityEvolution'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const parseJSON = (v) => {
   if (v == null) return {}
@@ -58,9 +59,14 @@ export default function IdentityPage() {
     <div>
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div>
-            <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Identity</h1>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive identity profile and evolution tracking</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+              <CharacterCreature3D size={68} variant="helix" confidence={identity?.overall_confidence ?? 0.4} thinking={loading} showLabels={false} />
+            </div>
+            <div>
+              <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Identity</h1>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive identity profile and evolution tracking</p>
+            </div>
           </div>
           {snapshotList.length >= 2 && (
             <div style={{ display: 'flex', gap: 4, background: 'var(--bg-surface)', borderRadius: 8, padding: 2, border: '1px solid var(--border-subtle)' }}>

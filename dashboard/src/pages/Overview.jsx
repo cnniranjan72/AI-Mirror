@@ -7,6 +7,7 @@ import StatCard from '../components/ui/StatCard'
 import Badge from '../components/ui/Badge'
 import { ActivityIcon, BrainIcon, TargetIcon, LayersIcon, NetworkIcon, CpuIcon, RefreshIcon } from '../icons/icons'
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import CharacterCreature3D from '../components/character/CharacterCreature3D'
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#f43f5e', '#a78bfa']
 
@@ -78,11 +79,16 @@ export default function Overview() {
     <div>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
-        <div>
-          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>
-            Cognitive Dashboard
-          </h1>
-          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Real-time view of your Digital Cognitive Twin</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+            <CharacterCreature3D size={68} variant="pulse" confidence={confidence ?? 0.4} thinking={isLoading} showLabels={false} />
+          </div>
+          <div>
+            <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>
+              Cognitive Dashboard
+            </h1>
+            <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Real-time view of your Digital Cognitive Twin</p>
+          </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Badge variant={online ? 'emerald' : 'danger'} dot>

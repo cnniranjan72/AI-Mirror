@@ -2,6 +2,7 @@ import { useTraces } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { LayersIcon, CpuIcon, TargetIcon, ZapIcon, NetworkIcon } from '../../icons/icons'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 // Map display stage -> the timing field the backend actually records.
 const stages = [
@@ -15,11 +16,20 @@ export default function PlanningPage() {
   const { data: traces, loading } = useTraces()
   const traceList = Array.isArray(traces) ? traces : (traces?.traces || [])
 
+  const avgPlanConfidence = traceList.length
+    ? traceList.reduce((s, t) => s + (t.plan_confidence || t.aggregate_confidence || 0), 0) / traceList.length
+    : 0.4
+
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Planning</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive planner output and execution flow</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="pathway" confidence={avgPlanConfidence} thinking={loading} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Planning</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive planner output and execution flow</p>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>

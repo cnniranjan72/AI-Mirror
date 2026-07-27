@@ -5,6 +5,7 @@ import { api, DEFAULT_USER } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { CheckIcon, RefreshIcon } from '../../icons/icons'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const PIPELINE_STAGES = [
   'Behavior Gateway', 'Content Intelligence', 'Knowledge Consolidation',
@@ -50,13 +51,18 @@ export default function IngestionPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>
-          Data Ingestion
-        </h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>
-          How behavioral data flows into your cognitive twin
-        </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="portal" confidence={summary?.behavior_object_count ? 0.7 : 0.35} topics={Object.keys(platformBreakdown)} thinking={loading || seeding} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>
+            Data Ingestion
+          </h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>
+            How behavioral data flows into your cognitive twin
+          </p>
+        </div>
       </div>
 
       {/* Current twin state — real data */}

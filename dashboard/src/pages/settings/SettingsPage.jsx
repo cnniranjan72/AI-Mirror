@@ -4,6 +4,7 @@ import { api, DEFAULT_USER, activeUser } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon, DownloadIcon, AlertIcon } from '../../icons/icons'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 export default function SettingsPage() {
   const { data: v3Health, refetch: refetchV3 } = useV3Health()
@@ -54,9 +55,14 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Settings</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>System configuration and connectivity</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="gear" confidence={v3Health ? 0.8 : 0.3} thinking={testLoading} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Settings</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>System configuration and connectivity</p>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>

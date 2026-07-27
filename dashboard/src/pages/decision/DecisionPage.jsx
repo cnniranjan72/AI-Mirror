@@ -7,6 +7,7 @@ import { BrainIcon, TargetIcon, CheckIcon, LayersIcon, AlertIcon } from '../../i
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import ExplainabilityPanel from '../../components/explain/ExplainabilityPanel'
 import DecisionTree from '../../components/decision/DecisionTree'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6']
 
@@ -40,9 +41,14 @@ export default function DecisionPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Decision</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive decision-making analysis</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="scale" confidence={avgConfidence || 0.4} thinking={loading} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Decision</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive decision-making analysis</p>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>

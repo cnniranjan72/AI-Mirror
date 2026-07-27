@@ -5,6 +5,7 @@ import GlassCard from '../../components/ui/GlassCard'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
 import { ZapIcon, TargetIcon, ActivityIcon, BrainIcon } from '../../icons/icons'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const ACTION_LABELS = {
   reduce_session: 'Reduce session length',
@@ -51,11 +52,16 @@ export default function LearningPage() {
 
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Learning</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>
-          Reinforcement-learning policy — a contextual bandit that learns which nudge helps in each state
-        </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D size={68} variant="compass" confidence={bestArm?.q_value ?? 0.4} moodColor={bestArm ? qColor(bestArm.q_value) : null} thinking={loading} showLabels={false} />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Learning</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>
+            Reinforcement-learning policy — a contextual bandit that learns which nudge helps in each state
+          </p>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
