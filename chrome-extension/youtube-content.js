@@ -116,6 +116,33 @@
   // clicks are XHR, not reloads), so it silently describes the PREVIOUS
   // video after a nav. Callers must verify videoId freshness (see
   // extractMeta) before trusting it — that check is load-bearing.
+  // Scan forward from the opening '{' tracking brace depth and string-
+  // literal state, returning the substring up to the matching closing brace.
+  // Verified live that a marker-string search (e.g. up to ";var ytInitialData")
+  // is NOT safe: the player response's own string values (captions,
+  // descriptions) can legitimately contain that substring, truncating the
+  // slice mid-object and producing invalid JSON. Brace-matching is correct
+  // regardless of what text the JSON contains.
+  function extractBalancedJson(text, startIdx) {
+    let depth = 0, inString = false, quoteChar = '', escaped = false;
+    for (let i = startIdx; i < text.length; i++) {
+      const c = text[i];
+      if (escaped) { escaped = false; continue; }
+      if (inString) {
+        if (c === '\\') { escaped = true; continue; }
+        if (c === quoteChar) inString = false;
+        continue;
+      }
+      if (c === '"' || c === "'") { inString = true; quoteChar = c; continue; }
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) return text.slice(startIdx, i + 1);
+      }
+    }
+    return null; // unbalanced — truncated script text, give up
+  }
+
   function readPlayerResponse() {
     try {
       const scripts = document.getElementsByTagName('script');
@@ -124,8 +151,8 @@
         if (!text || text.indexOf('var ytInitialPlayerResponse') !== 0) continue;
         const start = text.indexOf('{');
         if (start < 0) continue;
-        const marker = text.indexOf(';var ytInitialData');
-        const jsonText = marker > start ? text.slice(start, marker) : text.slice(start, text.lastIndexOf(';'));
+        const jsonText = extractBalancedJson(text, start);
+        if (!jsonText) continue;
         return JSON.parse(jsonText);
       }
     } catch (e) {
@@ -158,34 +185,65 @@
   // live verification — see the extractionFailed drop rule below, which
   // exists specifically so a selector miss degrades to "skip" rather than
   // "record a wrong/empty creator".
+  // A comma-separated CSS selector list resolves by DOCUMENT ORDER, not by
+  // which alternative is listed first — querySelector('#owner a, ytd-channel-name a')
+  // can return a totally unrelated channel-name element (e.g. from a sidebar
+  // recommendation) if it happens to sit earlier in the DOM than the real
+  // one. Verified live: this returned a sidebar video's channel instead of
+  // the actual video owner. Fix: try selectors in explicit JS priority order.
+  function queryFirst(selectors) {
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  // Strip YouTube's UI chrome ("...more" expander labels, the AI "Summary"
+  // panel heading, collapsed whitespace) that leaks into textContent when
+  // grabbing the description container wholesale rather than an exact
+  // snippet element (which didn't exist under any selector tried live).
+  function cleanDescriptionText(raw) {
+    return (raw || '')
+      .replace(/…\s*more/gi, ' ')
+      .replace(/\.\.\.\s*more/gi, ' ')
+      .replace(/^\s*Summary\s*$/gim, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   function extractMetaTier2(target) {
     let username = 'unknown', caption = '', profileUrl = '';
     try {
       if (target.surface === 'shorts') {
-        const a = document.querySelector(
-          'ytd-reel-video-renderer[is-active] a[href^="/@"], #shorts-container a[href^="/@"]'
-        );
+        const a = queryFirst(['ytd-reel-video-renderer[is-active] a[href^="/@"]', '#shorts-container a[href^="/@"]']);
         if (a) {
           username = (a.textContent || '').trim() || 'unknown';
           profileUrl = 'https://www.youtube.com' + (a.getAttribute('href') || '');
         }
-        const titleEl = document.querySelector(
-          'ytd-reel-video-renderer[is-active] yt-formatted-string.ytd-reel-player-header-renderer, #shorts-container h2'
-        );
+        const titleEl = queryFirst([
+          'ytd-reel-video-renderer[is-active] yt-formatted-string.ytd-reel-player-header-renderer',
+          '#shorts-container h2',
+        ]);
         if (titleEl) caption = (titleEl.textContent || '').trim();
       } else {
-        const titleEl = document.querySelector('ytd-watch-metadata h1 yt-formatted-string, h1.ytd-watch-metadata');
+        const titleEl = queryFirst(['ytd-watch-metadata h1 yt-formatted-string', 'h1.ytd-watch-metadata']);
         if (titleEl) caption = (titleEl.textContent || '').trim();
 
-        const chEl = document.querySelector('#owner #channel-name a, ytd-channel-name a');
+        // Most specific first: the actual video-owner component, not the
+        // generic ytd-channel-name tag that also appears in sidebars/comments.
+        const chEl = queryFirst([
+          '#owner #channel-name a',
+          'ytd-video-owner-renderer ytd-channel-name a',
+        ]);
         if (chEl) {
           username = (chEl.textContent || '').trim() || 'unknown';
           profileUrl = 'https://www.youtube.com' + (chEl.getAttribute('href') || '');
         }
 
-        const descEl = document.querySelector('#description-inline-expander, #description');
+        const descEl = queryFirst(['#description-inline-expander', '#description']);
         if (descEl) {
-          const desc = (descEl.textContent || '').trim().slice(0, 1500);
+          const desc = cleanDescriptionText(descEl.textContent).slice(0, 1500);
           if (desc) caption = caption ? `${caption}\n${desc}` : desc;
         }
       }
@@ -241,6 +299,23 @@
     const v = getVideoEl();
     state.lastCurrentTime = v ? v.currentTime : 0;
     console.log('[AIMirror-YT] ▶ Watching:', target.surface, target.videoId, `(tier ${state.meta.tier})`);
+
+    // Verified live: on an SPA nav (not a hard reload), tier 1 is correctly
+    // rejected as stale, but tier 2's DOM can *also* still be mid-hydration
+    // at this exact instant — title/channel came back empty even though the
+    // right elements existed a second later. One delayed re-extraction,
+    // guarded so it only applies to the SAME target, catches that lag
+    // without needing a fixed "wait N ms before extracting" that would
+    // just be wrong for a hard page load where the DOM is already ready.
+    setTimeout(() => {
+      if (!sameTarget(state.target, target)) return; // moved on already
+      if (state.meta.tier === 1) return; // tier 1 is never a hydration race
+      const retry = extractMeta(target);
+      if (retry.caption || retry.username !== 'unknown') {
+        state.meta = { ...state.meta, ...retry };
+        console.log('[AIMirror-YT] ↻ Re-extracted after hydration delay:', target.videoId, `(tier ${retry.tier})`);
+      }
+    }, 1200);
   }
 
   function accumulateWatchTime() {
