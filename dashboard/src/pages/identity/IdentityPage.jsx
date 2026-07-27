@@ -47,9 +47,10 @@ export default function IdentityPage() {
     { trait: 'Stability', value: Math.round((behaviorProfile.behavior_stability || 0) * 100) },
   ]
 
-  const versionHistory = snapshotList.map((s, i) => ({
-    version: s.snapshot_version || i + 1,
-    confidence: s.confidence || (s.overall_confidence || 0),
+  const versionHistory = snapshotList.map((s) => ({
+    version: s.identity_version,
+    confidence: s.confidence ?? s.overall_confidence ?? 0,
+    completeness: s.identity_completeness ?? 0,
     timestamp: s.snapshot_timestamp || s.created_at,
   })).reverse()
 
@@ -108,7 +109,7 @@ export default function IdentityPage() {
         <GlassCard gradient>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>Identity Evolution</h3>
-            <Badge variant="neutral">Confidence over versions</Badge>
+            <Badge variant="neutral">Confidence + completeness over versions</Badge>
           </div>
           <ResponsiveContainer width="100%" height={320}>
             <AreaChart data={versionHistory}>
@@ -117,12 +118,17 @@ export default function IdentityPage() {
                   <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
                   <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                 </linearGradient>
+                <linearGradient id="colorComplete" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
               <XAxis dataKey="version" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} label={{ value: 'Version', position: 'bottom', fill: '#64748b', fontSize: 11 }} />
               <YAxis domain={[0, 1]} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#e2e8f0' }} itemStyle={{ color: '#e2e8f0' }} />
-              <Area type="monotone" dataKey="confidence" stroke="#6366f1" fill="url(#colorConf)" strokeWidth={2} />
+              <Area type="monotone" dataKey="confidence" name="Confidence" stroke="#6366f1" fill="url(#colorConf)" strokeWidth={2} />
+              <Area type="monotone" dataKey="completeness" name="Completeness" stroke="#10b981" fill="url(#colorComplete)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         </GlassCard>
