@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useV3Health } from '../../hooks/useApi'
-import { api, DEFAULT_USER } from '../../api/client'
+import { api, DEFAULT_USER, activeUser } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
-import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon } from '../../icons/icons'
+import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon, DownloadIcon, AlertIcon } from '../../icons/icons'
 
 export default function SettingsPage() {
   const { data: v3Health, refetch: refetchV3 } = useV3Health()
@@ -11,6 +11,23 @@ export default function SettingsPage() {
   const [testForm, setTestForm] = useState({ userId: DEFAULT_USER })
   const [testResult, setTestResult] = useState(null)
   const [testLoading, setTestLoading] = useState(false)
+
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleteStep, setDeleteStep] = useState('idle') // idle | confirming | deleting | done
+  const [deleteResult, setDeleteResult] = useState(null)
+  const currentUser = activeUser()
+
+  const runDelete = async () => {
+    setDeleteStep('deleting')
+    try {
+      const res = await api.deleteAllData(deleteConfirmText)
+      setDeleteResult(res)
+      setDeleteStep('done')
+    } catch (err) {
+      setDeleteResult({ error: err?.response?.data?.detail || err.message })
+      setDeleteStep('done')
+    }
+  }
 
   const runTest = async (endpoint) => {
     setTestLoading(true)
@@ -149,6 +166,106 @@ export default function SettingsPage() {
             <span style={{ color: 'var(--text-secondary)' }}>FastAPI + PostgreSQL (Neon)</span>
           </div>
         </div>
+      </GlassCard>
+
+      <GlassCard gradient style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fb7185' }}>
+            <AlertIcon />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Data & Privacy</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Every row this platform holds for {currentUser}, across every table — export it or permanently delete it.</p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <a href={api.exportAllDataUrl()} download={`${currentUser}_all_data.json`} target="_blank" rel="noreferrer" style={{
+            padding: '10px 16px', borderRadius: 10, border: '1px solid var(--border-subtle)',
+            background: 'transparent', color: 'var(--text-secondary)', fontSize: 13,
+            textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8,
+          }}>
+            <DownloadIcon /> Export all my data (JSON)
+          </a>
+        </div>
+
+        {deleteStep === 'idle' && (
+          <button onClick={() => setDeleteStep('confirming')} style={{
+            padding: '10px 16px', borderRadius: 10, border: '1px solid rgba(244,63,94,0.3)',
+            background: 'rgba(244,63,94,0.08)', color: '#fb7185', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>
+            Delete all my data
+          </button>
+        )}
+
+        {deleteStep === 'confirming' && (
+          <div style={{ padding: 16, borderRadius: 10, background: 'rgba(244,63,94,0.06)', border: '1px solid rgba(244,63,94,0.25)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#fb7185', marginBottom: 6 }}>
+              This permanently deletes every row for "{currentUser}" — behavior objects, evidence, inferences,
+              reflections, identity, snapshots, chat history, everything. This cannot be undone.
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              Type <strong style={{ color: 'var(--text-secondary)' }}>{currentUser}</strong> to confirm.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={deleteConfirmText}
+                onChange={e => setDeleteConfirmText(e.target.value)}
+                placeholder={currentUser}
+                style={{
+                  flex: 1, padding: '8px 12px', borderRadius: 6,
+                  background: '#1e293b', border: '1px solid rgba(244,63,94,0.3)',
+                  color: '#f8fafc', fontSize: 13, outline: 'none', colorScheme: 'dark',
+                }}
+              />
+              <button
+                onClick={runDelete}
+                disabled={deleteConfirmText !== currentUser}
+                style={{
+                  padding: '8px 16px', borderRadius: 6, border: 'none',
+                  background: deleteConfirmText === currentUser ? '#e11d48' : 'rgba(148,163,184,0.15)',
+                  color: 'white', fontSize: 13, fontWeight: 600,
+                  cursor: deleteConfirmText === currentUser ? 'pointer' : 'not-allowed',
+                }}
+              >
+                Permanently delete
+              </button>
+              <button onClick={() => { setDeleteStep('idle'); setDeleteConfirmText('') }} style={{
+                padding: '8px 16px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+                background: 'transparent', color: 'var(--text-tertiary)', fontSize: 13, cursor: 'pointer',
+              }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {deleteStep === 'deleting' && (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Deleting…</div>
+        )}
+
+        {deleteStep === 'done' && deleteResult && (
+          <div style={{ padding: 16, borderRadius: 10, background: deleteResult.error ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)', border: `1px solid ${deleteResult.error ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'}` }}>
+            {deleteResult.error ? (
+              <div style={{ fontSize: 13, color: '#f87171' }}>{deleteResult.error}</div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#34d399', marginBottom: 6 }}>
+                  Deleted {deleteResult.total_deleted} rows across {Object.values(deleteResult.deleted_rows_by_table).filter(v => v > 0).length} tables.
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  {Object.entries(deleteResult.deleted_rows_by_table).filter(([, v]) => v > 0).map(([t, v]) => `${t}: ${v}`).join(' · ')}
+                </div>
+              </>
+            )}
+            <button onClick={() => { setDeleteStep('idle'); setDeleteConfirmText(''); setDeleteResult(null) }} style={{
+              marginTop: 10, padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+              background: 'transparent', color: 'var(--text-tertiary)', fontSize: 12, cursor: 'pointer',
+            }}>
+              Close
+            </button>
+          </div>
+        )}
       </GlassCard>
     </div>
   )

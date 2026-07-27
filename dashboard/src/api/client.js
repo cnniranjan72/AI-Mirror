@@ -241,6 +241,15 @@ export const api = {
     const { data } = await client.post(`/guardian/alert-log/${alertId}/acknowledge`, null, { params: { user_id: userId } });
     return data;
   },
+  exportAllDataUrl: (userId = activeUser()) =>
+    `${API_BASE_URL}/privacy/export-all?user_id=${encodeURIComponent(userId)}`,
+  // confirmUserId must be what the user actually typed to confirm — the
+  // backend rejects the call if it doesn't match user_id, as a guard
+  // against an accidental click triggering an irreversible deletion.
+  deleteAllData: async (confirmUserId, userId = activeUser()) => {
+    const { data } = await client.post('/privacy/delete-all-data', { user_id: userId, confirm_user_id: confirmUserId });
+    return data;
+  },
 };
 
 export default client;
