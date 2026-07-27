@@ -121,7 +121,7 @@ export default function IdentityPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
               <XAxis dataKey="version" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} label={{ value: 'Version', position: 'bottom', fill: '#64748b', fontSize: 11 }} />
               <YAxis domain={[0, 1]} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#e2e8f0' }} itemStyle={{ color: '#e2e8f0' }} />
               <Area type="monotone" dataKey="confidence" stroke="#6366f1" fill="url(#colorConf)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>

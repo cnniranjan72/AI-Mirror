@@ -64,7 +64,7 @@ export default function DecisionPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
               <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#e2e8f0' }} itemStyle={{ color: '#e2e8f0' }} />
               <Bar dataKey="Input" fill="#6366f1" radius={[2, 2, 0, 0]} />
               <Bar dataKey="Output" fill="#10b981" radius={[2, 2, 0, 0]} />
               <Bar dataKey="Conflicts" fill="#f43f5e" radius={[2, 2, 0, 0]} />
@@ -82,7 +82,7 @@ export default function DecisionPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
               <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis domain={[0, 1]} tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} />
+              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#e2e8f0' }} itemStyle={{ color: '#e2e8f0' }} />
               <Bar dataKey="confidence" radius={[4, 4, 0, 0]}>
                 {confidenceData.map((_, i) => (
                   <Cell key={i} fill={confidenceData[i]?.confidence > 0.7 ? '#10b981' : confidenceData[i]?.confidence > 0.4 ? '#f59e0b' : '#ef4444'} />
