@@ -11,6 +11,14 @@ const RISK_COLOR = { low: '#10b981', moderate: '#f59e0b', elevated: '#f43f5e' }
 
 export default function GuardianPage() {
   const { data: report, loading } = useApi(() => api.getGuardianReport(), [])
+  const { data: alertLog, refetch: refetchAlertLog } = useApi(() => api.getGuardianAlertLog(), [])
+
+  const acknowledge = async (alertId) => {
+    try {
+      await api.acknowledgeGuardianAlert(alertId)
+      refetchAlertLog()
+    } catch (_) { /* ignore */ }
+  }
 
   const hourly = report?.session_patterns?.hourly_distribution || {}
   const hourlyData = Object.entries(hourly).map(([h, n]) => ({
@@ -155,6 +163,52 @@ export default function GuardianPage() {
               </div>
             </div>
           ))}
+        </div>
+      </GlassCard>
+
+      {/* Alert history — the in-app push-equivalent: a persistent log of
+          risk-level state changes, not a snapshot that vanishes when this
+          page closes. */}
+      <GlassCard gradient style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600 }}>Alert History</h3>
+          <Badge variant="neutral">{alertLog?.length || 0} logged</Badge>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+          A new entry is recorded only when the risk level actually changes — this is the closest honest
+          equivalent to a push notification without external email/webhook delivery configured.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(alertLog || []).length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No risk-level changes logged yet</div>
+          ) : alertLog.map(a => {
+            const c = RISK_COLOR[a.risk_level] || '#94a3b8'
+            return (
+              <div key={a.alert_id} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8,
+                background: `${c}0d`, border: `1px solid ${c}33`, opacity: a.acknowledged ? 0.6 : 1,
+              }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: c, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: c, textTransform: 'capitalize' }}>
+                    {a.risk_level} risk — {Math.round(a.risk_score * 100)}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {a.risk_factors.join('; ') || 'No factors recorded'} · {new Date(a.created_at).toLocaleString()}
+                  </div>
+                </div>
+                {!a.acknowledged && (
+                  <button onClick={() => acknowledge(a.alert_id)} style={{
+                    padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)',
+                    background: 'transparent', color: 'var(--text-tertiary)', fontSize: 11,
+                    cursor: 'pointer', flexShrink: 0,
+                  }}>
+                    Acknowledge
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       </GlassCard>
     </div>

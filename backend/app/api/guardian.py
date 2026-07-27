@@ -27,3 +27,23 @@ async def get_guardian_sessions(user_id: str = Query(default="default")):
 @router.get("/guardian/alerts")
 async def get_guardian_alerts(user_id: str = Query(default="default")):
     return await wellbeing.get_content_alerts(user_id)
+
+
+@router.get("/guardian/alert-log")
+async def get_guardian_alert_log(user_id: str = Query(default="default"), limit: int = Query(default=20)):
+    """Persistent risk-level alert history — the in-app push-equivalent.
+    A new row is only written when risk_level actually changes (see
+    wellbeing._maybe_log_alert), so this is a real state-change log, not
+    a per-page-view snapshot."""
+    return await wellbeing.get_alert_log(user_id, limit)
+
+
+@router.get("/guardian/alert-log/unacknowledged-count")
+async def get_guardian_unacknowledged_count(user_id: str = Query(default="default")):
+    return {"count": await wellbeing.get_unacknowledged_alert_count(user_id)}
+
+
+@router.post("/guardian/alert-log/{alert_id}/acknowledge")
+async def acknowledge_guardian_alert(alert_id: str, user_id: str = Query(default="default")):
+    await wellbeing.acknowledge_alert(user_id, alert_id)
+    return {"success": True}

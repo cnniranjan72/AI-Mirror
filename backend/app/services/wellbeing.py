@@ -10,11 +10,12 @@ explainable ("why is this flagged?") to be usable by a guardian, a clinician,
 or a researcher. See ALIGNMENT_DIMENSIONS in rl_layer.py for the related (but
 distinct) behavioral-alignment framing used by the RL loop.
 """
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
-from app.db.postgres import fetch
+from app.db.postgres import fetch, fetchrow, execute
 
 logger = logging.getLogger(__name__)
 
@@ -199,10 +200,13 @@ async def compute_wellbeing_report(user_id: str) -> Dict[str, Any]:
     if not recommendations:
         recommendations.append("No elevated risk factors detected — usage pattern looks balanced.")
 
+    risk_level = "low" if risk < 0.3 else ("moderate" if risk < 0.6 else "elevated")
+    await _maybe_log_alert(user_id, risk_level, risk, risk_factors)
+
     return {
         "user_id": user_id,
         "risk_score": risk,
-        "risk_level": "low" if risk < 0.3 else ("moderate" if risk < 0.6 else "elevated"),
+        "risk_level": risk_level,
         "risk_factors": risk_factors,
         "session_patterns": sessions,
         "content_alerts": alerts,
@@ -210,3 +214,70 @@ async def compute_wellbeing_report(user_id: str) -> Dict[str, Any]:
         "recommendations": recommendations,
         "generated_at": datetime.utcnow().isoformat(),
     }
+
+
+async def _maybe_log_alert(user_id: str, risk_level: str, risk_score: float, risk_factors: List[str]) -> None:
+    """Record a persistent alert row when risk is elevated/moderate — the
+    in-app equivalent of a push notification (no external delivery infra
+    like email/webhooks is configured, so this is the honest version:
+    a real, queryable alert history instead of a fresh computation that
+    vanishes the moment the page closes). Deduped against the most recent
+    alert for this user so it only grows on an actual state change, not
+    once per page view."""
+    if risk_level == "low":
+        return
+    try:
+        last = await fetchrow(
+            "SELECT risk_level FROM guardian_alerts WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
+            user_id,
+        )
+        if last and last["risk_level"] == risk_level:
+            return
+        alert_id = f"alert_{user_id}_{int(datetime.utcnow().timestamp() * 1000)}"
+        await execute(
+            "INSERT INTO guardian_alerts (alert_id, user_id, risk_level, risk_score, risk_factors) "
+            "VALUES ($1,$2,$3,$4,$5::jsonb) ON CONFLICT (alert_id) DO NOTHING",
+            alert_id, user_id, risk_level, risk_score, json.dumps(risk_factors),
+        )
+    except Exception as e:
+        logger.warning(f"Could not log guardian alert: {e}")
+
+
+async def get_alert_log(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+    rows = await fetch(
+        "SELECT alert_id, risk_level, risk_score, risk_factors, acknowledged, created_at "
+        "FROM guardian_alerts WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+        user_id, limit,
+    )
+    out = []
+    for r in rows:
+        rf = r["risk_factors"]
+        if isinstance(rf, str):
+            try:
+                rf = json.loads(rf)
+            except Exception:
+                rf = []
+        out.append({
+            "alert_id": r["alert_id"],
+            "risk_level": r["risk_level"],
+            "risk_score": float(r["risk_score"]),
+            "risk_factors": rf or [],
+            "acknowledged": r["acknowledged"],
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+        })
+    return out
+
+
+async def get_unacknowledged_alert_count(user_id: str) -> int:
+    row = await fetchrow(
+        "SELECT COUNT(*) as c FROM guardian_alerts WHERE user_id = $1 AND acknowledged = FALSE",
+        user_id,
+    )
+    return int(row["c"]) if row else 0
+
+
+async def acknowledge_alert(user_id: str, alert_id: str) -> None:
+    await execute(
+        "UPDATE guardian_alerts SET acknowledged = TRUE WHERE user_id = $1 AND alert_id = $2",
+        user_id, alert_id,
+    )

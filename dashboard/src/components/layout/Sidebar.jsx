@@ -54,6 +54,17 @@ export default function Sidebar({ collapsed, onToggle }) {
     if (cmdOpen && inputRef.current) inputRef.current.focus()
   }, [cmdOpen])
 
+  const [guardianAlertCount, setGuardianAlertCount] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    const check = () => api.getGuardianUnacknowledgedCount().then(d => {
+      if (!cancelled) setGuardianAlertCount(d.count || 0)
+    }).catch(() => {})
+    check()
+    const id = setInterval(check, 60000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [])
+
   useEffect(() => {
     if (!cmdOpen) { setSearchResults([]); setCmdQuery('') }
   }, [cmdOpen])
@@ -175,10 +186,30 @@ export default function Sidebar({ collapsed, onToggle }) {
                         background: 'var(--accent-gradient)',
                       }} />
                     )}
-                    <div style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
                       <Icon />
+                      {item.path === '/guardian' && guardianAlertCount > 0 && (
+                        <div style={{
+                          position: 'absolute', top: -4, right: collapsed ? -4 : -6,
+                          minWidth: 14, height: 14, borderRadius: 7, padding: '0 3px',
+                          background: '#f43f5e', color: 'white', fontSize: 9, fontWeight: 700,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          border: '1.5px solid rgba(15,23,42,0.85)',
+                        }}>
+                          {guardianAlertCount > 9 ? '9+' : guardianAlertCount}
+                        </div>
+                      )}
                     </div>
                     {!collapsed && <span>{item.label}</span>}
+                    {!collapsed && item.path === '/guardian' && guardianAlertCount > 0 && (
+                      <div style={{
+                        marginLeft: 'auto', minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
+                        background: '#f43f5e', color: 'white', fontSize: 10, fontWeight: 700,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        {guardianAlertCount > 9 ? '9+' : guardianAlertCount}
+                      </div>
+                    )}
                   </>
                 )}
               </NavLink>

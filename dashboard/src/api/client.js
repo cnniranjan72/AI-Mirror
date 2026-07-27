@@ -229,6 +229,18 @@ export const api = {
     const { data } = await client.post('/insights/campaign-resonance', { user_id: userId, campaign_text: campaignText });
     return data;
   },
+  getGuardianAlertLog: async (userId = activeUser(), limit = 20) => {
+    const { data } = await client.get('/guardian/alert-log', { params: { user_id: userId, limit } });
+    return data;
+  },
+  getGuardianUnacknowledgedCount: async (userId = activeUser()) => {
+    const { data } = await client.get('/guardian/alert-log/unacknowledged-count', { params: { user_id: userId } });
+    return data;
+  },
+  acknowledgeGuardianAlert: async (alertId, userId = activeUser()) => {
+    const { data } = await client.post(`/guardian/alert-log/${alertId}/acknowledge`, null, { params: { user_id: userId } });
+    return data;
+  },
 };
 
 export default client;
