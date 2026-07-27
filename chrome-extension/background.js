@@ -100,7 +100,8 @@ async function getBackendStatus(activeTabId) {
   const userId = result.userId || 'default';
   const sessions = result.sessions || [];
   const localEvents = sessions.reduce((sum, s) => sum + (s.events?.length || 0), 0);
-  const isOnInstagram = activeTabId ? activeSessions.has(activeTabId) : false;
+  // Tracks Instagram AND YouTube sessions now — name reflects that.
+  const isTracking = activeTabId ? activeSessions.has(activeTabId) : false;
 
   const status = {
     connected: false,
@@ -113,7 +114,7 @@ async function getBackendStatus(activeTabId) {
 
   try {
     const healthResp = await fetch(`${CONFIG.API_BASE_URL}/health`, { signal: AbortSignal.timeout(5000) });
-    if (!healthResp.ok) return { ...status, localEvents, isOnInstagram, activeSessions: activeSessions.size };
+    if (!healthResp.ok) return { ...status, localEvents, isTracking, activeSessions: activeSessions.size };
     status.connected = true;
 
     const [summaryResp, profileResp] = await Promise.allSettled([
@@ -144,7 +145,7 @@ async function getBackendStatus(activeTabId) {
     // Backend unreachable — status.connected stays false
   }
 
-  return { ...status, localEvents, isOnInstagram, activeSessions: activeSessions.size };
+  return { ...status, localEvents, isTracking, activeSessions: activeSessions.size };
 }
 
 // ==================== DATA SYNC ====================

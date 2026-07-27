@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "AIMirror - Instagram Behavioral Tracker",
-  "version": "1.0.0",
-  "description": "Track your Instagram Reels behavior for transparency and self-awareness",
+  "name": "AIMirror - Behavioral Tracker (Instagram + YouTube)",
+  "version": "1.1.0",
+  "description": "Track your Instagram Reels and YouTube watching behavior for transparency and self-awareness",
   "permissions": [
     "storage",
     "tabs",
@@ -10,6 +10,7 @@
   ],
   "host_permissions": [
     "https://www.instagram.com/*",
+    "https://www.youtube.com/*",
     "http://localhost:8000/*",
     "http://localhost:8001/*",
     "http://127.0.0.1:8000/*",
@@ -22,6 +23,11 @@
     {
       "matches": ["https://www.instagram.com/*"],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["youtube-content.js"],
       "run_at": "document_idle"
     }
   ],
