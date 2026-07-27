@@ -5,6 +5,7 @@ import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
 import { AlertIcon, ClockIcon, CheckIcon, TargetIcon } from '../../icons/icons'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const RISK_COLOR = { low: '#10b981', moderate: '#f59e0b', elevated: '#f43f5e' }
 
@@ -18,6 +19,7 @@ export default function GuardianPage() {
   }))
 
   const riskColor = RISK_COLOR[report?.risk_level] || '#94a3b8'
+  const alertCategories = [...new Set((report?.content_alerts || []).flatMap(a => a.categories || []))]
 
   return (
     <div>
@@ -46,15 +48,27 @@ export default function GuardianPage() {
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+              <div style={{ width: 90, height: 90, flexShrink: 0, margin: '-12px 0' }}>
+                <CharacterCreature3D
+                  size={90}
+                  variant="shield"
+                  confidence={0.4 + (report?.risk_score || 0) * 0.6}
+                  topics={alertCategories}
+                  moodColor={riskColor}
+                  thinking={loading}
+                  showLabels={false}
+                />
+              </div>
               <div style={{
                 width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: `${riskColor}18`, border: `2px solid ${riskColor}`, color: riskColor, fontWeight: 800, fontSize: 18,
+                flexShrink: 0,
               }}>
                 {Math.round((report?.risk_score || 0) * 100)}
               </div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: riskColor, textTransform: 'capitalize' }}>{report?.risk_level} risk</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Composite score from real, independently-computed behavioral signals</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Composite score from real, independently-computed behavioral signals — shield color and solidity mirror this score</div>
               </div>
             </div>
             {report?.risk_factors?.length > 0 && (

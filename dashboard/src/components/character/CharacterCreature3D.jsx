@@ -182,6 +182,61 @@ function Robot({ colorHex, glowIntensity, thinking }) {
   )
 }
 
+const SHIELD_SHAPE = (() => {
+  const s = new THREE.Shape()
+  s.moveTo(-0.5, 0.35)
+  s.quadraticCurveTo(-0.5, 0.55, -0.25, 0.55)
+  s.lineTo(0.25, 0.55)
+  s.quadraticCurveTo(0.5, 0.55, 0.5, 0.35)
+  s.lineTo(0.5, 0)
+  s.quadraticCurveTo(0.5, -0.35, 0, -0.7)
+  s.quadraticCurveTo(-0.5, -0.35, -0.5, 0)
+  s.lineTo(-0.5, 0.35)
+  return s
+})()
+const SHIELD_EXTRUDE = { depth: 0.07, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 }
+
+/**
+ * A holographic shield — for surfaces about protection/risk (Guardian),
+ * not a companion. Stands its ground rather than spinning: a slow
+ * protective sway instead of continuous rotation, plus a pulsing core
+ * gem whose speed reflects how actively risk is being (re)assessed.
+ */
+function Shield({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const matRefs = useRef([])
+  const gemRef = useRef(null)
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.2 : 1
+    matRefs.current.forEach((m) => { if (m) m.uTime = t })
+    if (group.current) {
+      group.current.rotation.y = Math.sin(t * 0.5 * speed) * 0.35
+      group.current.position.y = Math.sin(t * 1.1 * speed) * 0.05
+    }
+    if (gemRef.current) {
+      const pulse = 0.7 + 0.3 * Math.sin(t * (thinking ? 5 : 2))
+      gemRef.current.scale.setScalar(pulse)
+    }
+  })
+
+  const setRef = (i) => (r) => { matRefs.current[i] = r }
+
+  return (
+    <group ref={group}>
+      <mesh position={[0, 0, -0.035]}>
+        <extrudeGeometry args={[SHIELD_SHAPE, SHIELD_EXTRUDE]} />
+        <holoMaterial ref={setRef(0)} uColor={colorHex} uOpacity={glowIntensity} transparent depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh ref={gemRef} position={[0, 0.05, 0.08]}>
+        <octahedronGeometry args={[0.16, 0]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={glowIntensity} />
+      </mesh>
+    </group>
+  )
+}
+
 function OrbitingLabels({ topics, colorHex }) {
   const items = useMemo(() => topics.slice(0, 6).map((t, i, arr) => ({
     label: t.length > 18 ? t.slice(0, 16) + '…' : t,
@@ -229,7 +284,7 @@ export default function CharacterCreature3D({
 }) {
   const colorHex = moodColor || '#818cf8'
   const glowIntensity = 0.45 + confidence * 0.55
-  const Being = variant === 'robot' ? Robot : Creature
+  const Being = variant === 'robot' ? Robot : variant === 'shield' ? Shield : Creature
 
   return (
     <div style={{ width: size, height: size }}>
