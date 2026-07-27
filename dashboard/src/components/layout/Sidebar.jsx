@@ -3,13 +3,15 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   DashboardIcon, IdentityIcon, MemoryIcon, EvidenceIcon, BehaviorIcon,
   PlanningIcon, DecisionIcon, PipelineIcon, AnalyticsIcon, ChatIcon, SettingsIcon,
-  SearchIcon, ChevronLeftIcon, ZapIcon, AlertIcon, CpuIcon, DownloadIcon
+  SearchIcon, ChevronLeftIcon, ZapIcon, AlertIcon, CpuIcon, DownloadIcon,
+  UploadIcon, BookIcon, CompassIcon
 } from '../../icons/icons'
 import { api, isAuthed, displayName } from '../../api/client'
 import AuthModal from '../auth/AuthModal'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
+  { path: '/import', label: 'Import', icon: UploadIcon },
   { path: '/identity', label: 'Identity', icon: IdentityIcon },
   { path: '/character', label: 'Character', icon: CpuIcon },
   { path: '/memory', label: 'Memory', icon: MemoryIcon },
@@ -23,6 +25,8 @@ const navItems = [
   { path: '/pipeline', label: 'Pipeline', icon: PipelineIcon },
   { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
   { path: '/chat', label: 'Chat', icon: ChatIcon },
+  { path: '/guide', label: 'Guide', icon: CompassIcon },
+  { path: '/documentation', label: 'Documentation', icon: BookIcon },
   { path: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
