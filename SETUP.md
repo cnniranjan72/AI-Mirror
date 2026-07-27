@@ -1,332 +1,173 @@
-# AIMirror Setup Guide
+# AIMirror — Local Setup Guide
 
-Complete production-grade behavioral intelligence system.
+Get the backend, dashboard, and browser extension running locally after cloning from GitHub. This
+guide reflects the current V3 architecture (Identity/Evidence/Inference pipeline, dashboard, auth,
+and dual Instagram+YouTube ingestion) — not the earlier V1/V2 persona-archetype system some older
+docs in this repo still describe.
 
-## Architecture
+## Prerequisites
 
+- **Python 3.11+** (built and tested on 3.13)
+- **Node.js 18+** (tested on 22) and npm
+- **A PostgreSQL database with the `pgvector` extension** — [Neon](https://neon.tech) has a free tier and is what this project was built against; any Postgres with pgvector works. There is no SQLite or offline fallback — `DATABASE_URL` is required and the backend refuses to start without it.
+- **Either** [Ollama](https://ollama.com) (free, runs locally, no API costs) **or** an OpenAI/Anthropic API key, for the LLM verbalization layer
+
+## 1. Clone
+
+```bash
+git clone <this-repo-url>
+cd AI-Mirror
 ```
-Chrome Extension (DOM extraction)
-    ↓
-Backend FastAPI (enrich → expand → embed → store)
-    ↓
-Postgres + pgvector (embeddings + personas)
-    ↓
-RAG → Persona Engine → RL-ready Layer
+
+## 2. Backend
+
+```bash
+cd backend
+python -m venv venv
 ```
 
----
+Activate it:
+- Windows (Git Bash): `source venv/Scripts/activate`
+- Windows (PowerShell): `venv\Scripts\Activate.ps1`
+- Mac/Linux: `source venv/bin/activate`
 
-## Quick Start (5 minutes)
-
-### 1. Backend Setup
-
-```powershell
-# Navigate to backend
-cd C:\Users\cnnir\Documents\AI-Mirror\backend
-
-# Install dependencies
+```bash
 pip install -r requirements.txt
-
-# Setup database (already done!)
-python setup_db.py
-
-# Start server
-python -m uvicorn app.main:app --host localhost --port 8000 --reload
 ```
 
-Open browser: http://localhost:8000/docs
+### Configure
 
----
+Create **`backend/.env`**:
 
-### 2. Chrome Extension Setup
+```env
+# Required — no fallback. Get a free Postgres+pgvector database at
+# https://console.neon.tech
+DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require
 
-```powershell
-# Extension is in chrome-extension folder
-cd C:\Users\cnnir\Documents\AI-Mirror\chrome-extension
+# LLM verbalization layer — the ONLY place an LLM is used. By design it
+# never reasons or decides anything; it only turns already-decided facts
+# (produced by the deterministic pipeline) into prose.
+LLM_PROVIDER=ollama          # "ollama" (local/free), "openai", or "anthropic"
+OLLAMA_BASE_URL=http://localhost:11434/v1
+LLM_MODEL_OLLAMA=llama3.2
+# OPENAI_API_KEY=
+# ANTHROPIC_API_KEY=
 
-# Load in Chrome:
-# 1. Open chrome://extensions
-# 2. Enable "Developer mode"
-# 3. Click "Load unpacked"
-# 4. Select: chrome-extension folder
-```
+# Signs auth tokens. Defaults to a placeholder — set your own random
+# value before this backend is reachable by anyone besides you (see
+# "Known limitations" below for why this matters).
+AUTH_SECRET=change-me-to-something-random
 
----
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | API info |
-| `/health` | GET | Health check |
-| `/ingest` | POST | Full pipeline (events → embeddings) |
-| `/query` | POST | RAG query with persona context |
-| `/profile` | GET | Get user persona + alignment |
-
----
-
-## Test Commands (PowerShell)
-
-### Health Check
-```powershell
-Invoke-RestMethod -Uri "http://localhost:8000/health" | ConvertTo-Json
-```
-
-### Ingest Events
-```powershell
-$body = @{
-    user_id = "demo_user"
-    events = @(
-        @{
-            reel_id = "reel_001"
-            username = "finance_guru"
-            caption = "How to start investing in stocks with small capital. Beginner friendly! #finance #investing #stocks"
-            hashtags = @("#finance", "#investing", "#stocks")
-            audio = "Trending Finance Audio"
-            watch_time = 18.5
-            timestamp = "2024-01-15T10:30:00Z"
-            session_id = "sess_001"
-        }
-    )
-} | ConvertTo-Json -Depth 10
-
-Invoke-RestMethod -Uri "http://localhost:8000/ingest" -Method POST -ContentType "application/json" -Body $body
-```
-
-### Get Profile
-```powershell
-Invoke-RestMethod -Uri "http://localhost:8000/profile?user_id=demo_user" | ConvertTo-Json -Depth 10
-```
-
-### RAG Query
-```powershell
-$body = @{
-    user_id = "demo_user"
-    query = "What content do I watch most?"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Uri "http://localhost:8000/query" -Method POST -ContentType "application/json" -Body $body | ConvertTo-Json -Depth 10
-```
-
----
-
-## Pipeline Flow
-
-When you send events to `/ingest`:
-
-1. **Store** → Raw events saved to `events` table
-2. **Enrich** → NLP analysis (topics, sentiment, intent)
-3. **Expand** → Short caption → rich embeddable text
-4. **Embed** → Generate 384-dim vector (MiniLM-L6-v2)
-5. **Store** → Save to `embeddings` table (pgvector)
-6. **Features** → Compute behavioral metrics
-7. **Persona** → Map to archetype (Explorer/Focused Learner/etc)
-8. **RL** → Compute alignment + suggest action
-
----
-
-## Database Schema
-
-### events
-- `id`, `user_id`, `reel_id`, `username`, `caption`
-- `hashtags` (JSONB), `audio`, `watch_time`, `timestamp`, `session_id`
-
-### embeddings
-- `id`, `user_id`, `text`, `embedding` (VECTOR(384))
-- `doc_type`, `metadata` (JSONB), `content_tsv` (full-text search)
-
-### personas
-- `user_id`, `interest_vector`, `behavior_vector`
-- `persona_label`, `traits`, `recommendations`, `confidence`
-
-### actions_log (RL)
-- `user_id`, `action_type`, `action_data`, `state`, `reward`
-
----
-
-## File Structure
-
-```
-backend/
-├── app/
-│   ├── main.py              # FastAPI app
-│   ├── api/
-│   │   ├── ingest.py        # POST /ingest
-│   │   ├── query.py         # POST /query
-│   │   └── profile.py       # GET /profile
-│   ├── services/
-│   │   ├── enrichment.py    # NLP topics/sentiment/intent
-│   │   ├── expansion.py     # Content expansion
-│   │   ├── embedding.py     # MiniLM-L6-v2 encoder
-│   │   ├── vector_store.py  # pgvector operations
-│   │   ├── feature_engineering.py
-│   │   ├── rag.py           # RAG with hybrid search
-│   │   ├── persona.py       # Persona archetypes
-│   │   └── rl_layer.py      # RL-ready state/actions
-│   └── db/
-│       ├── postgres.py      # Async connection pool
-│       └── schema.sql       # Database schema
-├── .env                     # DATABASE_URL
-├── requirements.txt
-└── setup_db.py              # Run schema
-
-chrome-extension/
-├── content.js               # Reel extraction + batching
-├── manifest.json
-└── icons/
-```
-
----
-
-## Environment Variables
-
-Create `.env` in `backend/`:
-
-```
-DATABASE_URL=postgresql://user:pass@host/neondb?sslmode=require
 PORT=8000
-EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+LOG_LEVEL=INFO
 ```
 
----
+**If using Ollama:** install it, then pull the model once:
+```bash
+ollama pull llama3.2
+```
+Ollama runs as a local background service on port 11434 automatically after install.
 
-## Chrome Extension Features
+### Run
 
-- **Viewport detection** → Finds most visible video
-- **Metadata extraction** → Username, caption, hashtags, audio
-- **Watch tracking** → Start/stop times, session ID
-- **Batching** → Send every 10 events OR 30 seconds
-- **Retry logic** → Failed batches re-queued
+From **inside `backend/`**, with the venv active — this exact form (run from the `backend/`
+directory, both repo root and `backend/` on `PYTHONPATH`) is what's actually been verified working
+throughout this project's development:
 
----
+```bash
+# Git Bash / macOS / Linux (adjust the path to your clone location):
+PYTHONPATH="/path/to/AI-Mirror:/path/to/AI-Mirror/backend" python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+```powershell
+# PowerShell:
+$env:PYTHONPATH = "C:\path\to\AI-Mirror;C:\path\to\AI-Mirror\backend"
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
 
-## Persona Archetypes
+You do **not** need to run any separate database-setup script — every migration applies
+automatically on startup. The log should end with something like `Migration V10 applied
+successfully` and `Database ready`. Verify with:
 
-| Archetype | Description |
-|-----------|-------------|
-| **Explorer** | Diverse content, high curiosity |
-| **Focused Learner** | Deep engagement, educational content |
-| **High-Stimulation Seeker** | Rapid scrolling, stimulation-seeking |
-| **Passive Consumer** | Casual browsing, low engagement |
+```bash
+curl http://127.0.0.1:8000/health
+```
+You should get back `{"status":"healthy", ...}`.
 
----
+**If you see `ModuleNotFoundError: No module named 'backend'` or `'app'`** — `PYTHONPATH` isn't set
+correctly, or you're not running from inside `backend/`. See Troubleshooting below.
+
+## 3. Dashboard
+
+```bash
+cd dashboard
+npm install
+```
+
+Create **`dashboard/.env`**:
+
+```env
+VITE_API_URL=http://localhost:8000
+VITE_USER_ID=demo_user
+```
+
+(`VITE_USER_ID` is only the fallback used before you sign in — see the next step.)
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:5173**.
+
+## 4. Create your own account
+
+Each person testing this should sign up for their **own** account rather than sharing one
+username — that's what keeps a twin's data associated with just that person (see "Known
+limitations" for exactly what that isolation does and doesn't guarantee).
+
+1. Click **Sign in** at the bottom of the sidebar → switch to Register
+2. Pick a username and a password (6+ characters)
+3. You're logged in — every page now reflects your own (empty, at first) cognitive twin
+
+## 5. Browser extension (live tracking)
+
+1. Open `chrome://extensions`, enable **Developer mode** (top right)
+2. **Load unpacked** → select the `chrome-extension/` folder from this repo
+3. Browse `instagram.com/reels` or `youtube.com` (both watch pages and Shorts are tracked) — the extension batches events and sends them to the backend automatically
+4. Check the **Import** tab in the dashboard to see your live source mix once you've watched a few things
+
+A dashboard code change never requires reloading the extension; the reverse is not true — reload
+the extension at `chrome://extensions` after any change to files inside `chrome-extension/`.
+
+## 6. Fastest way to see data (no browsing required)
+
+Open the **Import** tab and click **Run demo seed** — it sends synthetic events through the real
+pipeline (same code path as live tracking) so behavior objects, evidence, inferences, and an
+identity appear immediately.
+
+## Known limitations (read before giving others access)
+
+- **User isolation is enforced by data scoping, not by request authorization.** Every table is
+  correctly scoped by `user_id` (verified: a fresh account returns zero rows — no bleed from any
+  other user), and the dashboard always sends the logged-in user's own id — but the backend's read
+  endpoints do not check that a request's `user_id` actually matches the caller's auth token.
+  Fine for testing on a trusted local machine or private network; **do not expose this backend on
+  the open internet as-is**, since anyone who can reach it can read any known username's data.
+- `AUTH_SECRET` defaults to a placeholder if unset — change it before this leaves your machine, since it's what makes login tokens un-forgeable.
+- No automated test suite yet. Changes are verified by actually running the app (curling the API, clicking through the dashboard).
+- The Instagram/YouTube extractors read the live page DOM (plus, for YouTube, an embedded page-data JSON) — both platforms can change their markup at any time, which would require updating the corresponding content script.
 
 ## Troubleshooting
 
-### Server won't start
-```powershell
-# Check Python version (need 3.10+)
-python --version
+| Symptom | Likely cause |
+|---|---|
+| `ValueError: DATABASE_URL environment variable is required` | `backend/.env` is missing, or uvicorn isn't being run from inside `backend/` |
+| `ModuleNotFoundError: No module named 'backend'` / `'app'` | `PYTHONPATH` isn't set to include both the repo root and `backend/` |
+| First chat/ingest request hangs ~1-2 minutes | Ollama cold-loading the model on its first call — normal; later requests are fast |
+| `Address already in use` on port 8000 or 5173 | Something else is already listening — stop it, or change `PORT` / pass Vite a different port |
+| Dashboard loads but every page is empty | Not signed in yet (still on the `VITE_USER_ID` fallback with no data) — register/sign in, or click "Run demo seed" on Import |
+| Extension console shows no `[AIMirror]` logs on Instagram/YouTube | Reload the extension at `chrome://extensions`, then hard-refresh the page |
 
-# Install missing dependencies
-pip install -r requirements.txt --force-reinstall
+## Where to go next
 
-# Check .env exists
-cat .env
-```
-
-### Database connection error
-```powershell
-# Verify DATABASE_URL format
-# Should be: postgresql://user:pass@host/db?sslmode=require
-
-# Test connection
-python -c "import asyncio; from app.db.postgres import health; print(asyncio.run(health()))"
-```
-
-### Extension not injecting
-```powershell
-# Check manifest.json loaded
-# Check console for [AIMirror] logs
-# Run in console: aimirrorDebug()
-```
-
----
-
-## Development Commands
-
-```powershell
-# Auto-reload server
-python -m uvicorn app.main:app --reload
-
-# Pre-load embedding model
-python -c "from app.services.embedding import encode; print('Model ready')"
-
-# Check database health
-python -c "import asyncio; from app.db.postgres import health; print(asyncio.run(health()))"
-
-# Reset database
-python setup_db.py
-```
-
----
-
-## Production Deployment
-
-```powershell
-# Run without reload
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-
-# Or using Gunicorn (Unix)
-gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app
-```
-
----
-
-## Full System Test
-
-```powershell
-# 1. Start server (in one terminal)
-python -m uvicorn app.main:app --reload
-
-# 2. Test health
-Invoke-RestMethod http://localhost:8000/health
-
-# 3. Send test events (5+ for persona detection)
-$events = @()
-for ($i=1; $i -le 5; $i++) {
-    $events += @{
-        reel_id = "reel_$i"
-        username = "creator_$i"
-        caption = "This is about technology and coding #tech #code"
-        hashtags = @("#tech", "#code")
-        audio = "Tech Audio"
-        watch_time = 10 + $i
-        timestamp = (Get-Date).ToString("o")
-        session_id = "test_session"
-    }
-}
-
-$body = @{ user_id = "test_user"; events = $events } | ConvertTo-Json -Depth 10
-Invoke-RestMethod -Uri "http://localhost:8000/ingest" -Method POST -ContentType "application/json" -Body $body
-
-# 4. Check profile
-Invoke-RestMethod "http://localhost:8000/profile?user_id=test_user" | ConvertTo-Json -Depth 10
-
-# 5. Query insights
-$q = @{ user_id = "test_user"; query = "What do I watch?" } | ConvertTo-Json
-Invoke-RestMethod -Uri "http://localhost:8000/query" -Method POST -ContentType "application/json" -Body $q
-```
-
----
-
-## ✅ Success Indicators
-
-- ✅ Server starts without errors
-- ✅ `/health` returns healthy
-- ✅ `/ingest` returns success with persona_label
-- ✅ `/profile` returns persona + alignment scores
-- ✅ `/query` returns contextual answer
-- ✅ Extension console shows [AIMirror] logs
-
----
-
-**System Ready!** 🚀
-
-Your AIMirror is a production-grade behavioral intelligence pipeline:
-- Chrome Extension extracts Instagram Reels data
-- FastAPI processes through 8-layer pipeline
-- Postgres + pgvector stores embeddings
-- RAG provides contextual insights
-- Persona Engine maps behavior to archetypes
-- RL layer tracks actions for future training
+- **Guide** tab in the dashboard (`/guide`) — what each page does and how to use it
+- **Documentation** tab (`/documentation`) — the full cognitive pipeline, key-concept glossary, and data-source details
