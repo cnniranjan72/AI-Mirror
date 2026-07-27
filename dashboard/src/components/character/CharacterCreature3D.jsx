@@ -1,7 +1,19 @@
 import { useRef, useMemo } from 'react'
 import { Canvas, useFrame, extend } from '@react-three/fiber'
-import { Text, Billboard, Sparkles, shaderMaterial } from '@react-three/drei'
+import { Text, Billboard, Sparkles, Line, shaderMaterial } from '@react-three/drei'
 import * as THREE from 'three'
+
+function fibonacciSphere(count, radius) {
+  const points = []
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5))
+  for (let i = 0; i < count; i++) {
+    const y = count > 1 ? 1 - (i / (count - 1)) * 2 : 0
+    const r = Math.sqrt(Math.max(0, 1 - y * y))
+    const theta = goldenAngle * i
+    points.push([Math.cos(theta) * r * radius, y * radius, Math.sin(theta) * r * radius])
+  }
+  return points
+}
 
 // Fresnel-rim "hologram" material: view-dependent glow + a slow vertical
 // scanline shimmer. No scene lighting needed — it reads purely off the
@@ -286,6 +298,61 @@ function Crystal({ colorHex, glowIntensity, thinking }) {
   )
 }
 
+/**
+ * A holographic neural-network cluster — for surfaces about stored
+ * memory/knowledge structure (Memory tab), not a character. Nodes on a
+ * Fibonacci sphere connected to their nearest neighbors, each node
+ * pulsing on its own phase like independent memory traces; the whole
+ * cluster breathes together only when "thinking".
+ */
+function NeuralNet({ colorHex, glowIntensity, thinking }) {
+  const group = useRef(null)
+  const nodeRefs = useRef([])
+  const NODE_COUNT = 14
+  const RADIUS = 0.75
+
+  const nodes = useMemo(() => fibonacciSphere(NODE_COUNT, RADIUS), [])
+  const edges = useMemo(() => {
+    const pairs = []
+    for (let i = 0; i < nodes.length; i++) {
+      const dists = nodes
+        .map((p, j) => ({ j, d: j === i ? Infinity : Math.hypot(p[0] - nodes[i][0], p[1] - nodes[i][1], p[2] - nodes[i][2]) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, 2)
+      dists.forEach(({ j }) => {
+        const key = [i, j].sort().join('-')
+        if (!pairs.some(p => p.key === key)) pairs.push({ key, a: nodes[i], b: nodes[j] })
+      })
+    }
+    return pairs
+  }, [nodes])
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime
+    const speed = thinking ? 2.4 : 1
+    if (group.current) group.current.rotation.y = t * 0.22 * speed
+    nodeRefs.current.forEach((n, i) => {
+      if (!n) return
+      const pulse = 0.7 + 0.3 * Math.sin(t * (1.5 + (i % 4) * 0.3) * speed + i)
+      n.scale.setScalar(pulse)
+    })
+  })
+
+  return (
+    <group ref={group}>
+      {edges.map(({ key, a, b }) => (
+        <Line key={key} points={[a, b]} color={colorHex} transparent opacity={0.25 * glowIntensity + 0.1} lineWidth={1} />
+      ))}
+      {nodes.map((p, i) => (
+        <mesh key={i} ref={(r) => { nodeRefs.current[i] = r }} position={p}>
+          <sphereGeometry args={[0.06, 12, 12]} />
+          <meshBasicMaterial color={colorHex} transparent opacity={Math.min(1, glowIntensity + 0.2)} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
 function OrbitingLabels({ topics, colorHex }) {
   const items = useMemo(() => topics.slice(0, 6).map((t, i, arr) => ({
     label: t.length > 18 ? t.slice(0, 16) + '…' : t,
@@ -333,7 +400,7 @@ export default function CharacterCreature3D({
 }) {
   const colorHex = moodColor || '#818cf8'
   const glowIntensity = 0.45 + confidence * 0.55
-  const BEINGS = { robot: Robot, shield: Shield, crystal: Crystal, creature: Creature }
+  const BEINGS = { robot: Robot, shield: Shield, crystal: Crystal, neural: NeuralNet, creature: Creature }
   const Being = BEINGS[variant] || Creature
 
   return (

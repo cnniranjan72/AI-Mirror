@@ -3,6 +3,7 @@ import { useReflections, useInferences, useBehaviorObjects } from '../../hooks/u
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { BrainIcon, LayersIcon, SearchIcon } from '../../icons/icons'
+import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 const memoryTypes = [
   { key: 'reflections', label: 'Reflection Memory', icon: BrainIcon, color: '#6366f1' },
@@ -51,11 +52,28 @@ export default function MemoryPage() {
     { id: 'patterns', label: 'Patterns', count: patterns.length },
   ]
 
+  const memoryLoading = refLoading || infLoading || patLoading
+  const avgPatternConfidence = patterns.length
+    ? patterns.reduce((s, p) => s + (p.confidence || 0), 0) / patterns.length
+    : 0.3
+
   return (
     <div>
-      <div style={{ marginBottom: 32 }}>
-        <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Memory</h1>
-        <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive memory stores and retrieval</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 32 }}>
+        <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
+          <CharacterCreature3D
+            size={68}
+            variant="neural"
+            confidence={avgPatternConfidence}
+            topics={memoryTypes.map(m => m.label)}
+            thinking={memoryLoading}
+            showLabels={false}
+          />
+        </div>
+        <div>
+          <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>Memory</h1>
+          <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Cognitive memory stores and retrieval</p>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>
