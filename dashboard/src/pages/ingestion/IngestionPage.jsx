@@ -28,6 +28,12 @@ export default function IngestionPage() {
   const [error, setError] = useState(null)
 
   const cur = summary?.current_identity || {}
+  const platformBreakdown = summary?.platform_breakdown || {}
+  const platformTotal = Object.values(platformBreakdown).reduce((a, b) => a + b, 0)
+  const PLATFORM_META = {
+    instagram: { label: 'Instagram', color: '#ec4899', icon: '📸' },
+    youtube: { label: 'YouTube', color: '#f43f5e', icon: '▶️' },
+  }
 
   const runSeed = async () => {
     setError(null); setSeeding(true); setSeedResult(null)
@@ -71,6 +77,38 @@ export default function IngestionPage() {
         </div>
       </GlassCard>
 
+      {/* Platform mix — real per-platform event counts from the events table */}
+      {!loading && platformTotal > 0 && (
+        <GlassCard gradient style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Source Mix</h3>
+            <Badge variant="neutral">{platformTotal} events tracked</Badge>
+          </div>
+          <div style={{ display: 'flex', height: 10, borderRadius: 6, overflow: 'hidden', marginBottom: 14 }}>
+            {Object.entries(platformBreakdown).map(([platform, count]) => {
+              const meta = PLATFORM_META[platform] || { label: platform, color: '#94a3b8' }
+              return (
+                <div key={platform} style={{ width: `${(count / platformTotal) * 100}%`, background: meta.color }} title={`${meta.label}: ${count}`} />
+              )
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+            {Object.entries(platformBreakdown).map(([platform, count]) => {
+              const meta = PLATFORM_META[platform] || { label: platform, color: '#94a3b8', icon: '•' }
+              return (
+                <div key={platform} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16 }}>{meta.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{meta.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{count} events · {Math.round((count / platformTotal) * 100)}%</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </GlassCard>
+      )}
+
       {/* The two real ingestion paths */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, margin: '24px 0' }}>
         {/* Live extension */}
@@ -80,17 +118,19 @@ export default function IngestionPage() {
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>Live tracking (extension)</h3>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6, marginBottom: 14 }}>
-            The AIMirror browser extension captures each Reel you watch — creator,
-            caption, hashtags, audio, watch time, likes/saves — and streams it here
-            automatically as you browse.
+            The AIMirror browser extension captures each Instagram Reel and YouTube
+            video/Short you watch — creator, caption, hashtags, watch time,
+            likes/subscriptions — and streams it here automatically as you browse.
           </p>
           <ol style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.9, paddingLeft: 18, margin: 0 }}>
             <li><code>chrome://extensions</code> → enable Developer mode</li>
             <li>Load unpacked → the <code>chrome-extension</code> folder</li>
-            <li>Open instagram.com/reels and scroll</li>
+            <li>Browse instagram.com/reels or youtube.com — both are tracked</li>
           </ol>
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 14, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <Badge variant="indigo">user: {DEFAULT_USER}</Badge>
+            <Badge variant="neutral">📸 Instagram</Badge>
+            <Badge variant="neutral">▶️ YouTube</Badge>
           </div>
         </GlassCard>
 

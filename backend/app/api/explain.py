@@ -222,6 +222,11 @@ async def get_cognitive_summary(user_id: str = Query(default="default")):
            FROM identities WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1""",
         user_id,
     )
+    platform_rows = await fetch(
+        "SELECT platform, COUNT(*) as c FROM events WHERE user_id = $1 GROUP BY platform",
+        user_id,
+    )
+    platform_breakdown = {r["platform"]: r["c"] for r in platform_rows}
     return {
         "user_id": user_id,
         "behavior_object_count": bo_count or 0,
@@ -231,6 +236,7 @@ async def get_cognitive_summary(user_id: str = Query(default="default")):
         "snapshot_count": snap_count or 0,
         "trace_count": trace_count or 0,
         "current_identity": dict(last_identity) if last_identity else None,
+        "platform_breakdown": platform_breakdown,
     }
 
 
