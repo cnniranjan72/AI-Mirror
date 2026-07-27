@@ -1,8 +1,20 @@
 import { useState } from 'react'
-import { useBehaviorObjects } from '../../hooks/useApi'
+import { useBehaviorObjects, useIdentity } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+
+const parseJSON = (v) => {
+  if (v == null) return {}
+  if (typeof v === 'object') return v
+  try { return JSON.parse(v) } catch { return {} }
+}
+
+function filterBubbleLabel(score) {
+  if (score >= 0.6) return { label: 'High concentration', color: '#f43f5e' }
+  if (score >= 0.35) return { label: 'Moderate concentration', color: '#f59e0b' }
+  return { label: 'Diverse exposure', color: '#10b981' }
+}
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#a78bfa', '#f472b6']
 
@@ -13,9 +25,13 @@ const stateVariant = (s) => ({
 
 export default function BehaviorPage() {
   const { data: behaviorObjects, loading } = useBehaviorObjects()
+  const { current: identityRaw } = useIdentity()
   const [filter, setFilter] = useState('all')
 
   const objects = Array.isArray(behaviorObjects) ? behaviorObjects : (behaviorObjects?.objects || [])
+  const identity = identityRaw?.identity || identityRaw || null
+  const creatorGraph = parseJSON(identity?.creator_graph)
+  const dependenceScore = creatorGraph.dependence_score ?? null
 
   const states = [...new Set(objects.map(o => o.lifecycle_state).filter(Boolean))]
   const filtered = filter === 'all' ? objects : objects.filter(o => o.lifecycle_state === filter)
@@ -87,6 +103,25 @@ export default function BehaviorPage() {
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>Top Creators</h3>
             <Badge variant="neutral">{Object.keys(creatorCounts).length} tracked</Badge>
           </div>
+          {dependenceScore != null && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8,
+              background: `${filterBubbleLabel(dependenceScore).color}0f`,
+              border: `1px solid ${filterBubbleLabel(dependenceScore).color}33`, marginBottom: 14,
+            }}>
+              <div style={{ fontSize: 20, fontWeight: 800, color: filterBubbleLabel(dependenceScore).color }}>
+                {Math.round(dependenceScore * 100)}%
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: filterBubbleLabel(dependenceScore).color }}>
+                  Filter Bubble Score — {filterBubbleLabel(dependenceScore).label}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  How concentrated this user's attention is on a small set of creators (identity.creator_graph.dependence_score)
+                </div>
+              </div>
+            </div>
+          )}
           <div style={{ maxHeight: 320, overflow: 'auto' }}>
             {topCreators.length === 0 ? (
               <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No creators yet</div>
