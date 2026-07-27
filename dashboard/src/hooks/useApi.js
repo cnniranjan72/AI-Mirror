@@ -82,10 +82,6 @@ export function useChatHistory(userId, conversationId) {
   return useApi(() => api.getChatHistory(userId, conversationId), [userId, conversationId])
 }
 
-export function useHealth() {
-  return useApi(() => api.healthCheck(), [])
-}
-
 export function useV3Health() {
   return useApi(() => api.v3Health(), [])
 }

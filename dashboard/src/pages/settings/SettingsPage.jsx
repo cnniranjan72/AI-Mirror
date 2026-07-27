@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { useHealth, useV3Health } from '../../hooks/useApi'
+import { useV3Health } from '../../hooks/useApi'
 import { api, DEFAULT_USER } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon } from '../../icons/icons'
 
 export default function SettingsPage() {
-  const { data: health, refetch: refetchHealth } = useHealth()
   const { data: v3Health, refetch: refetchV3 } = useV3Health()
 
   const [testForm, setTestForm] = useState({ userId: DEFAULT_USER })
@@ -55,15 +54,19 @@ export default function SettingsPage() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 6, background: 'rgba(148,163,184,0.04)' }}>
-                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>V3 Backend (port 8000)</span>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>AIMirror Backend (port 8000)</span>
                 <Badge variant={v3Health ? 'emerald' : 'danger'} dot>{v3Health ? 'Online' : 'Offline'}</Badge>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 6, background: 'rgba(148,163,184,0.04)' }}>
-                <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Legacy Backend (port 3000)</span>
-                <Badge variant={health ? 'emerald' : 'danger'} dot>{health ? 'Online' : 'Offline'}</Badge>
-              </div>
+              {v3Health?.database && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 6, background: 'rgba(148,163,184,0.04)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>PostgreSQL (Neon)</span>
+                  <Badge variant={v3Health.database.status === 'healthy' ? 'emerald' : 'danger'} dot>
+                    {v3Health.database.status === 'healthy' ? 'Connected' : 'Disconnected'}
+                  </Badge>
+                </div>
+              )}
             </div>
-            <button onClick={() => { refetchHealth(); refetchV3() }} style={{
+            <button onClick={() => refetchV3()} style={{
               display: 'flex', alignItems: 'center', gap: 6, marginTop: 16,
               padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
               background: 'transparent', color: 'var(--text-tertiary)', fontSize: 13,

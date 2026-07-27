@@ -107,10 +107,6 @@ export const api = {
   getSessions: async () => [],
 
   // === Health ===
-  healthCheck: async () => {
-    const { data } = await client.get('/health');
-    return data;
-  },
   v3Health: async () => {
     const { data } = await client.get('/health');
     return data;
