@@ -180,13 +180,18 @@ body::before {
   font-size: 40px;
   font-weight: 800;
   margin-bottom: 12px;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 50%, var(--accent) 100%);
+  background: linear-gradient(120deg, #22d3ee 0%, var(--primary) 35%, var(--secondary) 65%, var(--accent) 100%);
+  background-size: 200% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   letter-spacing: -1px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   filter: drop-shadow(0 2px 4px rgba(99, 102, 241, 0.3));
+  animation: gradientShift 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-title { animation: none; }
 }
 
 
@@ -299,22 +304,29 @@ input:focus, select:focus, textarea:focus {
   backdrop-filter: blur(10px);
 }
 
-/* Scrollbar Styling */
+/* Scrollbar Styling — kept in sync with the gradient thumb defined in
+   design-system.css; this file loads after it, so this is the version
+   that actually wins the cascade. */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(30, 41, 59, 0.5);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--primary);
-  border-radius: 4px;
+  background: linear-gradient(180deg, #22d3ee, var(--primary), var(--secondary));
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--primary-dark);
+  background: linear-gradient(180deg, #22d3ee, var(--secondary), var(--accent));
+  background-clip: padding-box;
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
 }
 
 /* Animations */
