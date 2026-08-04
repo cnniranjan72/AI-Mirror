@@ -209,6 +209,12 @@ export const api = {
     return data;
   },
 
+  // === Diary (AI-narrated weekly/monthly story) ===
+  getDiaryStory: async (userId = activeUser(), period = 'week', offset = 0) => {
+    const { data } = await client.get('/diary/story', { params: { user_id: userId, period, offset } });
+    return data;
+  },
+
   // === Seed (demo data) ===
   seedDemo: async () => {
     const { data } = await client.post('/seed');

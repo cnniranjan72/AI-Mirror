@@ -17,6 +17,10 @@ const FEATURE_GUIDE = [
     body: 'Your digital diary — every watch, like, and save across Instagram and YouTube in one chronological feed, with the real behavior objects and evidence each event contributed to shown inline. Filter by platform, attention depth, or search captions and creators.',
   },
   {
+    path: '/diary', icon: '📔', title: 'Diary',
+    body: 'A weekly or monthly "story" narrated entirely from real, computed stats over your actual events — no LLM call, just the same deterministic-facts-to-prose pattern used elsewhere in the app. Every sentence (including the comparisons to the previous period) traces back to a real number.',
+  },
+  {
     path: '/graph', icon: '🕸️', title: 'Knowledge Graph',
     body: 'A living, physics-driven map of your topics and creators — node size is real importance, color shows which platform a topic came from, and lines are real relationships (shared keywords between topics, or a creator who made content in that topic). Click any node for its full stats, or search to fly the camera to it.',
   },
