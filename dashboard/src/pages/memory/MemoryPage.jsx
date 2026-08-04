@@ -4,6 +4,7 @@ import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { BrainIcon, LayersIcon, SearchIcon } from '../../icons/icons'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
+import MemoryTree from '../../components/memory/MemoryTree'
 
 const memoryTypes = [
   { key: 'reflections', label: 'Reflection Memory', icon: BrainIcon, color: '#6366f1' },
@@ -103,6 +104,19 @@ export default function MemoryPage() {
           ))}
         </div>
       </div>
+
+      <GlassCard gradient style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Memory Tree</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              Every branch is real — reflections, inferences, and established behavior patterns, sized by confidence. Click a leaf.
+            </p>
+          </div>
+          <Badge variant="indigo">{refs.length + infs.length + patterns.length} entries</Badge>
+        </div>
+        <MemoryTree reflections={refs} inferences={infs} patterns={patterns} height={420} />
+      </GlassCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
         {memoryTypes.map(mt => (
