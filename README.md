@@ -33,6 +33,7 @@
 - [Dashboard Pages](#dashboard-pages)
 - [Configuration](#configuration)
 - [Architecture Decisions](#architecture-decisions)
+- [Production Hardening](#production-hardening)
 - [Development](#development)
 - [Glossary](#glossary)
 - [Troubleshooting](#troubleshooting)
@@ -113,7 +114,7 @@ graph TB
     end
 
     subgraph "React Dashboard"
-        DASH[Dashboard App] --> PAGES[18 Pages]
+        DASH[Dashboard App] --> PAGES[24 Pages]
         DASH --> COMP[Key Components]
         COMP --> EP[ExplainabilityPanel]
         COMP --> II[IdentityInspector]
@@ -262,7 +263,7 @@ flowchart TB
     LLMV -->|Error/Circuit Break| FALLBACK[Deterministic Template]
     FALLBACK --> RESP
 
-    RESP --> TRACE[Pipeline Trace<br/>(per-stage timing + state)]
+    RESP --> TRACE["Pipeline Trace<br/>(per-stage timing + state)"]
 ```
 
 ### Component Architecture
@@ -851,7 +852,7 @@ erDiagram
     }
 ```
 
-### Table Summary (20 Tables)
+### Table Summary (21 Tables)
 
 | Table | Rows Estimate | Purpose |
 |---|---|---|
@@ -875,6 +876,7 @@ erDiagram
 | `personas` | V2 legacy persona snapshots | Backward compatibility |
 | `actions_log` | V2 legacy RL action log | Backward compatibility |
 | `runtime_metrics` | Character runtime build metrics | Performance monitoring |
+| `error_events` | Unhandled exceptions + extension extraction failures | `GET /admin/errors` — replaces silent console-only failures |
 
 ---
 
@@ -933,13 +935,13 @@ flowchart TB
 
     subgraph "Extension Background"
         SEND -->|SEND_EVENTS| BW[Background Worker<br/>background.js]
-        BW -->|POST /ingest| API[FastAPI Backend<br/>:8001]
+        BW -->|POST /ingest| API[FastAPI Backend<br/>:8000]
         BW -->|30s periodic sync| API
         BW -->|storage quota hit| API
 
         subgraph "Local Storage"
             LS[chrome.storage.local]
-            LS -->|sessions[]| SI[Session Info]
+            LS -->|"sessions[]"| SI[Session Info]
             LS -->|userId| UID[User Identity]
         end
 
@@ -1005,15 +1007,20 @@ flowchart TB
 |---|---|---|
 | **Landing** | `/` | Hero with feature cards, demo seed, Instagram import CTA |
 | **Dashboard** | `/dashboard` | Stats cards, radar chart, latency bars, topic pie, reflections |
-| **Identity** | `/identity` | 9 sub-profiles, evolution timeline, identity inspector |
-| **Memory** | `/memory` | Reflections, inferences, patterns with tab filters |
+| **Import** | `/import` | Live ingestion pulse, source-mix breakdown, demo seed, extraction-warning card |
+| **Timeline** | `/timeline` | Chronological feed of every watch/like/save with real behavior-object and evidence linkage, replay modal |
+| **Knowledge Graph** | `/graph` | Physics-driven 3D graph of topics and creators — node size, platform color, and edges all real |
+| **Diary** | `/diary` | Deterministic weekly/monthly narrated summary, no LLM — same facts-to-prose pattern as the rest of the app |
+| **Goals** | `/goals` | Set an intention, get an alignment score computed live against real behavior objects |
+| **Identity** | `/identity` | 9 sub-profiles, evolution timeline, identity inspector, Identity Galaxy (3D) |
+| **Memory** | `/memory` | Reflections, inferences, patterns with tab filters, Memory Tree (3D) |
 | **Evidence** | `/evidence` | Evidence list, type distribution bar chart, detail drawer |
-| **Behavior** | `/behavior` | Behavior objects by topic/creator, lifecycle state distribution |
+| **Behavior** | `/behavior` | Behavior objects by topic/creator, lifecycle state distribution, Filter Bubble Score |
 | **Planning** | `/planning` | Pipeline planning breakdown, per-stage timing |
 | **Decision** | `/decision` | Decision traces, tree visualization, explainability panel |
 | **Pipeline** | `/pipeline` | Trace selector, per-stage timing bars, stage-highlighted view |
 | **Trace** | `/trace/:id` | Single trace detail with full JSON inspector |
-| **Analytics** | `/analytics` | Time-series metric trends, composition charts |
+| **Analytics** | `/analytics` | Time-series metric trends, composition charts (explicit "not enough history" state instead of a fabricated flat line) |
 | **Chat** | `/chat` | AI chat with streaming, explain button, follow-up chips |
 | **Character** | `/character` | 3D orb, runtime state, memory references, RL policy |
 | **Guardian** | `/guardian` | Wellbeing report, risk indicators, content alerts |
@@ -1046,7 +1053,7 @@ flowchart TB
         EXP --> L[LLM Data]
         EXP --> TRACE[Pipeline Trace]
 
-        I -->|GET /explain/{trace_id}| API[Backend API]
+        I -->|"GET /explain/{trace_id}"| API[Backend API]
         EV --> API
         M --> API
         PL --> API
@@ -1064,7 +1071,7 @@ flowchart TB
         DRAW --> CE[Counter-Evidence]
         DRAW --> IDT[Identity Traits]
 
-        ED -->|GET /explain/evidence/{id}| API
+        ED -->|"GET /explain/evidence/{id}"| API
     end
 
     subgraph "IdentityInspector"
@@ -1073,7 +1080,7 @@ flowchart TB
         INSP --> SNAP[Snapshot History]
         INSP --> TOP[Topic Breakdown]
 
-        PROF -->|GET /explain/identity/{id}| API
+        PROF -->|"GET /explain/identity/{id}"| API
     end
 
     subgraph "DecisionTree"
@@ -1275,6 +1282,11 @@ flowchart LR
 flowchart TB
     LANDING[Landing /] --> DASHBOARD[Dashboard /dashboard]
 
+    DASHBOARD --> IMPORT[Import /import]
+    DASHBOARD --> TIMELINE[Timeline /timeline]
+    DASHBOARD --> GRAPH[Knowledge Graph /graph]
+    DASHBOARD --> DIARY[Diary /diary]
+    DASHBOARD --> GOALS[Goals /goals]
     DASHBOARD --> IDENTITY[Identity /identity]
     DASHBOARD --> MEMORY[Memory /memory]
     DASHBOARD --> EVIDENCE[Evidence /evidence]
@@ -1288,6 +1300,10 @@ flowchart TB
     DASHBOARD --> GUARDIAN[Guardian /guardian]
     DASHBOARD --> INSIGHTS[Insights /insights]
     DASHBOARD --> LEARNING[Learning /learning]
+
+    TIMELINE --> REPLAY[ReplayModal<br/>click any event]
+    GRAPH --> GRAPH_NODE[Node detail panel<br/>click any topic/creator]
+    GOALS --> GOAL_CARD[Live alignment scoring<br/>on every read]
 
     IDENTITY --> ID_INSPECTOR[IdentityInspector<br/>click any card]
     IDENTITY --> ID_EVOLUTION[IdentityEvolution<br/>timeline toggle]
@@ -1316,7 +1332,7 @@ flowchart TB
 | From | To | How |
 |---|---|---|
 | Landing | Dashboard | Click "Load Demo Data" or "Go to Dashboard" |
-| Dashboard | Any page | Sidebar navigation (18 items) |
+| Dashboard | Any page | Sidebar navigation (23 items) |
 | Identity | IdentityInspector | Click any stat card or sub-profile |
 | Identity | IdentityEvolution | Toggle "Evolution" tab |
 | Evidence | EvidenceDrawer | Click any evidence row |
@@ -1440,6 +1456,17 @@ flowchart TB
 | `POST` | `/auth/login` | Login, returns HMAC-signed token |
 | `GET` | `/auth/me` | Current user from Bearer token |
 
+Every other endpoint enforces `user_id` against the bearer token (see [Auth Enforcement](#auth-enforcement) below) — registering doesn't just get you a token, it's required to touch any `user_id` outside the public demo set.
+
+### Admin
+
+Local-debugging tooling — not per-user data endpoints, so `/admin/errors` has no auth. `/admin/reprocess` is destructive and always requires a token, even for public `user_id`s.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/admin/errors` | Recent unhandled exceptions and extension extraction failures |
+| `POST` | `/admin/reprocess` | Rebuild a user's behavior_objects/evidence/inferences/identity from their real events (`dry_run` supported) |
+
 ---
 
 ## Configuration
@@ -1472,7 +1499,7 @@ flowchart TB
 
 | Variable | Location | Default | Description |
 |---|---|---|---|
-| `BACKEND_URL` | `background.js` | `http://localhost:8001/ingest` | Ingestion endpoint |
+| `BACKEND_URL` | `background.js` | `http://localhost:8000/ingest` | Ingestion endpoint |
 | `API_BASE_URL` | `background.js` | `http://localhost:8000` | API base for status/health |
 | `SYNC_INTERVAL` | `background.js` | `30000` | Periodic sync interval (ms) |
 | `MAX_STORAGE_EVENTS` | `background.js` | `1000` | Local storage event limit |
@@ -1580,6 +1607,54 @@ The V1 SQLAlchemy schema (basic events/sessions) coexists with the V3 asyncpg sc
 
 ---
 
+## Production Hardening
+
+A dedicated pass making the system safe to run past a single testing session: authenticated data access, tests, real observability, and a process supervisor. All additive — the signed-out demo flow is unchanged.
+
+### Auth Enforcement
+
+Every endpoint that reads or writes `user_id`-scoped data now checks the bearer token (`app/api/deps.py`), not just the auth endpoints:
+
+- **No token, public `user_id`** (`default`, `test_user_001`, `demo_*`) → allowed — today's signed-out demo behavior, unchanged.
+- **No token, real `user_id`** → `401`.
+- **Valid token matching `user_id`** → allowed.
+- **Valid token, `user_id` is a public id** → allowed for *reads* (`enforce_user_match`) — a signed-in user can still browse the demo data.
+- **Valid token, `user_id` belongs to someone else** → `403`.
+- **Invalid/expired token** → `401`, even against a public id.
+- **Mutating/destructive endpoints** (`enforce_write_match`: ingest, query, goals create/update/delete, privacy delete-all, admin reprocess) drop the public-id read bypass entirely — a token must match `user_id` exactly to write or delete anything, public id or not.
+
+### Reprocess / Data Lifecycle
+
+`POST /admin/reprocess` rebuilds a user's `behavior_objects`/`evidence`/`inferences`/`identities` from their real, already-ingested `events` — for when raw data and derived data have drifted (e.g. after a schema/linkage fix). Supports `dry_run` to preview row counts with no writes; idempotent on repeat calls.
+
+### Observability
+
+Unhandled exceptions are caught by the outermost request middleware (not `@app.exception_handler` — verified live that it doesn't reliably intercept exceptions raised deep in the stack) and recorded to an `error_events` table, queryable via `GET /admin/errors`. Every response still carries `X-Trace-Id` for correlating logs.
+
+### Process Supervision
+
+`scripts/start-all.ps1` runs the backend and dashboard under `scripts/supervise.ps1`, which restarts either on exit and keeps a real stdout/stderr log per attempt (never overwritten by the next restart) plus a `logs/supervisor.log` timeline of every start/exit/restart — replacing silent, unexplained process deaths with a real crash trace and automatic recovery.
+
+```powershell
+.\scripts\start-all.ps1     # supervised backend (8000) + dashboard (5173)
+.\scripts\stop-all.ps1      # stops both, including child process trees
+```
+
+### Extension Failure Visibility
+
+When a content script's DOM extraction fails (e.g. Instagram/YouTube changes their page structure and a selector goes stale), the event is dropped rather than recorded wrong — but the failure itself now flows through: content script → background worker → `POST /ingest` (`warnings` field) → `error_events` → a badge in the extension popup and a card on the Import page. Previously this was only a `console.log`, invisible unless devtools happened to be open at the exact moment.
+
+### Tests
+
+`backend/tests/` (pytest, gated behind a live `DATABASE_URL` via a session-scoped fixture — skips cleanly if unreachable) covers auth enforcement end-to-end, goals alignment scoring, the reprocess endpoint (including the write-vs-read auth bypass regression), the global exception handler, and ingest warning handling.
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+---
+
 ## Development
 
 ### Project Structure
@@ -1596,7 +1671,15 @@ AIMirror/
 │   │   │   ├── explain.py           # Explainability, identity, reasoning, search
 │   │   │   ├── seed.py              # POST /seed (demo data)
 │   │   │   ├── rl.py                # RL policy/history/feedback
-│   │   │   └── auth_api.py          # Registration, login, me
+│   │   │   ├── auth_api.py          # Registration, login, me
+│   │   │   ├── deps.py              # Per-request auth enforcement (resolve_user_id, enforce_write_match)
+│   │   │   ├── admin.py             # GET /admin/errors, POST /admin/reprocess
+│   │   │   ├── timeline.py          # GET /timeline
+│   │   │   ├── graph.py             # GET /graph/knowledge
+│   │   │   ├── diary.py             # GET /diary/story
+│   │   │   └── goals.py             # Goals CRUD + live alignment scoring
+│   │   ├── core/
+│   │   │   └── error_tracking.py    # record_error() -> error_events table
 │   │   ├── services/                 # Business logic services
 │   │   │   ├── enrichment.py        # Topic/sentiment/intent extraction
 │   │   │   ├── expansion.py         # Short caption → rich text
@@ -1614,7 +1697,7 @@ AIMirror/
 │   │   └── db/
 │   │       ├── postgres.py          # asyncpg pool + schema runner
 │   │       ├── schema.sql           # V1 core tables
-│   │       └── migration_v*.sql     # V3-V10 incremental migrations
+│   │       └── migration_v*.sql     # V3-V12 incremental migrations
 │   ├── cognitive_pipeline/          # Query-time pipeline
 │   │   └── pipeline.py             # Pipeline orchestrator
 │   ├── cognitive_planning/          # Planner subsystem
@@ -1655,22 +1738,24 @@ AIMirror/
 │   │   └── contracts.py            # Pydantic models
 │   ├── database.py                  # V1 SQLAlchemy models
 │   ├── start.py                     # Dev server entry point
-│   └── setup_db.py                  # Schema initialization
+│   ├── setup_db.py                  # Schema initialization
+│   ├── pytest.ini                   # asyncio_mode, db marker for tests needing a live DATABASE_URL
+│   └── tests/                       # pytest suite — auth, goals scoring, reprocess, error handling, ingest warnings
 │
 ├── dashboard/                       # React frontend
 │   ├── src/
-│   │   ├── pages/                  # 18 page components
+│   │   ├── pages/                  # 24 page components (lazy-loaded per route)
 │   │   ├── components/             # UI components
-│   │   │   ├── ui/                # Primitives (StatCard, GlassCard, Badge, etc.)
+│   │   │   ├── ui/                # Primitives (StatCard, GlassCard, Badge, AsyncState, etc.)
 │   │   │   ├── layout/            # AppShell, Sidebar
 │   │   │   └── ...                # Feature components
 │   │   ├── api/
 │   │   │   └── client.js          # Axios client + all API methods
 │   │   ├── hooks/
-│   │   │   └── useApi.js          # Generic data-fetching hook
+│   │   │   └── useApi.js          # Generic data-fetching hook ({data, loading, error, refetch})
 │   │   └── App.jsx                 # Root component
 │   ├── index.html
-│   ├── vite.config.js
+│   ├── vite.config.js              # manualChunks: vendor-three / vendor-graph / vendor-charts / vendor-react
 │   └── package.json
 │
 ├── chrome-extension/               # Chrome extension
@@ -1683,6 +1768,11 @@ AIMirror/
 │       ├── popup.js
 │       └── popup.css
 │
+├── scripts/                        # Process supervision (see Production Hardening)
+│   ├── supervise.ps1                # Generic restart-on-exit wrapper with per-attempt crash logs
+│   ├── start-all.ps1                # Launches backend + dashboard, each supervised
+│   └── stop-all.ps1                 # Stops both, including child process trees
+│
 ├── behavioral-engine/              # Legacy behavioral engine
 ├── refs/                           # Reference materials
 └── docs/                           # Additional documentation
@@ -1693,7 +1783,7 @@ AIMirror/
 ```mermaid
 flowchart TB
     subgraph "Development Environment"
-        DEV_EXT[Chrome Extension<br/>Loaded unpacked] -->|POST /ingest :8001| DEV_BE[FastAPI Backend<br/>uvicorn --reload]
+        DEV_EXT[Chrome Extension<br/>Loaded unpacked] -->|POST /ingest :8000| DEV_BE[FastAPI Backend<br/>uvicorn --reload]
         DEV_BE --> DEV_DB[(PostgreSQL 16<br/>+ pgvector)]
         DEV_DASH[Dashboard<br/>Vite Dev Server :5173] -->|GET/POST :8000| DEV_BE
     end
