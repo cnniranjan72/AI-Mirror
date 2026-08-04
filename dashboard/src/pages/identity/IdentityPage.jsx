@@ -8,6 +8,7 @@ import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Responsi
 import IdentityInspector from '../../components/explain/IdentityInspector'
 import IdentityEvolution from '../../components/identity/IdentityEvolution'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
+import IdentityGalaxy from '../../components/identity/IdentityGalaxy'
 
 const parseJSON = (v) => {
   if (v == null) return {}
@@ -27,6 +28,7 @@ export default function IdentityPage() {
   const { current: identityData, snapshots, summary: cognitiveSummary, loading } = useIdentity()
   const [inspectingIdentity, setInspectingIdentity] = useState(null)
   const [view, setView] = useState('overview')
+  const [selectedTopic, setSelectedTopic] = useState(null)
 
   // /identity/current wraps the identity object.
   const identity = identityData?.identity || identityData
@@ -47,6 +49,9 @@ export default function IdentityPage() {
     { trait: 'Focus', value: Math.round((attentionProfile.focus_quality || 0) * 100) },
     { trait: 'Stability', value: Math.round((behaviorProfile.behavior_stability || 0) * 100) },
   ]
+
+  const dominantInterests = interestGraph.dominant_interests || []
+  const selectedInterest = dominantInterests.find(t => t.topic === selectedTopic)
 
   const versionHistory = snapshotList.map((s) => ({
     version: s.identity_version,
@@ -94,6 +99,39 @@ export default function IdentityPage() {
             <StatCard label="Version" value={identity?.identity_version ? `v${identity.identity_version}` : (cognitiveSummary?.current_identity?.identity_version ? `v${cognitiveSummary.current_identity.identity_version}` : '--')} icon={LayersIcon} accent="cyan" loading={loading} />
             <StatCard label="Snapshots" value={snapshotList.length} icon={ClockIcon} accent="amber" loading={loading} />
           </div>
+
+      <GlassCard gradient style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Identity Galaxy</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              Each planet is a real dominant interest — size is strength, color is trend, distance is rank. Drag to rotate, click a planet.
+            </p>
+          </div>
+          <Badge variant="indigo">{dominantInterests.length} interests</Badge>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: selectedInterest ? '1fr 240px' : '1fr', gap: 16 }}>
+          <IdentityGalaxy
+            topics={dominantInterests}
+            confidence={identity?.overall_confidence || 0}
+            selectedTopic={selectedTopic}
+            onSelectTopic={(t) => setSelectedTopic(t.topic === selectedTopic ? null : t.topic)}
+            style={{ height: 380, borderRadius: 12, overflow: 'hidden', background: 'radial-gradient(circle at 50% 40%, rgba(30,27,75,0.4), rgba(2,6,23,0.5))' }}
+          />
+          {selectedInterest && (
+            <div style={{ padding: 14, borderRadius: 12, background: 'rgba(148,163,184,0.05)', border: '1px solid var(--border-subtle)' }}>
+              <h4 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{selectedInterest.topic}</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Trend</span><span style={{ color: 'var(--text-secondary)', textTransform: 'capitalize' }}>{selectedInterest.trend}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Strength</span><span style={{ color: 'var(--text-secondary)' }}>{Math.round((selectedInterest.strength || 0) * 100)}%</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Confidence</span><span style={{ color: 'var(--text-secondary)' }}>{Math.round((selectedInterest.confidence || 0) * 100)}%</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Frequency</span><span style={{ color: 'var(--text-secondary)' }}>{selectedInterest.frequency}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ color: 'var(--text-muted)' }}>Engagement</span><span style={{ color: 'var(--text-secondary)' }}>{Math.round((selectedInterest.engagement_rate || 0) * 100)}%</span></div>
+              </div>
+            </div>
+          )}
+        </div>
+      </GlassCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
         <GlassCard gradient>
