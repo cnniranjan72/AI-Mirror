@@ -186,6 +186,23 @@ export const api = {
     return data;
   },
 
+  // === Timeline ===
+  getTimeline: async (userId = activeUser(), opts = {}) => {
+    const { data } = await client.get('/timeline', {
+      params: {
+        user_id: userId,
+        platform: opts.platform || undefined,
+        liked_only: opts.likedOnly || undefined,
+        saved_only: opts.savedOnly || undefined,
+        attention: opts.attention || undefined,
+        search: opts.search || undefined,
+        limit: opts.limit || 30,
+        before_id: opts.beforeId || undefined,
+      },
+    });
+    return data;
+  },
+
   // === Seed (demo data) ===
   seedDemo: async () => {
     const { data } = await client.post('/seed');

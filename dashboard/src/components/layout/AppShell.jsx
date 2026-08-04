@@ -9,6 +9,7 @@ import LoadingSkeleton from '../ui/LoadingSkeleton'
 import LandingPage from '../../pages/LandingPage'
 import Overview from '../../pages/Overview'
 import IngestionPage from '../../pages/ingestion/IngestionPage'
+import TimelinePage from '../../pages/timeline/TimelinePage'
 import IdentityPage from '../../pages/identity/IdentityPage'
 import MemoryPage from '../../pages/memory/MemoryPage'
 import EvidencePage from '../../pages/evidence/EvidencePage'
@@ -76,6 +77,7 @@ export default function AppShell() {
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/dashboard" element={<Overview />} />
                 <Route path="/import" element={<IngestionPage />} />
+                <Route path="/timeline" element={<TimelinePage />} />
                 <Route path="/identity" element={<IdentityPage />} />
                 <Route path="/memory" element={<MemoryPage />} />
                 <Route path="/evidence" element={<EvidencePage />} />

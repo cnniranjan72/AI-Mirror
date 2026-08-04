@@ -13,6 +13,10 @@ const FEATURE_GUIDE = [
     body: 'The live runtime the chat actually talks through — identity snapshot version, self-model beliefs, memory reference counts, and how the reinforcement-learning loop is currently tuning its behavior. Nothing here is a separate mock; it\'s the same object built fresh on every query.',
   },
   {
+    path: '/timeline', icon: '🕐', title: 'Timeline',
+    body: 'Your digital diary — every watch, like, and save across Instagram and YouTube in one chronological feed, with the real behavior objects and evidence each event contributed to shown inline. Filter by platform, attention depth, or search captions and creators.',
+  },
+  {
     path: '/identity', icon: '👤', title: 'Identity',
     body: 'The evolving computational model of who you are: confidence, completeness, sub-profiles (attention, exploration, consistency, habits, motivation), and a real version-by-version evolution timeline.',
   },
