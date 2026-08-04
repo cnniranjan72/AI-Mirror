@@ -4,7 +4,7 @@ Prevents repetitive memory and consolidates behavioral patterns
 """
 from typing import List, Dict, Any, Optional, Tuple
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import uuid
 import numpy as np
@@ -212,7 +212,9 @@ class KnowledgeConsolidationEngine:
         creators = list(set(e.creator for e in events if e.creator))[:10]
         
         # Calculate temporal weight (recent events weighted higher)
-        now = datetime.utcnow()
+        # event.timestamp arrives timezone-aware (event_normalizer parses "Z"
+        # as UTC) — utcnow() is naive and crashes the subtraction below.
+        now = datetime.now(timezone.utc)
         temporal_weights = []
         for event in events:
             days_ago = (now - event.timestamp).days
@@ -318,7 +320,9 @@ class KnowledgeConsolidationEngine:
         topics = list(set(all_hashtags))[:10]
         
         # Calculate temporal weight
-        now = datetime.utcnow()
+        # event.timestamp arrives timezone-aware (event_normalizer parses "Z"
+        # as UTC) — utcnow() is naive and crashes the subtraction below.
+        now = datetime.now(timezone.utc)
         temporal_weights = []
         for event in events:
             days_ago = (now - event.timestamp).days
@@ -612,8 +616,9 @@ class KnowledgeConsolidationEngine:
             # Update confidence
             cluster.confidence = _confidence_from_count(cluster.occurrence_count)
             
-            # Update temporal weight
-            now = datetime.utcnow()
+            # Update temporal weight (event.timestamp is timezone-aware; use an
+            # aware "now" too, or the subtraction below raises TypeError)
+            now = datetime.now(timezone.utc)
             days_ago = (now - event.timestamp).days
             temporal_weight = max(0.0, 1.0 - (days_ago / self.temporal_decay_days))
             cluster.temporal_weight = (cluster.temporal_weight * 0.9 + temporal_weight * 0.1)

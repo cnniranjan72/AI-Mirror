@@ -11,7 +11,7 @@ Legacy V2 Persona is replaced by Identity + PersonaAdapter.
 import json
 import logging
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
@@ -187,7 +187,7 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
                     "commented": ev.commented,
                     "following": ev.following,
                     "profile_url": ev.profile_url,
-                    "timestamp": ev.timestamp or datetime.utcnow().isoformat(),
+                    "timestamp": ev.timestamp or datetime.now(timezone.utc).isoformat(),
                     "session_id": ev.session_id,
                     "source_url": ev.source_url or "",
                     "platform": ev.platform,

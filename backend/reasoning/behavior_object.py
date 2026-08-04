@@ -4,7 +4,7 @@ Canonical representation of user behavior for downstream reasoning
 """
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -235,7 +235,9 @@ class BehaviorObject(BaseModel):
     
     def get_recency_days(self) -> int:
         """Get days since last occurrence"""
-        return (datetime.utcnow() - self.temporal_statistics.last_seen).days
+        # temporal_statistics.last_seen is timezone-aware (inherited from
+        # event.timestamp via the cluster) — utcnow() is naive.
+        return (datetime.now(timezone.utc) - self.temporal_statistics.last_seen).days
     
     def is_active(self, days_threshold: int = 7) -> bool:
         """

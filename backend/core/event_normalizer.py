@@ -4,7 +4,7 @@ Converts source-specific event formats into unified BehaviorEvent schema
 """
 from typing import Dict, Any
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from backend.shared.contracts import BehaviorEvent, EventSource, ContentType
@@ -60,12 +60,15 @@ class EventNormalizer:
             # Generate event ID if not present
             event_id = raw_event.get("event_id", f"evt_{uuid.uuid4().hex[:12]}")
             
-            # Parse timestamp
-            timestamp_str = raw_event.get("timestamp", datetime.utcnow().isoformat())
+            # Parse timestamp — always produce a timezone-aware datetime (downstream
+            # consolidation/orchestration compares it against an aware "now").
+            timestamp_str = raw_event.get("timestamp", datetime.now(timezone.utc).isoformat())
             try:
                 timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-            except:
-                timestamp = datetime.utcnow()
+                if timestamp.tzinfo is None:
+                    timestamp = timestamp.replace(tzinfo=timezone.utc)
+            except Exception:
+                timestamp = datetime.now(timezone.utc)
 
             platform = (raw_event.get("platform") or "instagram").strip().lower()
             surface = (raw_event.get("surface") or "").strip().lower()

@@ -1066,8 +1066,9 @@ class V3Pipeline:
     @staticmethod
     def _cluster_to_engagement(cluster):
         """Convert cluster metrics to engagement/watch/temporal/trend dicts"""
-        from datetime import datetime
-        now = datetime.utcnow()
+        from datetime import datetime, timezone
+        # cluster.last_seen is timezone-aware (inherited from event.timestamp)
+        now = datetime.now(timezone.utc)
         days_span = max(1, (cluster.last_seen - cluster.first_seen).days)
         
         return {

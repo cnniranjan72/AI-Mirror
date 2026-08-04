@@ -4,7 +4,7 @@ Detects emerging, declining, and stable behavioral trends
 """
 from typing import List, Dict, Any, Optional, Tuple
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict, Counter
 import statistics
 
@@ -92,7 +92,7 @@ class TrendDetectionEngine:
         try:
             logger.info(f"Detecting trends from {len(events)} events and {len(clusters)} clusters")
             
-            cutoff_date = datetime.utcnow() - timedelta(days=lookback_days)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=lookback_days)
             recent_events = [e for e in events if e.timestamp >= cutoff_date]
             recent_clusters = [c for c in clusters if c.last_seen >= cutoff_date]
             
@@ -136,7 +136,7 @@ class TrendDetectionEngine:
                 # Check if cluster is growing rapidly
                 if cluster.growth_rate > self.emerging_threshold:
                     # Check if it's recent (started in last 2 weeks)
-                    days_since_first = (datetime.utcnow() - cluster.first_seen).days
+                    days_since_first = (datetime.now(timezone.utc) - cluster.first_seen).days
                     
                     if days_since_first <= 14:
                         trend = Trend({
@@ -189,7 +189,7 @@ class TrendDetectionEngine:
             
             for cluster in clusters:
                 # Check if cluster hasn't been updated recently
-                days_since_last = (datetime.utcnow() - cluster.last_seen).days
+                days_since_last = (datetime.now(timezone.utc) - cluster.last_seen).days
                 
                 if days_since_last > 7:  # No activity in last week
                     # Calculate decline rate
@@ -374,7 +374,7 @@ class TrendDetectionEngine:
         """
         try:
             # Split events into time periods
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             mid_point = now - timedelta(days=lookback_days // 2)
             
             early_events = [e for e in events if e.timestamp < mid_point]
@@ -453,7 +453,7 @@ class TrendDetectionEngine:
         """
         try:
             # Split events into time periods
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             mid_point = now - timedelta(days=lookback_days // 2)
             
             early_events = [e for e in events if e.timestamp < mid_point]
