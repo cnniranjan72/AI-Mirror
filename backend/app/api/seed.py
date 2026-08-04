@@ -75,20 +75,29 @@ def _generate_events(user_id: str, count: int = 800) -> List[dict]:
     return events
 
 
-async def _run_pipeline(user_id: str, events: List[dict]):
+async def _run_pipeline(user_id: str, events: List[dict], reel_id_to_db_id: dict):
     try:
         from backend.core.behavior_gateway import get_behavior_gateway
         from pipeline.orchestrator import V3Pipeline
 
         gateway = get_behavior_gateway()
-        normalized = await gateway.process_batch({"events": events}, EventSource.CHROME_EXTENSION)
+        normalized = gateway.process_batch({"events": events}, EventSource.CHROME_EXTENSION)
+
+        # Same fix as /ingest: point each BehaviorEvent's event_id at the real
+        # events.id row instead of the normalizer's random evt_xxxx, so the
+        # Timeline endpoint's supporting_event_ids reverse-index works on
+        # demo-seeded data too.
+        for bev in normalized:
+            db_id = reel_id_to_db_id.get(bev.content_id)
+            if db_id is not None:
+                bev.event_id = str(db_id)
 
         pipeline = V3Pipeline()
         result = await pipeline.run(user_id, normalized)
 
-        logger.info(f"Demo pipeline complete: {len(events)} events → {result.get('evidence_count', 0)} evidence, "
-                     f"{result.get('inference_count', 0)} inferences, "
-                     f"identity v{result.get('identity_version', '?')}")
+        logger.info(f"Demo pipeline complete: {len(events)} events → {len(result.evidence)} evidence, "
+                     f"{len(result.inferences)} inferences, "
+                     f"identity v{result.identity.identity_version if result.identity else '?'}")
         return result
     except Exception as e:
         logger.error(f"Demo pipeline error: {e}")
@@ -101,30 +110,33 @@ async def seed_demo_data():
     events = _generate_events(user_id, 800)
 
     stored = 0
+    reel_id_to_db_id = {}
     for event in events:
         try:
-            await execute(
+            row = await fetchrow(
                 """INSERT INTO events (user_id, reel_id, username, caption, hashtags, audio, watch_time, timestamp, session_id)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                   RETURNING id""",
                 user_id, event["reel_id"], event["username"], event["caption"],
                 json.dumps(event["hashtags"]), event["audio"], event["watch_time"],
-                event["timestamp"], event["session_id"],
+                datetime.fromisoformat(event["timestamp"]), event["session_id"],
             )
+            reel_id_to_db_id[event["reel_id"]] = row["id"]
             stored += 1
         except Exception as e:
             logger.warning(f"Failed to store event {event['reel_id']}: {e}")
 
-    result = await _run_pipeline(user_id, events)
+    result = await _run_pipeline(user_id, events, reel_id_to_db_id)
 
     return {
         "success": True,
         "user_id": user_id,
         "events_stored": stored,
         "pipeline_result": {
-            "evidence_count": result.get("evidence_count", 0),
-            "inference_count": result.get("inference_count", 0),
-            "reflection_count": result.get("reflection_count", 0),
-            "identity_version": result.get("identity_version"),
-            "behavior_object_count": result.get("behavior_object_count", 0),
+            "evidence_count": len(result.evidence),
+            "inference_count": len(result.inferences),
+            "reflection_count": 1 if result.reflection else 0,
+            "identity_version": result.identity.identity_version if result.identity else None,
+            "behavior_object_count": len(result.behavior_objects),
         },
     }
