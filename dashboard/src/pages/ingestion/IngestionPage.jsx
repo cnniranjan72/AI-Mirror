@@ -6,6 +6,7 @@ import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { CheckIcon, RefreshIcon } from '../../icons/icons'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
+import LiveIngestionPulse from '../../components/ingestion/LiveIngestionPulse'
 
 const PIPELINE_STAGES = [
   'Behavior Gateway', 'Content Intelligence', 'Knowledge Consolidation',
@@ -63,6 +64,10 @@ export default function IngestionPage() {
             How behavioral data flows into your cognitive twin
           </p>
         </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <LiveIngestionPulse />
       </div>
 
       {/* Current twin state — real data */}
