@@ -203,6 +203,12 @@ export const api = {
     return data;
   },
 
+  // === Knowledge Graph ===
+  getKnowledgeGraph: async (userId = activeUser()) => {
+    const { data } = await client.get('/graph/knowledge', { params: { user_id: userId } });
+    return data;
+  },
+
   // === Seed (demo data) ===
   seedDemo: async () => {
     const { data } = await client.post('/seed');

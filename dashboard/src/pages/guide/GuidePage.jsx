@@ -17,6 +17,10 @@ const FEATURE_GUIDE = [
     body: 'Your digital diary — every watch, like, and save across Instagram and YouTube in one chronological feed, with the real behavior objects and evidence each event contributed to shown inline. Filter by platform, attention depth, or search captions and creators.',
   },
   {
+    path: '/graph', icon: '🕸️', title: 'Knowledge Graph',
+    body: 'A living, physics-driven map of your topics and creators — node size is real importance, color shows which platform a topic came from, and lines are real relationships (shared keywords between topics, or a creator who made content in that topic). Click any node for its full stats, or search to fly the camera to it.',
+  },
+  {
     path: '/identity', icon: '👤', title: 'Identity',
     body: 'The evolving computational model of who you are: confidence, completeness, sub-profiles (attention, exploration, consistency, habits, motivation), and a real version-by-version evolution timeline.',
   },
