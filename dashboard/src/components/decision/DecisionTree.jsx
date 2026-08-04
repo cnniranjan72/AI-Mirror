@@ -34,10 +34,16 @@ function TreeNode({ icon, label, confidence, latency, children, color = 'var(--i
   )
 }
 
-function Arrow({ label }) {
+function Arrow({ label, delay = 0 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '2px 0' }}>
-      <div style={{ width: 2, height: 20, background: 'var(--border-subtle)' }} />
+      <div style={{ position: 'relative', width: 2, height: 20, background: 'var(--border-subtle)' }}>
+        <div style={{
+          position: 'absolute', left: -2, top: 0, width: 6, height: 6, borderRadius: '50%',
+          background: 'var(--indigo-400, #818cf8)', boxShadow: '0 0 6px var(--indigo-400, #818cf8)',
+          animation: `flowDown 1.8s ease-in-out ${delay}s infinite`,
+        }} />
+      </div>
       {label && <span style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>}
       <svg width="10" height="10" viewBox="0 0 10 10" style={{ color: 'var(--text-muted)' }}>
         <path d="M5 10 L0 4 H10 Z" fill="currentColor" />
@@ -108,7 +114,7 @@ export default function DecisionTree({ traceId, onExplain }) {
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, padding: '20px 0' }}>
       {/* Query */}
       <TreeNode icon="💬" label={data.query?.slice(0, 40) || 'Query'} onClick={() => onExplain?.(traceId)} />
-      <Arrow label="Intent: " />
+      <Arrow label="Intent: " delay={0} />
 
       {/* Planner */}
       <TreeNode
@@ -118,14 +124,14 @@ export default function DecisionTree({ traceId, onExplain }) {
       >
         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>{data.planner?.reasoning_mode || data.planner?.intent}</div>
       </TreeNode>
-      <Arrow label="Rank" />
+      <Arrow label="Rank" delay={0.25} />
 
       {/* Candidates */}
       {candidates.length > 0 && (
         <>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600 }}>Candidate Decisions</div>
           <CandidatesRow candidates={candidates} onSelect={() => onExplain?.(traceId)} />
-          <Arrow label="Best" />
+          <Arrow label="Best" delay={0.5} />
         </>
       )}
 
@@ -141,7 +147,7 @@ export default function DecisionTree({ traceId, onExplain }) {
           {(data.decision?.conflicts || 0) > 0 && <Badge variant="rose">{data.decision.conflicts} conflicts</Badge>}
         </div>
       </TreeNode>
-      <Arrow label="Assemble" />
+      <Arrow label="Assemble" delay={0.75} />
 
       {/* Context */}
       <TreeNode
@@ -153,7 +159,7 @@ export default function DecisionTree({ traceId, onExplain }) {
           {data.context?.retrieved_count || 0} retrieved · {(data.context?.token_count || 0).toLocaleString()} tokens
         </div>
       </TreeNode>
-      <Arrow label="Generate" />
+      <Arrow label="Generate" delay={1.0} />
 
       {/* LLM */}
       <TreeNode
@@ -165,7 +171,7 @@ export default function DecisionTree({ traceId, onExplain }) {
           {data.llm?.model || data.llm?.provider || 'gpt-4o'} · {data.llm?.tokens || 0} tokens
         </div>
       </TreeNode>
-      <Arrow label="Respond" />
+      <Arrow label="Respond" delay={1.25} />
 
       {/* Response */}
       <TreeNode icon="✨" label="Response" color="var(--emerald-400)" onClick={() => onExplain?.(traceId)}>
