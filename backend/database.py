@@ -14,7 +14,7 @@ if not DATABASE_URL:
 
 # Handle different database types
 if DATABASE_URL.startswith("postgresql://"):
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+pg8000://")
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
     engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 elif DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, pool_pre_ping=True)
@@ -58,4 +58,4 @@ def get_db():
 
 def init_db():
     Base.metadata.create_all(bind=engine)
-    print("✅ Database tables created successfully")
+    print("Database tables created successfully")

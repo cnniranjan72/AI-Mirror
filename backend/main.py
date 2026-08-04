@@ -30,9 +30,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 Starting AIMirror Backend API...")
+    print("Starting AIMirror Backend API...")
     init_db()
-    print("✅ API ready to receive requests")
+    print("API ready to receive requests")
 
 @app.get("/")
 async def root():
