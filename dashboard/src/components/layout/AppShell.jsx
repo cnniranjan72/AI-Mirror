@@ -48,11 +48,21 @@ export default function AppShell() {
           canvas via <View> instead of mounting its own <Canvas>. Route changes
           swap which View is in the DOM, not the WebGL context itself — this is
           what keeps navigation from tearing down/recreating a context on every
-          page (the source of the react-three-fiber StrictMode unmount warning). */}
+          page (the source of the react-three-fiber StrictMode unmount warning).
+
+          zIndex sits above normal page content (GlassCards etc. are unpositioned,
+          z-index:auto) but below Sidebar (100) and modals (1000) — it MUST be
+          above regular content, not behind it: GlassCard uses backdrop-filter,
+          which blurs whatever renders behind the card. A hologram rendered by
+          this canvas at z-index 0 (below the DOM) inside a GlassCard was getting
+          its crisp geometry blurred into an unrecognizable glow blob by the
+          card's own 20px backdrop-filter — this canvas being transparent
+          everywhere except the actual 3D pixels, plus pointerEvents:none, makes
+          sitting above content safe (nothing else is ever visually covered). */}
       <Canvas
         gl={{ alpha: true, antialias: true }}
         dpr={[1, 2]}
-        style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 0 }}
+        style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 50 }}
       >
         <View.Port />
       </Canvas>
