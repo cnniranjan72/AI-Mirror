@@ -8,6 +8,15 @@ from datetime import datetime, timezone
 from enum import Enum
 
 
+def _ensure_aware(dt: datetime) -> datetime:
+    """Coerce a possibly-naive datetime to UTC-aware. Data persisted before
+    the timestamp-normalization fix stored naive datetimes; anything written
+    since is aware — this dataset is permanently mixed, so every comparison
+    against datetime.now(timezone.utc) needs this rather than trusting the
+    stored value's format."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 class BehaviorLifecycleState(str, Enum):
     """Lifecycle state of a behavior object"""
     EMERGING = "emerging"
@@ -231,13 +240,15 @@ class BehaviorObject(BaseModel):
     
     def get_age_days(self) -> int:
         """Get age of behavior in days"""
-        return (datetime.utcnow() - self.created_at).days
-    
+        return (datetime.now(timezone.utc) - _ensure_aware(self.created_at)).days
+
     def get_recency_days(self) -> int:
         """Get days since last occurrence"""
-        # temporal_statistics.last_seen is timezone-aware (inherited from
-        # event.timestamp via the cluster) — utcnow() is naive.
-        return (datetime.now(timezone.utc) - self.temporal_statistics.last_seen).days
+        # temporal_statistics.last_seen is timezone-aware for objects created
+        # after the timestamp-normalization fix, but naive for anything
+        # persisted before it — a permanently mixed dataset, so coerce
+        # defensively rather than assume either format.
+        return (datetime.now(timezone.utc) - _ensure_aware(self.temporal_statistics.last_seen)).days
     
     def is_active(self, days_threshold: int = 7) -> bool:
         """
