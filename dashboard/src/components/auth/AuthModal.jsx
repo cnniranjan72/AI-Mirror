@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { api } from '../../api/client'
 
-export default function AuthModal({ onClose }) {
-  const [mode, setMode] = useState('login')  // 'login' | 'register'
+export default function AuthModal({ onClose, initialMode = 'login' }) {
+  const [mode, setMode] = useState(initialMode)  // 'login' | 'register'
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')

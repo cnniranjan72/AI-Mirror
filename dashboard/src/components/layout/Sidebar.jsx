@@ -4,7 +4,7 @@ import {
   DashboardIcon, IdentityIcon, MemoryIcon, EvidenceIcon, BehaviorIcon,
   PlanningIcon, DecisionIcon, PipelineIcon, AnalyticsIcon, ChatIcon, SettingsIcon,
   SearchIcon, ChevronLeftIcon, ZapIcon, AlertIcon, CpuIcon, DownloadIcon,
-  UploadIcon, BookIcon, CompassIcon, ClockIcon, NetworkIcon, DiaryIcon, TargetIcon
+  UploadIcon, BookIcon, CompassIcon, ClockIcon, NetworkIcon, DiaryIcon, TargetIcon, BuildingIcon
 } from '../../icons/icons'
 import { api, isAuthed, displayName } from '../../api/client'
 import AuthModal from '../auth/AuthModal'
@@ -16,6 +16,7 @@ const navItems = [
   { path: '/graph', label: 'Knowledge Graph', icon: NetworkIcon },
   { path: '/diary', label: 'Diary', icon: DiaryIcon },
   { path: '/goals', label: 'Goals', icon: TargetIcon },
+  { path: '/org', label: 'Organization', icon: BuildingIcon },
   { path: '/identity', label: 'Identity', icon: IdentityIcon },
   { path: '/character', label: 'Character', icon: CpuIcon },
   { path: '/memory', label: 'Memory', icon: MemoryIcon },
@@ -127,9 +128,11 @@ export default function Sidebar({ collapsed, onToggle }) {
           padding: collapsed ? '0 16px' : '0 20px', gap: 12,
           borderBottom: '1px solid var(--border-subtle)', flexShrink: 0,
         }}>
-          <div style={{
+          <div className="aim-brand-mark" style={{
             width: 32, height: 32, borderRadius: 10,
-            background: 'var(--accent-gradient)',
+            background: 'var(--accent-gradient-aurora)',
+            backgroundSize: '200% auto',
+            boxShadow: 'var(--shadow-glow)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 16, fontWeight: 700, color: 'white', flexShrink: 0,
           }}>A</div>
@@ -145,12 +148,12 @@ export default function Sidebar({ collapsed, onToggle }) {
           <div style={{ padding: '12px 12px 8px' }}>
             <button
               onClick={() => setCmdOpen(true)}
+              className="aim-search-trigger"
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 12px', borderRadius: 8,
                 background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)',
                 color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer',
-                transition: 'all 0.2s',
               }}
             >
               <SearchIcon />
@@ -171,16 +174,14 @@ export default function Sidebar({ collapsed, onToggle }) {
                 key={item.path}
                 to={item.path}
                 end={item.path === '/dashboard'}
+                className={({ isActive }) => `aim-nav-item${isActive ? ' active' : ''}`}
                 style={({ isActive }) => ({
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: collapsed ? '10px 0' : '10px 12px',
                   marginBottom: 2,
                   borderRadius: 8,
                   textDecoration: 'none',
-                  color: isActive ? 'var(--indigo-400)' : 'var(--text-tertiary)',
-                  background: isActive ? 'rgba(99,102,241,0.1)' : 'transparent',
                   fontSize: 14, fontWeight: isActive ? 600 : 500,
-                  transition: 'all 0.15s ease',
                   justifyContent: collapsed ? 'center' : 'flex-start',
                   position: 'relative',
                 })}
@@ -191,18 +192,20 @@ export default function Sidebar({ collapsed, onToggle }) {
                       <div style={{
                         position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
                         width: 3, height: 20, borderRadius: '0 3px 3px 0',
-                        background: 'var(--accent-gradient)',
+                        background: 'var(--accent-gradient-aurora)', backgroundSize: '200% auto',
+                        boxShadow: '0 0 8px rgba(99,102,241,0.6)',
                       }} />
                     )}
                     <div style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
                       <Icon />
                       {item.path === '/guardian' && guardianAlertCount > 0 && (
-                        <div style={{
+                        <div className="animate-pulse" style={{
                           position: 'absolute', top: -4, right: collapsed ? -4 : -6,
                           minWidth: 14, height: 14, borderRadius: 7, padding: '0 3px',
                           background: '#f43f5e', color: 'white', fontSize: 9, fontWeight: 700,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           border: '1.5px solid rgba(15,23,42,0.85)',
+                          boxShadow: '0 0 8px rgba(244,63,94,0.5)',
                         }}>
                           {guardianAlertCount > 9 ? '9+' : guardianAlertCount}
                         </div>
@@ -210,10 +213,11 @@ export default function Sidebar({ collapsed, onToggle }) {
                     </div>
                     {!collapsed && <span>{item.label}</span>}
                     {!collapsed && item.path === '/guardian' && guardianAlertCount > 0 && (
-                      <div style={{
+                      <div className="animate-pulse" style={{
                         marginLeft: 'auto', minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
                         background: '#f43f5e', color: 'white', fontSize: 10, fontWeight: 700,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 0 8px rgba(244,63,94,0.5)',
                       }}>
                         {guardianAlertCount > 9 ? '9+' : guardianAlertCount}
                       </div>

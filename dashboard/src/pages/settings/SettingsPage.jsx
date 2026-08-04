@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useV3Health } from '../../hooks/useApi'
-import { api, DEFAULT_USER, activeUser } from '../../api/client'
+import { api, DEFAULT_USER, activeUser, isAuthed } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
-import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon, DownloadIcon, AlertIcon } from '../../icons/icons'
+import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon, DownloadIcon, AlertIcon, CompassIcon } from '../../icons/icons'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 export default function SettingsPage() {
@@ -17,6 +17,23 @@ export default function SettingsPage() {
   const [deleteStep, setDeleteStep] = useState('idle') // idle | confirming | deleting | done
   const [deleteResult, setDeleteResult] = useState(null)
   const currentUser = activeUser()
+  const authed = isAuthed()
+
+  const [researchOptIn, setResearchOptInState] = useState(null)
+  const [researchBusy, setResearchBusy] = useState(false)
+  useEffect(() => {
+    if (!authed) return
+    api.getResearchStatus().then(r => setResearchOptInState(r.opted_in)).catch(() => {})
+  }, [authed])
+
+  const toggleResearchOptIn = async () => {
+    setResearchBusy(true)
+    try {
+      const r = await api.setResearchOptIn(!researchOptIn)
+      setResearchOptInState(r.opted_in)
+    } catch { /* leave state unchanged on failure */ }
+    setResearchBusy(false)
+  }
 
   const runDelete = async () => {
     setDeleteStep('deleting')
@@ -278,6 +295,40 @@ export default function SettingsPage() {
           </div>
         )}
       </GlassCard>
+
+      {authed && (
+        <GlassCard gradient style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22d3ee' }}>
+              <CompassIcon />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600 }}>Research Participation</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 520 }}>
+                Off by default. If you opt in, your behavior objects, evidence, inferences, and identity
+                snapshots become part of a bulk export researchers can pull — keyed to a one-way hashed
+                participant ID, never your username. Turning it back off removes you from every future
+                export (already-downloaded exports can't be recalled).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={toggleResearchOptIn}
+            disabled={researchOptIn === null || researchBusy}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 16px', borderRadius: 10, border: '1px solid var(--border-subtle)',
+              background: researchOptIn ? 'rgba(16,185,129,0.1)' : 'transparent',
+              color: researchOptIn ? '#34d399' : 'var(--text-secondary)',
+              fontSize: 13, fontWeight: 600,
+              cursor: researchBusy ? 'wait' : 'pointer',
+            }}
+          >
+            {researchOptIn ? <CheckIcon /> : null}
+            {researchOptIn === null ? 'Loading…' : researchOptIn ? 'Opted in — click to opt out' : 'Opt in to research export'}
+          </button>
+        </GlassCard>
+      )}
     </div>
   )
 }

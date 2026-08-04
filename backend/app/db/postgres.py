@@ -163,6 +163,20 @@ async def run_schema():
                 await conn.execute(f.read())
         logger.info("Migration V12 applied successfully")
 
+    migration_v13_path = os.path.join(os.path.dirname(__file__), "migration_v13.sql")
+    if os.path.exists(migration_v13_path):
+        async with get_conn() as conn:
+            with open(migration_v13_path, "r") as f:
+                await conn.execute(f.read())
+        logger.info("Migration V13 applied successfully")
+
+    migration_v14_path = os.path.join(os.path.dirname(__file__), "migration_v14.sql")
+    if os.path.exists(migration_v14_path):
+        async with get_conn() as conn:
+            with open(migration_v14_path, "r") as f:
+                await conn.execute(f.read())
+        logger.info("Migration V14 applied successfully")
+
 
 async def health() -> dict:
     try:

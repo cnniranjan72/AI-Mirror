@@ -1,12 +1,31 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
+import AuthModal from '../components/auth/AuthModal'
 
 const features = [
   { icon: '🧠', title: 'Cognitive Identity', desc: 'Your digital twin learns who you are — interests, behaviors, and thinking patterns.' },
   { icon: '📊', title: 'Behavior Analytics', desc: 'See how you engage with content across topics, creators, and time.' },
   { icon: '🔄', title: 'Real-time Pipeline', desc: 'Watch your data flow through behavior analysis, evidence, inference, and reflection.' },
   { icon: '💬', title: 'AI Chat', desc: 'Ask questions about your digital self. The AI reasons from your actual cognitive data.' },
+]
+
+const personas = [
+  {
+    icon: '👤', title: 'Individuals',
+    desc: 'Build your own private cognitive twin from your browsing history. Free, and your data stays yours.',
+    cta: 'Create your twin', mode: 'register',
+  },
+  {
+    icon: '🏢', title: 'Organizations',
+    desc: 'Give every member their own private twin under one workspace with shared billing and seat management. Admins manage the roster — never member data.',
+    cta: 'Set up a workspace', mode: 'register',
+  },
+  {
+    icon: '🔬', title: 'Researchers',
+    desc: 'Study real digital-behavior patterns with an opt-in, de-identified export — participant IDs are salted hashes, never usernames or emails.',
+    cta: 'Read the data codebook', mode: 'docs',
+  },
 ]
 
 const floatingElements = [
@@ -24,6 +43,10 @@ export default function LandingPage() {
   const [demoStatus, setDemoStatus] = useState('')
   const [seedStep, setSeedStep] = useState(0)
   const [showDemoAnimation, setShowDemoAnimation] = useState(false)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState('register')
+
+  const openAuth = (mode) => { setAuthMode(mode); setAuthOpen(true) }
 
   const handleDemoData = async () => {
     setDemoLoading(true)
@@ -66,6 +89,21 @@ export default function LandingPage() {
 
   return (
     <div style={{ minHeight: '100vh', position: 'relative' }}>
+      {/* Sign-in entry point for returning users — the landing page has no
+          sidebar to hide this in, so it needs its own visible affordance. */}
+      <div style={{ position: 'fixed', top: 20, right: 24, zIndex: 10 }}>
+        <button
+          onClick={() => openAuth('login')}
+          style={{
+            padding: '8px 16px', borderRadius: 10,
+            background: 'var(--bg-surface)', border: '1px solid var(--border-default)',
+            color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Sign in
+        </button>
+      </div>
+
       {/* Floating background elements */}
       {floatingElements.map((el, i) => (
         <div
@@ -195,18 +233,34 @@ export default function LandingPage() {
           flexWrap: 'wrap',
         }}>
           <button
+            onClick={() => openAuth('register')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '16px 32px', borderRadius: 14,
+              background: 'var(--accent-gradient-aurora)', backgroundSize: '200% auto',
+              color: 'white', fontSize: 16, fontWeight: 700,
+              border: 'none', cursor: 'pointer',
+              boxShadow: 'var(--shadow-glow-strong)',
+              transition: 'all 0.3s ease',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)' }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)' }}
+          >
+            Sign up free →
+          </button>
+
+          <button
             onClick={() => navigate('/import')}
             style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '16px 32px', borderRadius: 14,
-              background: 'var(--accent-gradient)',
-              color: 'white', fontSize: 16, fontWeight: 600,
-              border: 'none', cursor: 'pointer',
-              boxShadow: 'var(--shadow-glow)',
+              background: 'transparent',
+              color: 'var(--text-primary)', fontSize: 16, fontWeight: 600,
+              border: '1px solid var(--border-strong)', cursor: 'pointer',
               transition: 'all 0.3s ease',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--shadow-glow-strong)' }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'var(--shadow-glow)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-surface)'; e.currentTarget.style.borderColor = 'var(--accent)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--border-strong)' }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
@@ -280,6 +334,43 @@ export default function LandingPage() {
           ))}
         </div>
       </div>
+
+      {/* Who it's for */}
+      <div style={{
+        maxWidth: 1000, margin: '0 auto', padding: '0 32px 100px',
+        position: 'relative', zIndex: 1,
+      }}>
+        <h2 style={{ textAlign: 'center', fontSize: 28, fontWeight: 700, marginBottom: 8 }}>
+          Built for how you'll actually use it
+        </h2>
+        <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 14, marginBottom: 40 }}>
+          Every account is a private, individual cognitive twin — orgs and studies are organized around that, never around sharing your data.
+        </p>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: 20,
+        }}>
+          {personas.map((p, i) => (
+            <div key={i} className="card" style={{ padding: 28, display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: 28, marginBottom: 14 }}>{p.icon}</div>
+              <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>{p.title}</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6, flex: 1, marginBottom: 20 }}>{p.desc}</p>
+              <button
+                onClick={() => p.mode === 'docs' ? navigate('/documentation') : openAuth(p.mode)}
+                style={{
+                  padding: '10px 16px', borderRadius: 10, alignSelf: 'flex-start',
+                  background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)',
+                  color: '#a5b4fc', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                {p.cta} →
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {authOpen && <AuthModal initialMode={authMode} onClose={() => setAuthOpen(false)} />}
     </div>
   )
 }

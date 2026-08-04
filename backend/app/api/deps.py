@@ -81,3 +81,14 @@ async def resolve_user_id(
     """FastAPI dependency: drop-in replacement for `user_id: str = Query(default="default")`."""
     enforce_user_match(authorization, user_id)
     return user_id
+
+
+async def require_auth(authorization: Optional[str] = Header(default=None)) -> str:
+    """FastAPI dependency for endpoints with no user_id concept of their own
+    (e.g. organizations) — there's no public-id bypass to fall back to, so a
+    valid token is always required. Returns the authenticated username."""
+    token = _bearer(authorization)
+    username = auth.verify_token(token) if token else None
+    if not username:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return username

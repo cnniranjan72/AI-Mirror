@@ -114,7 +114,7 @@ graph TB
     end
 
     subgraph "React Dashboard"
-        DASH[Dashboard App] --> PAGES[24 Pages]
+        DASH[Dashboard App] --> PAGES[25 Pages]
         DASH --> COMP[Key Components]
         COMP --> EP[ExplainabilityPanel]
         COMP --> II[IdentityInspector]
@@ -852,7 +852,7 @@ erDiagram
     }
 ```
 
-### Table Summary (21 Tables)
+### Table Summary (23 Tables)
 
 | Table | Rows Estimate | Purpose |
 |---|---|---|
@@ -877,6 +877,10 @@ erDiagram
 | `actions_log` | V2 legacy RL action log | Backward compatibility |
 | `runtime_metrics` | Character runtime build metrics | Performance monitoring |
 | `error_events` | Unhandled exceptions + extension extraction failures | `GET /admin/errors` — replaces silent console-only failures |
+| `organizations` | Org name/slug/owner | Seat/roster grouping — never joined against cognitive-data tables |
+| `org_invites` | Invite codes with expiry/use-count | `POST /orgs/join` |
+
+`users.org_id`/`users.org_role` and `users.research_opt_in` extend the existing `users` table rather than adding new per-user tables.
 
 ---
 
@@ -1012,6 +1016,7 @@ flowchart TB
 | **Knowledge Graph** | `/graph` | Physics-driven 3D graph of topics and creators — node size, platform color, and edges all real |
 | **Diary** | `/diary` | Deterministic weekly/monthly narrated summary, no LLM — same facts-to-prose pattern as the rest of the app |
 | **Goals** | `/goals` | Set an intention, get an alignment score computed live against real behavior objects |
+| **Organization** | `/org` | Create/join a workspace, generate invite codes, manage roster — never member cognitive data |
 | **Identity** | `/identity` | 9 sub-profiles, evolution timeline, identity inspector, Identity Galaxy (3D) |
 | **Memory** | `/memory` | Reflections, inferences, patterns with tab filters, Memory Tree (3D) |
 | **Evidence** | `/evidence` | Evidence list, type distribution bar chart, detail drawer |
@@ -1199,6 +1204,45 @@ curl -X POST http://localhost:8000/seed
 
 Or click "Load Demo Data" on the landing page.
 
+### Getting Started by Persona
+
+The landing page (`/`) has a dedicated entry point for each of these — the steps below are what those buttons actually do, if you'd rather drive it directly against the API.
+
+**Individuals** — sign up, install the extension, browse normally:
+```bash
+curl -X POST http://localhost:8000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "alice", "password": "at-least-6-chars"}'
+# -> {"token": "...", "user": {...}}
+```
+Load the Chrome extension (below), browse Instagram/YouTube for a bit, then open the dashboard — your identity, evidence, and reflections build up automatically as the pipeline processes what the extension captures. No import step required; `/seed` and "Load Demo Data" exist purely so you can see a full identity before you've generated one yourself.
+
+**Organizations** — one account still equals one private twin; an org is a seat/roster layer on top, not a shared identity:
+```bash
+# 1. Register (or sign in), then create the org as its owner
+curl -X POST http://localhost:8000/orgs -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"name": "Acme Research Labs"}'
+
+# 2. Generate an invite code
+curl -X POST http://localhost:8000/orgs/invites -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"max_uses": 5}'
+# -> {"code": "CFbCib3ALf02", ...}
+
+# 3. Each teammate registers their own account, then joins with the code
+curl -X POST http://localhost:8000/orgs/join -H "Authorization: Bearer $MEMBER_TOKEN" \
+  -H "Content-Type: application/json" -d '{"code": "CFbCib3ALf02"}'
+```
+Manage all of this from the **Organization** page in the dashboard instead — same endpoints, no curl required. See [Organizations](#organizations-1) below for exactly what an owner can and can't see about members.
+
+**Researchers** — opt in from an existing account, then pull the bulk export:
+```bash
+curl -X POST http://localhost:8000/research/opt-in -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" -d '{"opt_in": true}'
+
+curl http://localhost:8000/research/export -H "Authorization: Bearer $TOKEN" > export.json
+```
+The export requires being signed in (any account — there's no separate approval gate) but only ever includes users who've explicitly opted in via Settings. See [Research Data Export](#research-data-export) below for the anonymization method and exact schema.
+
 ---
 
 ## User Guide
@@ -1287,6 +1331,7 @@ flowchart TB
     DASHBOARD --> GRAPH[Knowledge Graph /graph]
     DASHBOARD --> DIARY[Diary /diary]
     DASHBOARD --> GOALS[Goals /goals]
+    DASHBOARD --> ORG[Organization /org]
     DASHBOARD --> IDENTITY[Identity /identity]
     DASHBOARD --> MEMORY[Memory /memory]
     DASHBOARD --> EVIDENCE[Evidence /evidence]
@@ -1304,6 +1349,7 @@ flowchart TB
     TIMELINE --> REPLAY[ReplayModal<br/>click any event]
     GRAPH --> GRAPH_NODE[Node detail panel<br/>click any topic/creator]
     GOALS --> GOAL_CARD[Live alignment scoring<br/>on every read]
+    ORG --> ORG_INVITE[Invite code generator<br/>owner only]
 
     IDENTITY --> ID_INSPECTOR[IdentityInspector<br/>click any card]
     IDENTITY --> ID_EVOLUTION[IdentityEvolution<br/>timeline toggle]
@@ -1466,6 +1512,29 @@ Local-debugging tooling — not per-user data endpoints, so `/admin/errors` has 
 |---|---|---|
 | `GET` | `/admin/errors` | Recent unhandled exceptions and extension extraction failures |
 | `POST` | `/admin/reprocess` | Rebuild a user's behavior_objects/evidence/inferences/identity from their real events (`dry_run` supported) |
+
+### Organizations
+
+Seat/roster grouping above individual accounts — every route requires a bearer token, no public-id exception. See [Organizations](#organizations-1) under Production Hardening for the privacy boundary this API deliberately stays inside.
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/orgs` | Create an org (caller becomes owner) |
+| `POST` | `/orgs/invites` | Generate an invite code (owner only) |
+| `GET` | `/orgs/invites` | List this org's active invites (owner only) |
+| `POST` | `/orgs/join` | Join an org via invite code |
+| `GET` | `/orgs/me` | Current user's org, role, and member count |
+| `GET` | `/orgs/members` | Roster — username, display name, role, join date only |
+| `DELETE` | `/orgs/members/{username}` | Remove a member (owner only) |
+| `POST` | `/orgs/leave` | Leave the org (owners blocked unless sole member) |
+
+### Research
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/research/status` | Current user's opt-in state |
+| `POST` | `/research/opt-in` | Set opt-in state (`{opt_in: bool}`) |
+| `GET` | `/research/export` | Bulk de-identified dataset across every opted-in user (any authenticated user) |
 
 ---
 
@@ -1644,9 +1713,29 @@ Unhandled exceptions are caught by the outermost request middleware (not `@app.e
 
 When a content script's DOM extraction fails (e.g. Instagram/YouTube changes their page structure and a selector goes stale), the event is dropped rather than recorded wrong — but the failure itself now flows through: content script → background worker → `POST /ingest` (`warnings` field) → `error_events` → a badge in the extension popup and a card on the Import page. Previously this was only a `console.log`, invisible unless devtools happened to be open at the exact moment.
 
+### Organizations
+
+`app/api/orgs.py` adds a seat/roster grouping layer above individual accounts — modeled on how Slack/Notion workspaces work, not on shared identity. This is a deliberate, load-bearing boundary, not an oversight:
+
+- Every org query touches `users`/`organizations`/`org_invites` only. None of it ever joins against `behavior_objects`, `evidence`, `inferences`, `reflections`, `self_models`, or `identity_snapshots`.
+- An org owner gets roster visibility (username, display name, role, join date) and seat management (invite, remove) — never a member's behavior, evidence, or identity data.
+- Two roles: `owner` (the creator — can invite/remove members, single per org, no ownership transfer yet) and `member` (can view the roster, leave anytime).
+- An owner can't leave while other members remain (avoids an orphaned org); leaving as the sole member deletes the org.
+
+If a future feature ever needs to cross this line — an org-wide analytics rollup, say — it should be opt-in per member, the same way [research export](#research-data-export) is, not implied by org membership.
+
+### Research Data Export
+
+`app/api/research.py` + `app/services/research_export.py` — an opt-in, de-identified bulk export for behavioral-science research, gated behind `users.research_opt_in` (off by default; every user controls their own flag from Settings).
+
+- **Anonymization**: `participant_id = HMAC-SHA256(RESEARCH_EXPORT_SALT, username)[:16]` — one-way, stable across export runs for the same user (so a longitudinal study can still join records for one participant), never reversible back to a username from the export alone. `RESEARCH_EXPORT_SALT` is a separate secret from `AUTH_SECRET` so the two can be rotated independently.
+- **Fields**: allowlisted columns only, the same allowlist `insights_export.py`'s per-user CSV export already used — `behavior_objects` (topic, lifecycle_state, confidence/importance/stability scores, keywords), `evidence` (type, confidence, weight), `inferences` (type, label, confidence), `identity_snapshots` (version, overall_confidence, identity_completeness). No raw captions, no usernames, no emails.
+- **Access**: `GET /research/export` requires being signed in (any account, no separate approval gate — self-serve like the rest of the product) so it isn't a fully anonymous scrape target, but participation is what actually gates the data, not the requester's identity.
+- **Reversible opt-out, not retroactive**: turning `research_opt_in` back off removes a user from every future export immediately; it can't recall a dataset a researcher already downloaded.
+
 ### Tests
 
-`backend/tests/` (pytest, gated behind a live `DATABASE_URL` via a session-scoped fixture — skips cleanly if unreachable) covers auth enforcement end-to-end, goals alignment scoring, the reprocess endpoint (including the write-vs-read auth bypass regression), the global exception handler, and ingest warning handling.
+`backend/tests/` (pytest, gated behind a live `DATABASE_URL` via a session-scoped fixture — skips cleanly if unreachable) covers auth enforcement end-to-end, goals alignment scoring, the reprocess endpoint (including the write-vs-read auth bypass regression), the global exception handler, ingest warning handling, the full organizations lifecycle (create/invite/join/roster/remove/leave, including that the roster response never carries cognitive-data fields), and research export opt-in gating + de-identification.
 
 ```bash
 cd backend
@@ -1744,7 +1833,7 @@ AIMirror/
 │
 ├── dashboard/                       # React frontend
 │   ├── src/
-│   │   ├── pages/                  # 24 page components (lazy-loaded per route)
+│   │   ├── pages/                  # 25 page components (lazy-loaded per route)
 │   │   ├── components/             # UI components
 │   │   │   ├── ui/                # Primitives (StatCard, GlassCard, Badge, AsyncState, etc.)
 │   │   │   ├── layout/            # AppShell, Sidebar

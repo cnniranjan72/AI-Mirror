@@ -1,10 +1,11 @@
 import { useState, Suspense, lazy } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { View } from '@react-three/drei'
 import Sidebar from './Sidebar'
 import ErrorBoundary from '../ErrorBoundary'
 import LoadingSkeleton from '../ui/LoadingSkeleton'
+import { isAuthed } from '../../api/client'
 
 // Lazy-loaded so each route's code (and the vendor chunks it pulls in —
 // three.js/drei/react-force-graph-3d/recharts) ships only when that route is
@@ -18,6 +19,7 @@ const TimelinePage = lazy(() => import('../../pages/timeline/TimelinePage'))
 const KnowledgeGraphPage = lazy(() => import('../../pages/graph/KnowledgeGraphPage'))
 const DiaryPage = lazy(() => import('../../pages/diary/DiaryPage'))
 const GoalsPage = lazy(() => import('../../pages/goals/GoalsPage'))
+const OrgPage = lazy(() => import('../../pages/org/OrgPage'))
 const IdentityPage = lazy(() => import('../../pages/identity/IdentityPage'))
 const MemoryPage = lazy(() => import('../../pages/memory/MemoryPage'))
 const EvidencePage = lazy(() => import('../../pages/evidence/EvidencePage'))
@@ -47,6 +49,20 @@ const PageLoading = () => (
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const sidebarWidth = collapsed ? 'var(--sidebar-collapsed)' : 'var(--sidebar-width)'
+  const location = useLocation()
+
+  // "/" is the public entry point — a first-time visitor with no account has
+  // nothing to navigate yet, so it renders standalone without the 21-item
+  // internal app sidebar. Signed-in visitors have no reason to see the
+  // marketing page at all and go straight to their dashboard.
+  if (location.pathname === '/') {
+    if (isAuthed()) return <Navigate to="/dashboard" replace />
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <LandingPage />
+      </Suspense>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -92,13 +108,13 @@ export default function AppShell() {
           <ErrorBoundary>
             <Suspense fallback={<PageLoading />}>
               <Routes>
-                <Route path="/" element={<LandingPage />} />
                 <Route path="/dashboard" element={<Overview />} />
                 <Route path="/import" element={<IngestionPage />} />
                 <Route path="/timeline" element={<TimelinePage />} />
                 <Route path="/graph" element={<KnowledgeGraphPage />} />
                 <Route path="/diary" element={<DiaryPage />} />
                 <Route path="/goals" element={<GoalsPage />} />
+                <Route path="/org" element={<OrgPage />} />
                 <Route path="/identity" element={<IdentityPage />} />
                 <Route path="/memory" element={<MemoryPage />} />
                 <Route path="/evidence" element={<EvidencePage />} />

@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from app.db.postgres import init_pool, close_pool, run_schema, health as db_health
-from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary, goals, admin
+from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary, goals, admin, orgs, research
 
 load_dotenv()
 
@@ -107,6 +107,8 @@ app.include_router(graph.router, tags=["Graph"])
 app.include_router(diary.router, tags=["Diary"])
 app.include_router(goals.router, tags=["Goals"])
 app.include_router(admin.router, tags=["Admin"])
+app.include_router(orgs.router, tags=["Organizations"])
+app.include_router(research.router, tags=["Research"])
 
 
 @app.get("/")

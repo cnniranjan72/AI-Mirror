@@ -294,6 +294,66 @@ export const api = {
   exportAllDataUrl: (userId = activeUser()) =>
     `${API_BASE_URL}/privacy/export-all?user_id=${encodeURIComponent(userId)}`,
 
+  // === Organizations (seats/roster — never cross-user cognitive data) ===
+  getMyOrg: async () => {
+    const { data } = await client.get('/orgs/me');
+    return data;
+  },
+  createOrg: async (name) => {
+    const { data } = await client.post('/orgs', { name });
+    return data;
+  },
+  getOrgMembers: async () => {
+    const { data } = await client.get('/orgs/members');
+    return data;
+  },
+  createOrgInvite: async (maxUses = 1, expiresHours = 168) => {
+    const { data } = await client.post('/orgs/invites', { max_uses: maxUses, expires_hours: expiresHours });
+    return data;
+  },
+  listOrgInvites: async () => {
+    const { data } = await client.get('/orgs/invites');
+    return data;
+  },
+  joinOrg: async (code) => {
+    const { data } = await client.post('/orgs/join', { code });
+    return data;
+  },
+  removeOrgMember: async (username) => {
+    const { data } = await client.delete(`/orgs/members/${encodeURIComponent(username)}`);
+    return data;
+  },
+  leaveOrg: async () => {
+    const { data } = await client.post('/orgs/leave');
+    return data;
+  },
+
+  // === Research (opt-in de-identified export) ===
+  getResearchStatus: async () => {
+    const { data } = await client.get('/research/status');
+    return data;
+  },
+  setResearchOptIn: async (optIn) => {
+    const { data } = await client.post('/research/opt-in', { opt_in: optIn });
+    return data;
+  },
+  // GET /research/export requires a bearer token, so it can't be a plain
+  // download link (no way to attach an Authorization header to <a href>) —
+  // fetch it through the authenticated client and save the blob instead.
+  downloadResearchExport: async () => {
+    const { data } = await client.get('/research/export');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `aimirror_research_export_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return data;
+  },
+
   // === Admin (local debugging — no per-user auth, not a data endpoint) ===
   getAdminErrors: async (errorType, limit = 20) => {
     const { data } = await client.get('/admin/errors', { params: { error_type: errorType, limit } });
