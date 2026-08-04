@@ -268,6 +268,12 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
             )
             event_id = row["id"]
             stored_count += 1
+            # Pipeline stages (behavior_objects.supporting_event_ids, evidence.supporting_events,
+            # memories.source_event_ids) key off bev.event_id — it arrives as a random evt_xxxx
+            # from the normalizer with no link back to this row. Overwrite it with the real
+            # Postgres id so downstream clustering can be traced back to a specific event (the
+            # Timeline endpoint's reverse-index depends on this).
+            bev.event_id = str(event_id)
 
             # Content Intelligence (still needed for expansion/embeddings)
             enriched = enrichment.enrich(bev.caption or "", bev.hashtags)
