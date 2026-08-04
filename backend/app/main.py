@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from app.db.postgres import init_pool, close_pool, run_schema, health as db_health
-from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary
+from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary, goals
 
 load_dotenv()
 
@@ -80,6 +80,7 @@ app.include_router(privacy.router, tags=["Privacy"])
 app.include_router(timeline.router, tags=["Timeline"])
 app.include_router(graph.router, tags=["Graph"])
 app.include_router(diary.router, tags=["Diary"])
+app.include_router(goals.router, tags=["Goals"])
 
 
 @app.get("/")

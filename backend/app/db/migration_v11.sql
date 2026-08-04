@@ -1,0 +1,13 @@
+-- Migration V11: fix the goals table's broken updated_at trigger.
+--
+-- trg_goals_updated_at (added in migration V3's schema.sql) calls
+-- update_updated_at_column(), which unconditionally sets NEW.updated_at —
+-- but goals' timestamp column is named last_updated, not updated_at. Any
+-- UPDATE on goals has always failed with
+-- "record \"new\" has no field \"updated_at\"" (asyncpg.UndefinedColumnError).
+-- This is very likely why the goals table has zero rows in production:
+-- nothing could ever be updated after insert. Application code now sets
+-- last_updated = NOW() explicitly on every UPDATE, so the trigger is
+-- redundant as well as broken — just drop it rather than adding a second,
+-- goals-specific trigger function.
+DROP TRIGGER IF EXISTS trg_goals_updated_at ON goals;
