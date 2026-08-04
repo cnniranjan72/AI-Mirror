@@ -1,5 +1,7 @@
 import { useState, Suspense } from 'react'
 import { Routes, Route } from 'react-router-dom'
+import { Canvas } from '@react-three/fiber'
+import { View } from '@react-three/drei'
 import Sidebar from './Sidebar'
 import ErrorBoundary from '../ErrorBoundary'
 import LoadingSkeleton from '../ui/LoadingSkeleton'
@@ -39,6 +41,19 @@ export default function AppShell() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Every CharacterCreature3D on every page renders into this single shared
+          canvas via <View> instead of mounting its own <Canvas>. Route changes
+          swap which View is in the DOM, not the WebGL context itself — this is
+          what keeps navigation from tearing down/recreating a context on every
+          page (the source of the react-three-fiber StrictMode unmount warning). */}
+      <Canvas
+        gl={{ alpha: true, antialias: true }}
+        dpr={[1, 2]}
+        style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', pointerEvents: 'none', zIndex: 0 }}
+      >
+        <View.Port />
+      </Canvas>
+
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
 
       <main style={{

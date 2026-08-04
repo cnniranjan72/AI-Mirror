@@ -1,6 +1,6 @@
-import { useRef, useMemo } from 'react'
-import { Canvas, useFrame, extend } from '@react-three/fiber'
-import { Text, Billboard, Sparkles, Line, shaderMaterial } from '@react-three/drei'
+import { useRef, useMemo, useLayoutEffect } from 'react'
+import { useFrame, useThree, extend } from '@react-three/fiber'
+import { Text, Billboard, Sparkles, Line, shaderMaterial, View } from '@react-three/drei'
 import * as THREE from 'three'
 
 function fibonacciSphere(count, radius) {
@@ -902,6 +902,21 @@ function OrbitingLabels({ topics, colorHex }) {
   )
 }
 
+// All CharacterCreature3D instances share a single <Canvas> mounted once at
+// the app shell (see AppShell.jsx) and rendered into via <View>, so route
+// navigation never tears down/recreates a WebGL context. Since only one
+// instance is ever visible at a time in this app, each active View is free
+// to point the shared camera at its own preferred framing on mount.
+function CameraRig({ distance, fov }) {
+  const camera = useThree((s) => s.camera)
+  useLayoutEffect(() => {
+    camera.position.set(0, 0, distance)
+    camera.fov = fov
+    camera.updateProjectionMatrix()
+  }, [camera, distance, fov])
+  return null
+}
+
 export default function CharacterCreature3D({
   confidence = 0.5,
   topics = [],
@@ -922,24 +937,19 @@ export default function CharacterCreature3D({
   const Being = BEINGS[variant] || Creature
 
   return (
-    <div style={{ width: size, height: size }}>
-      <Canvas
-        camera={{ position: [0, 0, showLabels ? 4.4 : 3.1], fov: 38 }}
-        gl={{ alpha: true, antialias: true }}
-        dpr={[1, 2]}
-      >
-        <ambientLight intensity={0.3} />
-        <Being colorHex={colorHex} glowIntensity={glowIntensity} thinking={thinking} />
-        {showLabels && topics.length > 0 && <OrbitingLabels topics={topics} colorHex={colorHex} />}
-        <Sparkles
-          count={thinking ? 60 : 28}
-          scale={[2.4, 2.4, 2.4]}
-          size={thinking ? 2.5 : 1.5}
-          speed={thinking ? 0.8 : 0.3}
-          color={colorHex}
-          opacity={0.6}
-        />
-      </Canvas>
-    </div>
+    <View style={{ width: size, height: size }}>
+      <CameraRig distance={showLabels ? 4.4 : 3.1} fov={38} />
+      <ambientLight intensity={0.3} />
+      <Being colorHex={colorHex} glowIntensity={glowIntensity} thinking={thinking} />
+      {showLabels && topics.length > 0 && <OrbitingLabels topics={topics} colorHex={colorHex} />}
+      <Sparkles
+        count={thinking ? 60 : 28}
+        scale={[2.4, 2.4, 2.4]}
+        size={thinking ? 2.5 : 1.5}
+        speed={thinking ? 0.8 : 0.3}
+        color={colorHex}
+        opacity={0.6}
+      />
+    </View>
   )
 }
