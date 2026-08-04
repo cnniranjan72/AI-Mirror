@@ -19,9 +19,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const backendIndicator = document.getElementById('backendIndicator');
   const backendStatusText = document.getElementById('backendStatusText');
 
+  // Extraction-warning elements
+  const extractionWarningBanner = document.getElementById('extractionWarningBanner');
+  const extractionWarningText = document.getElementById('extractionWarningText');
+
   // Load initial stats
   loadStats();
   loadBackendStatus();
+  loadExtractionWarnings();
 
   // Event listeners
   syncBtn.addEventListener('click', handleSync);
@@ -88,6 +93,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Surfaces content-script extraction failures (e.g. YouTube/Instagram
+  // changing their DOM so a selector stops matching) that were previously
+  // only a console.log — invisible unless you had devtools open at the
+  // exact moment it happened. This is the counter background.js increments
+  // each time a batch includes dropped-item warnings.
+  async function loadExtractionWarnings() {
+    try {
+      const { extractionFailureCount = 0 } = await chrome.storage.local.get(['extractionFailureCount']);
+      if (extractionFailureCount > 0) {
+        extractionWarningText.textContent =
+          `${extractionFailureCount} item${extractionFailureCount === 1 ? '' : 's'} couldn't be read this session — the page structure may have changed.`;
+        extractionWarningBanner.style.display = 'flex';
+      } else {
+        extractionWarningBanner.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('[AIMirror Popup] Failed to load extraction warnings:', error);
+    }
+  }
+
   async function handleSync() {
     syncBtn.disabled = true;
     syncBtn.innerHTML = '<span class="btn-icon">⏳</span> Syncing...';
@@ -140,6 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clearBtn.innerHTML = '<span class="btn-icon">🗑️</span> Clear Data';
             clearBtn.disabled = false;
             loadStats();
+            loadExtractionWarnings();
           }, 2000);
         }
       } catch (error) {

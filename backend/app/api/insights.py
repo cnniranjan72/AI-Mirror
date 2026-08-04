@@ -4,10 +4,13 @@ for ad agencies / audience research, mental-health & wellbeing research, and
 academic behavioral research. See app/services/insights_export.py.
 """
 import logging
-from fastapi import APIRouter, HTTPException, Query
+from typing import Optional
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
+from app.api.deps import enforce_write_match, resolve_user_id
 from app.services import insights_export, campaign_resonance
 
 logger = logging.getLogger(__name__)
@@ -20,7 +23,7 @@ class CampaignRequest(BaseModel):
 
 
 @router.get("/insights/profile")
-async def get_algorithmic_identity_profile(user_id: str = Query(default="default")):
+async def get_algorithmic_identity_profile(user_id: str = Depends(resolve_user_id)):
     """The full structured export — identity, interests, creator affinity,
     cognitive signals, audience segment, wellbeing signal."""
     return await insights_export.build_algorithmic_identity_profile(user_id)
@@ -28,7 +31,7 @@ async def get_algorithmic_identity_profile(user_id: str = Query(default="default
 
 @router.get("/insights/export.csv")
 async def export_csv(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     table: str = Query(default="behavior_objects"),
 ):
     try:
@@ -43,10 +46,11 @@ async def export_csv(
 
 
 @router.post("/insights/campaign-resonance")
-async def post_campaign_resonance(req: CampaignRequest):
+async def post_campaign_resonance(req: CampaignRequest, authorization: Optional[str] = Header(default=None)):
     """Score a hypothetical campaign/product description against this user's
     real algorithmic identity — the pre-outreach fit check an ad agency or
     creator-partnerships team would actually want."""
+    enforce_write_match(authorization, req.user_id)
     if not req.campaign_text.strip():
         raise HTTPException(status_code=400, detail="campaign_text is required")
     result = await campaign_resonance.score_campaign(req.user_id, req.campaign_text)

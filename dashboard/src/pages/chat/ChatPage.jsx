@@ -11,7 +11,7 @@ const USER_ID = DEFAULT_USER
 const CONVERSATION_ID = `conv_${USER_ID}`
 
 export default function ChatPage() {
-  const { data: history, loading: histLoading, refetch } = useChatHistory(USER_ID, CONVERSATION_ID)
+  const { data: history, loading: histLoading, error: histError, refetch } = useChatHistory(USER_ID, CONVERSATION_ID)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -117,7 +117,17 @@ export default function ChatPage() {
 
         {/* Messages */}
         <div style={{ flex: 1, overflow: 'auto', padding: '20px' }}>
-          {messages.length === 0 && !sending && (
+          {messages.length === 0 && !sending && histError && (
+            <div style={{ textAlign: 'center', paddingTop: '15vh' }}>
+              <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.5 }}>⚠️</div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: '#f87171', marginBottom: 8 }}>Couldn't load conversation history</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 400, margin: '0 auto 16px' }}>
+                {typeof histError === 'string' ? histError : 'You can still start a new message below.'}
+              </div>
+              <button className="btn btn-secondary" onClick={refetch}>Try again</button>
+            </div>
+          )}
+          {messages.length === 0 && !sending && !histError && (
             <div style={{ textAlign: 'center', paddingTop: '15vh' }}>
               <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.2 }}>💬</div>
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Start a conversation</div>

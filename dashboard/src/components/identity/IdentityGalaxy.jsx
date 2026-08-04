@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text, Billboard, Sparkles } from '@react-three/drei'
 
@@ -77,6 +77,19 @@ function Planet({ topic, angle, radius, size, color, onSelect, selected }) {
  * confidence: identity.overall_confidence
  */
 export default function IdentityGalaxy({ topics, confidence, onSelectTopic, selectedTopic, style }) {
+  // This page (like every route) is React.lazy-loaded, so this component can
+  // mount before the surrounding grid/card layout has finished settling.
+  // R3F's Canvas measures its container once on mount via ResizeObserver;
+  // if that first measurement lands during the pre-layout moment, the
+  // canvas gets stuck at the browser's ~300x150 fallback size forever
+  // (verified live — nothing subsequently re-triggers a re-measure).
+  // Dispatching a resize event a tick after mount forces R3F to re-read the
+  // container's real, settled size.
+  useEffect(() => {
+    const id = setTimeout(() => window.dispatchEvent(new Event('resize')), 50)
+    return () => clearTimeout(id)
+  }, [])
+
   if (!topics || topics.length === 0) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: 13, ...style }}>

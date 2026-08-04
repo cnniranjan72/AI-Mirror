@@ -3,6 +3,7 @@ import { useEvidence, useInferences } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
+import AsyncState from '../../components/ui/AsyncState'
 import { LayersIcon, BrainIcon, TargetIcon } from '../../icons/icons'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import EvidenceDrawer from '../../components/explain/EvidenceDrawer'
@@ -12,7 +13,7 @@ const evidenceTypes = ['behavioral', 'temporal', 'topical', 'creator', 'interact
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b']
 
 export default function EvidencePage() {
-  const { data: evidence, loading: evLoading } = useEvidence()
+  const { data: evidence, loading: evLoading, error: evError, refetch: refetchEvidence } = useEvidence()
   const { data: inferences, loading: infLoading } = useInferences()
   const [selectedType, setSelectedType] = useState('all')
   const [selectedEvidence, setSelectedEvidence] = useState(null)
@@ -44,6 +45,7 @@ export default function EvidencePage() {
         </div>
       </div>
 
+      <AsyncState loading={evLoading} error={evError} onRetry={refetchEvidence}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
         <StatCard label="Total Evidence" value={evidenceList.length} icon={LayersIcon} accent="indigo" loading={evLoading} />
         <StatCard label="Inferences" value={inferencesList.length} icon={BrainIcon} accent="violet" loading={infLoading} />
@@ -148,6 +150,7 @@ export default function EvidencePage() {
           </div>
         )}
       </GlassCard>
+      </AsyncState>
 
       {selectedEvidence && (
         <EvidenceDrawer evidenceId={selectedEvidence} onClose={() => setSelectedEvidence(null)} />

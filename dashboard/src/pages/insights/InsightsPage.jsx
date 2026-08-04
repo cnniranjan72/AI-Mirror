@@ -30,7 +30,7 @@ const USE_CASES = [
 const TABLES = ['behavior_objects', 'evidence', 'inferences', 'reflections']
 
 export default function InsightsPage() {
-  const { data: profile, loading } = useApi(() => api.getInsightsProfile(), [])
+  const { data: profile, loading, error, refetch } = useApi(() => api.getInsightsProfile(), [])
   const [expanded, setExpanded] = useState(null)
 
   const [campaignText, setCampaignText] = useState('')
@@ -123,6 +123,11 @@ export default function InsightsPage() {
 
         {loading ? (
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>Building profile…</div>
+        ) : error ? (
+          <div style={{ padding: 24, textAlign: 'center' }}>
+            <div style={{ color: '#f87171', fontSize: 13, marginBottom: 10 }}>Couldn't build the profile: {typeof error === 'string' ? error : 'request failed'}</div>
+            <button className="btn btn-secondary" onClick={refetch}>Try again</button>
+          </div>
         ) : profile && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
             <MiniStat label="Identity confidence" value={`${Math.round((profile.identity.overall_confidence || 0) * 100)}%`} icon={TargetIcon} />

@@ -4,6 +4,7 @@ import { api } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
+import AsyncState from '../../components/ui/AsyncState'
 import { ZapIcon, TargetIcon, ActivityIcon, BrainIcon } from '../../icons/icons'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
@@ -29,7 +30,7 @@ function qColor(q) {
 }
 
 export default function LearningPage() {
-  const { data: policy, loading, refetch } = useApi(() => api.getRlPolicy(), [])
+  const { data: policy, loading, error, refetch } = useApi(() => api.getRlPolicy(), [])
   const { data: history } = useApi(() => api.getRlHistory(), [])
   const [busy, setBusy] = useState(null)
 
@@ -64,6 +65,7 @@ export default function LearningPage() {
         </div>
       </div>
 
+      <AsyncState loading={loading} error={error} onRetry={refetch}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
         <StatCard label="Learned States" value={contexts.length} icon={TargetIcon} accent="indigo" loading={loading} />
         <StatCard label="Policy Entries" value={rows.length} icon={ZapIcon} accent="violet" loading={loading} />
@@ -81,9 +83,7 @@ export default function LearningPage() {
           For each behavioural state, the value it has learned for each nudge. Higher = more effective at improving alignment. Rate a suggestion 👍/👎 to teach it.
         </p>
 
-        {loading ? (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
-        ) : contexts.length === 0 ? (
+        {contexts.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
             No policy learned yet. As data is ingested (or you rate suggestions), the bandit fills in.
           </div>
@@ -159,6 +159,7 @@ export default function LearningPage() {
           </div>
         )}
       </GlassCard>
+      </AsyncState>
     </div>
   )
 }

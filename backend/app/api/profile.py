@@ -5,9 +5,10 @@ GET /profile — Returns persona + alignment + RL suggestions
 import logging
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from app.api.deps import resolve_user_id
 from app.services import persona as persona_svc, rl_layer, feature_engineering
 from app.db.postgres import fetch
 
@@ -32,7 +33,7 @@ class ProfileResponse(BaseModel):
 
 
 @router.get("/profile", response_model=ProfileResponse)
-async def get_profile(user_id: str = Query(default="default")):
+async def get_profile(user_id: str = Depends(resolve_user_id)):
     """
     Returns the latest persona profile with alignment and RL suggestions.
     """

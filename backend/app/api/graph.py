@@ -10,8 +10,9 @@ import logging
 from collections import defaultdict
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.api.deps import resolve_user_id
 from app.db.postgres import fetch
 
 logger = logging.getLogger(__name__)
@@ -28,7 +29,7 @@ def _parse_json(value):
 
 
 @router.get("/graph/knowledge")
-async def get_knowledge_graph(user_id: str = Query(default="default")):
+async def get_knowledge_graph(user_id: str = Depends(resolve_user_id)):
     rows = await fetch(
         "SELECT unique_id, topic, subtopics, keywords, creators, importance_score, "
         "confidence_score, lifecycle_state, supporting_event_ids "
@@ -53,14 +54,29 @@ async def get_knowledge_graph(user_id: str = Query(default="default")):
             except (TypeError, ValueError):
                 continue
 
-    # Best-effort platform lookup — only newly-linked (numeric) event ids resolve;
-    # older evt_xxxx-linked behavior objects just show no platform tag, honestly.
+    # Platform lookup, event-id based: only newly-linked (numeric) event ids
+    # resolve this way — older evt_xxxx-linked behavior objects (from before
+    # ingest.py/seed.py started setting BehaviorEvent.event_id to the real
+    # Postgres id) don't have a usable id here at all.
     platform_by_event = {}
     if all_event_ids:
         ids = list(all_event_ids)
         placeholders = ", ".join(f"${i + 1}" for i in range(len(ids)))
         ev_rows = await fetch(f"SELECT id, platform FROM events WHERE id IN ({placeholders})", *ids)
         platform_by_event = {r["id"]: r["platform"] for r in ev_rows}
+
+    # Fallback platform lookup, creator-based: for the legacy evt_xxxx objects
+    # above, fall back to the platform(s) their real creators actually posted
+    # on. Only safe because it's deterministic in practice: every username in
+    # this user's events maps to exactly one platform (verified live), so this
+    # is a real fact about the account's data, not a guess.
+    creator_rows = await fetch(
+        "SELECT DISTINCT username, platform FROM events WHERE user_id = $1 AND username IS NOT NULL",
+        user_id,
+    )
+    platform_by_username = defaultdict(set)
+    for r in creator_rows:
+        platform_by_username[r["username"]].add(r["platform"])
 
     nodes = []
     links = []
@@ -76,6 +92,9 @@ async def get_knowledge_graph(user_id: str = Query(default="default")):
                 p = None
             if p:
                 platforms.add(p)
+        if not platforms:
+            for creator in d["creators"]:
+                platforms |= platform_by_username.get(creator, set())
 
         topic_id = f"topic:{d['unique_id']}"
         nodes.append({
@@ -95,7 +114,9 @@ async def get_knowledge_graph(user_id: str = Query(default="default")):
                 continue
             cid = f"creator:{creator}"
             creator_topic_count[cid] += 1
-            creator_platforms[cid] |= platforms
+            # A creator's own platform is unambiguous from their username,
+            # independent of which platforms the topic as a whole spans.
+            creator_platforms[cid] |= (platform_by_username.get(creator) or platforms)
             links.append({"source": topic_id, "target": cid, "kind": "creates"})
 
     for cid, count in creator_topic_count.items():

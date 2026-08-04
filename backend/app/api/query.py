@@ -1,9 +1,10 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 
+from app.api.deps import enforce_write_match, resolve_user_id
 from app.services import rag, persona as persona_svc, chat_memory
 from backend.cognitive_pipeline.pipeline import get_cognitive_pipeline
 from backend.verbalizer.followups import generate_follow_ups
@@ -38,7 +39,8 @@ class QueryResponse(BaseModel):
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query_insights(req: QueryRequest):
+async def query_insights(req: QueryRequest, authorization: Optional[str] = Header(default=None)):
+    enforce_write_match(authorization, req.user_id)
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
@@ -126,7 +128,7 @@ async def query_insights(req: QueryRequest):
 
 @router.get("/chat/history")
 async def get_chat_history(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     conversation_id: Optional[str] = Query(default=None),
     limit: int = Query(default=50, le=200),
 ):
@@ -138,7 +140,7 @@ async def get_chat_history(
 
 @router.delete("/chat/history")
 async def clear_chat_history(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     conversation_id: Optional[str] = Query(default=None),
 ):
     from app.db.postgres import execute

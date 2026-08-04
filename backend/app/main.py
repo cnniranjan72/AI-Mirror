@@ -11,18 +11,29 @@ from datetime import datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from app.db.postgres import init_pool, close_pool, run_schema, health as db_health
-from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary, goals
+from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary, goals, admin
 
 load_dotenv()
 
 from app.core.logging import configure_logging, log_with_context
+from app.core.error_tracking import record_error
 
 # Structured JSON logging
 configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
+
+# Upgrade path to a real error-tracking service, when one is configured —
+# not built out further since no SENTRY_DSN exists in this environment today.
+if os.getenv("SENTRY_DSN"):
+    try:
+        import sentry_sdk
+        sentry_sdk.init(dsn=os.getenv("SENTRY_DSN"), traces_sample_rate=0.1)
+    except ImportError:
+        logger.warning("SENTRY_DSN set but sentry_sdk is not installed")
 
 
 @asynccontextmanager
@@ -60,7 +71,21 @@ async def logging_middleware(request: Request, call_next):
     trace_id = request.headers.get("X-Trace-Id", str(uuid.uuid4()))
     request.state.trace_id = trace_id
     logger.info("Request started", extra={"trace_id": trace_id, "path": request.url.path, "method": request.method})
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        # A plain @app.exception_handler(Exception) is unreliable here:
+        # BaseHTTPMiddleware (which this middleware itself is, via
+        # @app.middleware("http")) is documented to not consistently
+        # propagate exceptions from deeper in the stack to app-level
+        # exception handlers. This is the outermost middleware on every
+        # request regardless, so catching here is both correct and simpler
+        # than fighting that interaction.
+        await record_error(exc, trace_id=trace_id, path=request.url.path, method=request.method)
+        response = JSONResponse(
+            status_code=500,
+            content={"error": "internal_error", "trace_id": trace_id},
+        )
     response.headers["X-Trace-Id"] = trace_id
     logger.info("Request completed", extra={"trace_id": trace_id, "status": response.status_code})
     return response
@@ -81,6 +106,7 @@ app.include_router(timeline.router, tags=["Timeline"])
 app.include_router(graph.router, tags=["Graph"])
 app.include_router(diary.router, tags=["Diary"])
 app.include_router(goals.router, tags=["Goals"])
+app.include_router(admin.router, tags=["Admin"])
 
 
 @app.get("/")

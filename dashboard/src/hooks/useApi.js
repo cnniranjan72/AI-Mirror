@@ -35,10 +35,10 @@ export function useApi(fn, deps = [], options = {}) {
 }
 
 export function useIdentity(userId) {
-  const { data: current, loading: currentLoading } = useApi(() => api.getCurrentIdentity(userId), [userId])
+  const { data: current, loading: currentLoading, error: currentError, refetch: refetchCurrent } = useApi(() => api.getCurrentIdentity(userId), [userId])
   const { data: summary } = useApi(() => api.getCognitiveSummary(userId), [userId])
   const { data: snapshots } = useApi(() => api.getIdentitySnapshot(userId, 20), [userId])
-  return { current, summary, snapshots, loading: currentLoading }
+  return { current, summary, snapshots, loading: currentLoading, error: currentError, refetch: refetchCurrent }
 }
 
 export function useEvidence(userId) {

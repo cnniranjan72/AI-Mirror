@@ -293,6 +293,12 @@ export const api = {
   },
   exportAllDataUrl: (userId = activeUser()) =>
     `${API_BASE_URL}/privacy/export-all?user_id=${encodeURIComponent(userId)}`,
+
+  // === Admin (local debugging — no per-user auth, not a data endpoint) ===
+  getAdminErrors: async (errorType, limit = 20) => {
+    const { data } = await client.get('/admin/errors', { params: { error_type: errorType, limit } });
+    return data;
+  },
   // confirmUserId must be what the user actually typed to confirm — the
   // backend rejects the call if it doesn't match user_id, as a guard
   // against an accidental click triggering an irreversible deletion.

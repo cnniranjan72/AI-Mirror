@@ -7,7 +7,7 @@ import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon, DownloadIcon, Aler
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
 export default function SettingsPage() {
-  const { data: v3Health, refetch: refetchV3 } = useV3Health()
+  const { data: v3Health, error: v3Error, refetch: refetchV3 } = useV3Health()
 
   const [testForm, setTestForm] = useState({ userId: DEFAULT_USER })
   const [testResult, setTestResult] = useState(null)
@@ -78,8 +78,13 @@ export default function SettingsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 6, background: 'rgba(148,163,184,0.04)' }}>
                 <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>AIMirror Backend (port 8000)</span>
-                <Badge variant={v3Health ? 'emerald' : 'danger'} dot>{v3Health ? 'Online' : 'Offline'}</Badge>
+                <Badge variant={v3Health ? 'emerald' : 'danger'} dot>{v3Health ? 'Online' : v3Error ? 'Unreachable' : 'Offline'}</Badge>
               </div>
+              {v3Error && (
+                <div style={{ fontSize: 11, color: '#f87171', padding: '0 12px' }}>
+                  {typeof v3Error === 'string' ? v3Error : 'Request failed'}
+                </div>
+              )}
               {v3Health?.database && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 6, background: 'rgba(148,163,184,0.04)' }}>
                   <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>PostgreSQL (Neon)</span>

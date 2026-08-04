@@ -31,6 +31,7 @@
     buffer: [],
     lastBatchTime: Date.now(),
     extractionPending: false,
+    warnings: [],
   };
 
   console.log('[AIMirror] Content script loaded — session:', state.sessionId);
@@ -251,6 +252,12 @@
       if (extractionFailed) {
         console.log('[AIMirror] ⤫ Skipped (metadata not ready):', state.currentReelId,
           `(${watchTime.toFixed(1)}s)`);
+        state.warnings.push({
+          type: 'extraction_failed',
+          platform: 'instagram',
+          content_id: state.currentReelId,
+          timestamp: new Date().toISOString(),
+        });
       } else {
         const event = {
           reel_id: state.currentReelId,
@@ -317,18 +324,21 @@
   }
 
   function sendBatch() {
-    if (state.buffer.length === 0) return;
+    if (state.buffer.length === 0 && state.warnings.length === 0) return;
 
     const events = [...state.buffer];
+    const warnings = [...state.warnings];
     state.buffer = [];
+    state.warnings = [];
     state.lastBatchTime = Date.now();
 
     const payload = {
       user_id: CONFIG.USER_ID,
       events: events,
+      warnings: warnings,
     };
 
-    console.log(`[AIMirror] → Sending ${events.length} events via background worker`);
+    console.log(`[AIMirror] → Sending ${events.length} events (${warnings.length} warnings) via background worker`);
 
     // IMPORTANT: Instagram's Content-Security-Policy (connect-src) blocks a
     // direct fetch() from the content script to our backend. So we hand the
@@ -341,6 +351,7 @@
           if (chrome.runtime.lastError) {
             console.error('[AIMirror] ✗ Send failed:', chrome.runtime.lastError.message);
             state.buffer = [...events, ...state.buffer];
+            state.warnings = [...warnings, ...state.warnings];
             return;
           }
           if (resp && resp.success) {
@@ -348,12 +359,14 @@
           } else {
             console.error('[AIMirror] ✗ Backend error:', resp && resp.error);
             state.buffer = [...events, ...state.buffer]; // retry next cycle
+            state.warnings = [...warnings, ...state.warnings];
           }
         }
       );
     } catch (err) {
       console.error('[AIMirror] ✗ sendMessage threw:', err.message);
       state.buffer = [...events, ...state.buffer];
+      state.warnings = [...warnings, ...state.warnings];
     }
   }
 

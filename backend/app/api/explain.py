@@ -6,7 +6,9 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+
+from app.api.deps import resolve_user_id
 from pydantic import BaseModel
 
 from app.db.postgres import fetch, fetchrow, fetchval
@@ -32,7 +34,7 @@ def _parse_json_fields(d: dict, fields: list) -> dict:
 
 @router.get("/identity/snapshot", response_model=list)
 async def get_identity_snapshots(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     limit: int = Query(default=10, le=100),
 ):
     rows = await fetch(
@@ -52,7 +54,7 @@ async def get_identity_snapshots(
 
 
 @router.get("/identity/current", response_model=Optional[dict])
-async def get_current_identity(user_id: str = Query(default="default")):
+async def get_current_identity(user_id: str = Depends(resolve_user_id)):
     identity = await fetchrow(
         "SELECT * FROM identities WHERE user_id = $1", user_id
     )
@@ -72,7 +74,7 @@ async def get_current_identity(user_id: str = Query(default="default")):
 
 
 @router.get("/identity/self-model", response_model=Optional[dict])
-async def get_self_model(user_id: str = Query(default="default")):
+async def get_self_model(user_id: str = Depends(resolve_user_id)):
     row = await fetchrow(
         "SELECT * FROM self_models WHERE user_id = $1", user_id
     )
@@ -81,7 +83,7 @@ async def get_self_model(user_id: str = Query(default="default")):
 
 @router.get("/reasoning/evidence", response_model=list)
 async def get_evidence(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     evidence_type: Optional[str] = Query(default=None),
     limit: int = Query(default=50, le=200),
 ):
@@ -108,7 +110,7 @@ async def get_evidence(
 
 @router.get("/reasoning/inferences", response_model=list)
 async def get_inferences(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     limit: int = Query(default=50, le=200),
 ):
     rows = await fetch(
@@ -124,7 +126,7 @@ async def get_inferences(
 
 @router.get("/reasoning/reflections", response_model=list)
 async def get_reflections(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     limit: int = Query(default=20, le=100),
 ):
     rows = await fetch(
@@ -140,7 +142,7 @@ async def get_reflections(
 
 @router.get("/reasoning/behavior-objects", response_model=list)
 async def get_behavior_objects(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     limit: int = Query(default=50, le=200),
 ):
     rows = await fetch(
@@ -156,7 +158,7 @@ async def get_behavior_objects(
 
 @router.get("/query/traces", response_model=list)
 async def get_query_traces(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     limit: int = Query(default=20, le=100),
 ):
     rows = await fetch(
@@ -188,7 +190,7 @@ async def get_trace_detail(trace_id: str):
 
 @router.get("/cognitive/metrics", response_model=list)
 async def get_cognitive_metrics(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     metric_name: Optional[str] = Query(default=None),
     limit: int = Query(default=100, le=500),
 ):
@@ -210,7 +212,7 @@ async def get_cognitive_metrics(
 
 
 @router.get("/cognitive/summary")
-async def get_cognitive_summary(user_id: str = Query(default="default")):
+async def get_cognitive_summary(user_id: str = Depends(resolve_user_id)):
     bo_count = await fetchval("SELECT COUNT(*) FROM behavior_objects WHERE user_id = $1", user_id)
     ev_count = await fetchval("SELECT COUNT(*) FROM evidence WHERE user_id = $1", user_id)
     inf_count = await fetchval("SELECT COUNT(*) FROM inferences WHERE user_id = $1", user_id)
@@ -295,21 +297,6 @@ async def explain_trace(trace_id: str):
     )
     evidence = [_parse_json_fields(dict(r), ["supporting_behavior_objects"]) for r in evidence_rows]
 
-    # Memories
-    memory_rows = await fetch(
-        """SELECT memory_id, memory_type, content, importance_score,
-                  context, tags, related_memory_ids, access_count,
-                  timestamp::text, created_at::text
-           FROM memories WHERE user_id = $1 ORDER BY importance_score DESC LIMIT 20""",
-        user_id,
-    )
-    memories = [_parse_json_fields(dict(r), ["context", "tags", "related_memory_ids"]) for r in memory_rows]
-
-    grouped_memories = {}
-    for m in memories:
-        mt = m.get("memory_type", "episodic").lower()
-        grouped_memories.setdefault(mt, []).append(m)
-
     # Planner data from trace_data
     trace_data = trace.get("trace_data", {})
     planner = trace_data.get("planner", {}) or {
@@ -337,10 +324,13 @@ async def explain_trace(trace_id: str):
         "token_count": trace.get("token_count", 0),
     }
 
-    # LLM data
+    # LLM data — provider/model come from the trace itself (set in
+    # cognitive_pipeline/pipeline.py from the verbalizer's actual response),
+    # never a hardcoded vendor name. "unknown" only for traces recorded
+    # before these fields existed, not as a stand-in for a real answer.
     llm_data = trace_data.get("llm", {}) or {
-        "provider": trace_data.get("provider", "OpenAI"),
-        "model": trace_data.get("model", "gpt-4o-mini"),
+        "provider": trace_data.get("provider") or "unknown",
+        "model": trace_data.get("model") or "unknown",
         "latency_ms": trace.get("verbalization_ms", 0),
         "tokens": trace.get("token_count", 0),
         "response_length": trace.get("response_length", 0),
@@ -365,7 +355,6 @@ async def explain_trace(trace_id: str):
         },
         "self_model": self_model,
         "evidence": {"items": evidence, "count": len(evidence)},
-        "memories": {"items": memories, "grouped": grouped_memories, "count": len(memories)},
         "planner": planner,
         "decision": decision_data,
         "context": context_data,
@@ -417,10 +406,6 @@ async def explain_evidence_detail(evidence_id: str):
         "SELECT inference_id, inference_type, label, description, confidence FROM inferences WHERE user_id = $1 ORDER BY confidence DESC LIMIT 10",
         user_id,
     )
-    memories = await fetch(
-        "SELECT memory_id, memory_type, content, importance_score FROM memories WHERE user_id = $1 ORDER BY importance_score DESC LIMIT 10",
-        user_id,
-    )
     snapshot = await fetchrow(
         "SELECT dominant_topics, identity_completeness, overall_confidence FROM identity_snapshots WHERE user_id = $1 ORDER BY snapshot_timestamp DESC LIMIT 1",
         user_id,
@@ -442,7 +427,6 @@ async def explain_evidence_detail(evidence_id: str):
         "evidence": ev,
         "behavior_objects": behavior_objects,
         "inferences": [dict(r) for r in inferences],
-        "memories": [dict(r) for r in memories],
         "identity_traits": identity_traits,
         "counter_evidence": counter_evidence,
     }
@@ -479,13 +463,6 @@ async def explain_identity_detail(identity_id: str):
         )
     ]
 
-    memories = [
-        dict(r) for r in await fetch(
-            "SELECT memory_id, memory_type, content, importance_score FROM memories WHERE user_id = $1 ORDER BY importance_score DESC LIMIT 20",
-            user_id,
-        )
-    ]
-
     reflections = [
         dict(r) for r in await fetch(
             "SELECT reflection_id, reflection_type, summary, confidence FROM reflections WHERE user_id = $1 ORDER BY created_at DESC LIMIT 10",
@@ -501,27 +478,34 @@ async def explain_identity_detail(identity_id: str):
         topics[topic]["count"] += 1
         topics[topic]["total_importance"] += bo.get("importance_score", 0)
 
-    bo_contrib = min(35, len(bo_list) * 1.75)
-    ev_contrib = min(28, len(evidence_list) * 1.4)
-    ref_contrib = min(16, len(reflections) * 1.6)
-    mem_contrib = min(12, len(memories) * 0.6)
-    temporal_contrib = max(0, 100 - bo_contrib - ev_contrib - ref_contrib - mem_contrib)
+    # What this identity is actually built from, by real row count — NOT a
+    # weighting on how much each category influenced overall_confidence
+    # (the pipeline doesn't compute per-category weights anywhere, so
+    # presenting one here would just be inventing a number). Proportional
+    # shares of real counts, normalized to sum to exactly 100.
+    counts = {
+        "behavior_objects": len(bo_list),
+        "evidence": len(evidence_list),
+        "reflections": len(reflections),
+    }
+    total_rows = sum(counts.values())
+    if total_rows == 0:
+        composition = {k: 0.0 for k in counts}
+    else:
+        composition = {k: round(v / total_rows * 100, 1) for k, v in counts.items()}
+        diff = round(100 - sum(composition.values()), 1)
+        if diff:
+            largest = max(composition, key=composition.get)
+            composition[largest] = round(composition[largest] + diff, 1)
 
     return {
         "identity": identity,
         "snapshots": snapshots,
         "evidence": evidence_list,
         "behavior_objects": bo_list,
-        "memories": memories,
         "reflections": reflections,
         "topics": topics,
-        "contribution_breakdown": {
-            "behavior_events": round(bo_contrib, 1),
-            "evidence": round(ev_contrib, 1),
-            "reflection": round(ref_contrib, 1),
-            "semantic_memory": round(mem_contrib, 1),
-            "temporal_consistency": round(temporal_contrib, 1),
-        },
+        "grounding_composition": composition,
     }
 
 
@@ -553,16 +537,6 @@ async def global_search(
             "id": r["inference_id"], "type": "inference",
             "label": (r["label"] or r["description"] or "")[:120],
             "subtitle": f"{r['inference_type']} · {round(r['confidence'] * 100)}%",
-        })
-
-    for r in await fetch(
-        "SELECT memory_id, memory_type, content, importance_score, 'memory' as entity_type FROM memories WHERE content ILIKE $1 ORDER BY importance_score DESC LIMIT $2",
-        pattern, limit,
-    ):
-        results.append({
-            "id": r["memory_id"], "type": "memory",
-            "label": (r["content"] or "")[:120] or r["memory_id"],
-            "subtitle": f"{r['memory_type']} · importance: {round(r['importance_score'], 2)}",
         })
 
     for r in await fetch(

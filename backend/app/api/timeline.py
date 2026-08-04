@@ -15,8 +15,9 @@ import logging
 from collections import defaultdict
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from app.api.deps import resolve_user_id
 from app.db.postgres import fetch
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def _impact_for(scores: list) -> str:
 
 @router.get("/timeline")
 async def get_timeline(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     platform: Optional[str] = Query(default=None, description="instagram | youtube"),
     liked_only: bool = Query(default=False),
     saved_only: bool = Query(default=False),

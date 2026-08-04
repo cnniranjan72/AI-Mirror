@@ -31,6 +31,7 @@
     sessionId: `sess_yt_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`,
     buffer: [],
     lastBatchTime: Date.now(),
+    warnings: [],
   };
 
   console.log('[AIMirror-YT] Content script loaded — session:', state.sessionId);
@@ -216,12 +217,24 @@
     let username = 'unknown', caption = '', profileUrl = '';
     try {
       if (target.surface === 'shorts') {
-        const a = queryFirst(['ytd-reel-video-renderer[is-active] a[href^="/@"]', '#shorts-container a[href^="/@"]']);
+        // YouTube migrated the Shorts overlay to these custom elements and
+        // dropped the `is-active` attribute from ytd-reel-video-renderer
+        // (verified live, 2026); the old selectors below silently matched
+        // nothing, which is why every Shorts caption was falling back to
+        // 'untitled' in the UI. Only ONE reel is ever rendered with these
+        // tags at a time, so no [is-active]-style scoping is needed. Old
+        // selectors kept as a fallback in case YouTube dual-ships old markup.
+        const a = queryFirst([
+          'yt-reel-channel-bar-view-model a[href^="/@"]',
+          'ytd-reel-video-renderer[is-active] a[href^="/@"]',
+          '#shorts-container a[href^="/@"]',
+        ]);
         if (a) {
           username = (a.textContent || '').trim() || 'unknown';
           profileUrl = 'https://www.youtube.com' + (a.getAttribute('href') || '');
         }
         const titleEl = queryFirst([
+          'yt-shorts-video-title-view-model',
           'ytd-reel-video-renderer[is-active] yt-formatted-string.ytd-reel-player-header-renderer',
           '#shorts-container h2',
         ]);
@@ -345,6 +358,17 @@
       const extractionFailed = meta.username === 'unknown' && !meta.caption;
       if (extractionFailed) {
         console.log('[AIMirror-YT] ⤫ Skipped (metadata not ready):', target.videoId, `(${watched.toFixed(1)}s)`);
+        // Silently dropping this is exactly how the "untitled" caption bug
+        // went unnoticed for a while: a selector goes stale and every watch
+        // just vanishes with no signal anything's wrong. Surface it instead.
+        state.warnings.push({
+          type: 'extraction_failed',
+          platform: 'youtube',
+          surface: target.surface,
+          content_id: target.videoId,
+          tier: meta.tier,
+          timestamp: new Date().toISOString(),
+        });
       } else {
         const event = {
           reel_id: target.videoId,
@@ -409,15 +433,17 @@
   }
 
   function sendBatch() {
-    if (state.buffer.length === 0) return;
+    if (state.buffer.length === 0 && state.warnings.length === 0) return;
 
     const events = [...state.buffer];
+    const warnings = [...state.warnings];
     state.buffer = [];
+    state.warnings = [];
     state.lastBatchTime = Date.now();
 
-    const payload = { user_id: CONFIG.USER_ID, events };
+    const payload = { user_id: CONFIG.USER_ID, events, warnings };
 
-    console.log(`[AIMirror-YT] → Sending ${events.length} events via background worker`);
+    console.log(`[AIMirror-YT] → Sending ${events.length} events (${warnings.length} warnings) via background worker`);
 
     try {
       chrome.runtime.sendMessage(
@@ -426,6 +452,7 @@
           if (chrome.runtime.lastError) {
             console.error('[AIMirror-YT] ✗ Send failed:', chrome.runtime.lastError.message);
             state.buffer = [...events, ...state.buffer];
+            state.warnings = [...warnings, ...state.warnings];
             return;
           }
           if (resp && resp.success) {
@@ -433,12 +460,14 @@
           } else {
             console.error('[AIMirror-YT] ✗ Backend error:', resp && resp.error);
             state.buffer = [...events, ...state.buffer]; // retry next cycle
+            state.warnings = [...warnings, ...state.warnings];
           }
         }
       );
     } catch (err) {
       console.error('[AIMirror-YT] ✗ sendMessage threw:', err.message);
       state.buffer = [...events, ...state.buffer];
+      state.warnings = [...warnings, ...state.warnings];
     }
   }
 

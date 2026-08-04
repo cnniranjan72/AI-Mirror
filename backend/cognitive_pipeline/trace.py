@@ -63,6 +63,14 @@ class PipelineTrace:
     verbalization_ms: float = 0.0
     token_count: int = 0
     response_length: int = 0
+    # Which LLM actually produced the answer ("fallback" when the
+    # deterministic template fired, never a guessed vendor name) and the
+    # verbatim response text — both previously absent, which is why
+    # /explain/{trace_id} had to hardcode a provider/model and always
+    # returned response="".
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    response: str = ""
 
     total_ms: float = 0.0
     success: bool = False

@@ -21,7 +21,9 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+
+from app.api.deps import resolve_user_id
 
 from app.db.postgres import fetch
 
@@ -176,7 +178,7 @@ def _narrate(period_label: str, curr: dict, prev: dict) -> list:
 
 @router.get("/diary/story")
 async def get_diary_story(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     period: str = Query(default="week", description="week | month"),
     offset: int = Query(default=0, ge=0, le=52, description="0 = current period, 1 = previous, etc."),
 ):

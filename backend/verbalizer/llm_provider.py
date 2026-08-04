@@ -9,6 +9,19 @@ DEFAULT_OPENAI_MODEL = "gpt-4o"
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
 DEFAULT_OLLAMA_MODEL = "llama3.2"
 
+DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": DEFAULT_OPENAI_MODEL,
+    "anthropic": DEFAULT_ANTHROPIC_MODEL,
+    "ollama": DEFAULT_OLLAMA_MODEL,
+}
+
+
+def resolve_provider(provider: Optional[str] = None) -> str:
+    """Same resolution get_llm_call uses, exposed separately so callers can
+    know (and honestly report) which provider will actually be called."""
+    provider = provider or os.getenv("LLM_PROVIDER", "").lower()
+    return provider if provider in DEFAULT_MODEL_BY_PROVIDER else "openai"
+
 
 async def openai_call(
     system_prompt: str,
@@ -131,7 +144,7 @@ async def ollama_call(
 
 
 def get_llm_call(provider: Optional[str] = None):
-    provider = provider or os.getenv("LLM_PROVIDER", "").lower()
+    provider = resolve_provider(provider)
     if provider == "anthropic":
         return anthropic_call
     if provider == "ollama":

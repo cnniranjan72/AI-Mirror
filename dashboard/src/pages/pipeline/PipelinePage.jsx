@@ -18,7 +18,7 @@ const pipelineStages = [
 
 export default function PipelinePage() {
   const navigate = useNavigate()
-  const { data: traces, loading, refetch } = useTraces()
+  const { data: traces, loading, error, refetch } = useTraces()
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [selectedTrace, setSelectedTrace] = useState(null)
   const [selectedStage, setSelectedStage] = useState(null)
@@ -238,7 +238,18 @@ export default function PipelinePage() {
         </GlassCard>
       )}
 
-      {!activeTrace && (
+      {error && (
+        <GlassCard>
+          <div style={{ textAlign: 'center', padding: 60 }}>
+            <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>⚠️</div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: '#f87171', marginBottom: 8 }}>Couldn't load traces</div>
+            <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 16 }}>{typeof error === 'string' ? error : 'Something went wrong.'}</div>
+            <button className="btn btn-secondary" onClick={refetch}>Try again</button>
+          </div>
+        </GlassCard>
+      )}
+
+      {!loading && !error && !activeTrace && (
         <GlassCard>
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
             <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>⚡</div>

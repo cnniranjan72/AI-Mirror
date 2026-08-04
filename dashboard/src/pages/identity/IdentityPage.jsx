@@ -3,6 +3,7 @@ import { useIdentity, useCognitiveMetrics } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
+import AsyncState from '../../components/ui/AsyncState'
 import { TargetIcon, ActivityIcon, BrainIcon, ClockIcon, LayersIcon } from '../../icons/icons'
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from 'recharts'
 import IdentityInspector from '../../components/explain/IdentityInspector'
@@ -25,7 +26,7 @@ const subProfiles = [
 ]
 
 export default function IdentityPage() {
-  const { current: identityData, snapshots, summary: cognitiveSummary, loading } = useIdentity()
+  const { current: identityData, snapshots, summary: cognitiveSummary, loading, error, refetch } = useIdentity()
   const [inspectingIdentity, setInspectingIdentity] = useState(null)
   const [view, setView] = useState('overview')
   const [selectedTopic, setSelectedTopic] = useState(null)
@@ -88,6 +89,7 @@ export default function IdentityPage() {
         </div>
       </div>
 
+      <AsyncState loading={loading} error={error} onRetry={refetch}>
       {view === 'overview' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
@@ -239,6 +241,7 @@ export default function IdentityPage() {
           <IdentityEvolution snapshots={snapshotList} />
         </GlassCard>
       )}
+      </AsyncState>
 
       {inspectingIdentity && (
         <IdentityInspector identityId={inspectingIdentity} onClose={() => setInspectingIdentity(null)} />

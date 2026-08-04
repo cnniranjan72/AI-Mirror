@@ -1,4 +1,4 @@
-import { useState, Suspense } from 'react'
+import { useState, Suspense, lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { View } from '@react-three/drei'
@@ -6,30 +6,35 @@ import Sidebar from './Sidebar'
 import ErrorBoundary from '../ErrorBoundary'
 import LoadingSkeleton from '../ui/LoadingSkeleton'
 
-import LandingPage from '../../pages/LandingPage'
-import Overview from '../../pages/Overview'
-import IngestionPage from '../../pages/ingestion/IngestionPage'
-import TimelinePage from '../../pages/timeline/TimelinePage'
-import KnowledgeGraphPage from '../../pages/graph/KnowledgeGraphPage'
-import DiaryPage from '../../pages/diary/DiaryPage'
-import GoalsPage from '../../pages/goals/GoalsPage'
-import IdentityPage from '../../pages/identity/IdentityPage'
-import MemoryPage from '../../pages/memory/MemoryPage'
-import EvidencePage from '../../pages/evidence/EvidencePage'
-import BehaviorPage from '../../pages/behavior/BehaviorPage'
-import PlanningPage from '../../pages/planning/PlanningPage'
-import DecisionPage from '../../pages/decision/DecisionPage'
-import LearningPage from '../../pages/learning/LearningPage'
-import GuardianPage from '../../pages/guardian/GuardianPage'
-import CharacterPage from '../../pages/character/CharacterPage'
-import InsightsPage from '../../pages/insights/InsightsPage'
-import PipelinePage from '../../pages/pipeline/PipelinePage'
-import TracePage from '../../pages/trace/TracePage'
-import AnalyticsPage from '../../pages/analytics/AnalyticsPage'
-import ChatPage from '../../pages/chat/ChatPage'
-import SettingsPage from '../../pages/settings/SettingsPage'
-import GuidePage from '../../pages/guide/GuidePage'
-import DocumentationPage from '../../pages/documentation/DocumentationPage'
+// Lazy-loaded so each route's code (and the vendor chunks it pulls in —
+// three.js/drei/react-force-graph-3d/recharts) ships only when that route is
+// actually visited, instead of all 23 pages loading on first paint. The
+// Suspense boundary below already existed but was a no-op until these were
+// lazy — nothing else had to change to activate it.
+const LandingPage = lazy(() => import('../../pages/LandingPage'))
+const Overview = lazy(() => import('../../pages/Overview'))
+const IngestionPage = lazy(() => import('../../pages/ingestion/IngestionPage'))
+const TimelinePage = lazy(() => import('../../pages/timeline/TimelinePage'))
+const KnowledgeGraphPage = lazy(() => import('../../pages/graph/KnowledgeGraphPage'))
+const DiaryPage = lazy(() => import('../../pages/diary/DiaryPage'))
+const GoalsPage = lazy(() => import('../../pages/goals/GoalsPage'))
+const IdentityPage = lazy(() => import('../../pages/identity/IdentityPage'))
+const MemoryPage = lazy(() => import('../../pages/memory/MemoryPage'))
+const EvidencePage = lazy(() => import('../../pages/evidence/EvidencePage'))
+const BehaviorPage = lazy(() => import('../../pages/behavior/BehaviorPage'))
+const PlanningPage = lazy(() => import('../../pages/planning/PlanningPage'))
+const DecisionPage = lazy(() => import('../../pages/decision/DecisionPage'))
+const LearningPage = lazy(() => import('../../pages/learning/LearningPage'))
+const GuardianPage = lazy(() => import('../../pages/guardian/GuardianPage'))
+const CharacterPage = lazy(() => import('../../pages/character/CharacterPage'))
+const InsightsPage = lazy(() => import('../../pages/insights/InsightsPage'))
+const PipelinePage = lazy(() => import('../../pages/pipeline/PipelinePage'))
+const TracePage = lazy(() => import('../../pages/trace/TracePage'))
+const AnalyticsPage = lazy(() => import('../../pages/analytics/AnalyticsPage'))
+const ChatPage = lazy(() => import('../../pages/chat/ChatPage'))
+const SettingsPage = lazy(() => import('../../pages/settings/SettingsPage'))
+const GuidePage = lazy(() => import('../../pages/guide/GuidePage'))
+const DocumentationPage = lazy(() => import('../../pages/documentation/DocumentationPage'))
 
 const PageLoading = () => (
   <div style={{ padding: '32px' }}>

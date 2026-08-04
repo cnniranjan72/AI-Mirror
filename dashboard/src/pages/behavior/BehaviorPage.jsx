@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useBehaviorObjects, useIdentity } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
+import AsyncState from '../../components/ui/AsyncState'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
@@ -25,7 +26,7 @@ const stateVariant = (s) => ({
 }[s] || 'neutral')
 
 export default function BehaviorPage() {
-  const { data: behaviorObjects, loading } = useBehaviorObjects()
+  const { data: behaviorObjects, loading, error, refetch } = useBehaviorObjects()
   const { current: identityRaw } = useIdentity()
   const [filter, setFilter] = useState('all')
 
@@ -64,6 +65,15 @@ export default function BehaviorPage() {
         </div>
       </div>
 
+      <AsyncState
+        loading={loading}
+        error={error}
+        onRetry={refetch}
+        empty={!loading && objects.length === 0}
+        emptyIcon="📊"
+        emptyTitle="No behavior objects yet"
+        emptyDescription="Browse Instagram or YouTube with the extension enabled, or run a demo seed from Import."
+      >
       <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>
         <Badge variant="indigo">{objects.length} behavior objects</Badge>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -157,10 +167,8 @@ export default function BehaviorPage() {
           <h3 style={{ fontSize: 16, fontWeight: 600 }}>Behavior Objects</h3>
           <Badge variant="neutral">{filtered.length} items</Badge>
         </div>
-        {loading ? (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>Loading…</div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No behavior objects found</div>
+        {filtered.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No behavior objects match this filter</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table className="table" style={{ minWidth: 640 }}>
@@ -194,6 +202,7 @@ export default function BehaviorPage() {
           </div>
         )}
       </GlassCard>
+      </AsyncState>
     </div>
   )
 }

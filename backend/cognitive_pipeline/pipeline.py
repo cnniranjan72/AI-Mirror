@@ -386,6 +386,9 @@ class CognitivePipeline:
             trace.verbalization_ms = (time.perf_counter() - t0) * 1000
             trace.token_count = vresponse.token_count
             trace.response_length = len(vresponse.content)
+            trace.provider = vresponse.provider
+            trace.model = vresponse.model
+            trace.response = vresponse.content
             logger.info(f"Verbalized {vresponse.token_count} tokens in {trace.verbalization_ms:.1f}ms")
 
             # ── Assemble result ───────────────────────────────────────────

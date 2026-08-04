@@ -2,6 +2,26 @@
 
 Quick reference for running every service. Copy-paste these commands.
 
+## Supervised (auto-restart + crash logs)
+
+The manual commands below work fine, but nothing watches the process — if it
+crashes (or dies for an unclear reason, which has happened), it just stays
+down with no record of why. `scripts\start-all.ps1` runs the backend and
+dashboard under a small supervisor that restarts on exit and keeps a real
+stdout/stderr log per attempt plus a `logs\supervisor.log` of every
+start/exit/restart. Does not (yet) cover `behavioral-engine/`.
+
+```powershell
+cd C:\Users\cnnir\Documents\AI-Mirror
+.\scripts\start-all.ps1     # starts backend (8000) + dashboard (5173), supervised
+.\scripts\stop-all.ps1      # stops both, including their process trees
+Get-Content .\logs\supervisor.log -Tail 20 -Wait   # watch restarts live
+```
+
+Logs land in `logs\` (gitignored): `logs\<service>_stdout_<attempt>.log`,
+`logs\<service>_stderr_<attempt>.log` (a fresh file per restart, so an old
+crash trace is never overwritten by the next attempt), and `logs\supervisor.log`.
+
 ## Ports Summary
 
 | Service | Port | Notes |

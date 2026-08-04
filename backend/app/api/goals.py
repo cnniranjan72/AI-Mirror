@@ -15,9 +15,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.api.deps import enforce_write_match, resolve_user_id
 from app.db.postgres import fetch, fetchrow, execute
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,8 @@ class GoalUpdate(BaseModel):
 
 
 @router.post("/goals")
-async def create_goal(body: GoalCreate):
+async def create_goal(body: GoalCreate, authorization: Optional[str] = Header(default=None)):
+    enforce_write_match(authorization, body.user_id)
     if body.goal_type not in ("increase", "decrease", "maintain"):
         raise HTTPException(status_code=400, detail="goal_type must be increase, decrease, or maintain")
     if not body.target_keywords:
@@ -127,7 +129,7 @@ async def create_goal(body: GoalCreate):
 
 
 @router.get("/goals")
-async def list_goals(user_id: str = Query(default="default"), status: Optional[str] = Query(default=None)):
+async def list_goals(user_id: str = Depends(resolve_user_id), status: Optional[str] = Query(default=None)):
     conditions = ["user_id = $1"]
     params = [user_id]
     if status:
@@ -167,10 +169,11 @@ async def list_goals(user_id: str = Query(default="default"), status: Optional[s
 
 
 @router.patch("/goals/{goal_id}")
-async def update_goal(goal_id: str, body: GoalUpdate):
-    existing = await fetchrow("SELECT goal_id FROM goals WHERE goal_id = $1", goal_id)
+async def update_goal(goal_id: str, body: GoalUpdate, authorization: Optional[str] = Header(default=None)):
+    existing = await fetchrow("SELECT goal_id, user_id FROM goals WHERE goal_id = $1", goal_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Goal not found")
+    enforce_write_match(authorization, existing["user_id"])
 
     if body.status:
         if body.status not in ("active", "completed", "abandoned", "paused"):
@@ -189,8 +192,10 @@ async def update_goal(goal_id: str, body: GoalUpdate):
 
 
 @router.delete("/goals/{goal_id}")
-async def delete_goal(goal_id: str):
-    result = await execute("DELETE FROM goals WHERE goal_id = $1", goal_id)
-    if result == "DELETE 0":
+async def delete_goal(goal_id: str, authorization: Optional[str] = Header(default=None)):
+    existing = await fetchrow("SELECT user_id FROM goals WHERE goal_id = $1", goal_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Goal not found")
+    enforce_write_match(authorization, existing["user_id"])
+    await execute("DELETE FROM goals WHERE goal_id = $1", goal_id)
     return {"success": True}

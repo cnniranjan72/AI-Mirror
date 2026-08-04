@@ -24,7 +24,15 @@ function Stat({ label, value, accent }) {
 
 export default function IngestionPage() {
   const navigate = useNavigate()
-  const { data: summary, loading, refetch } = useApi(() => api.getCognitiveSummary(), [])
+  const { data: summary, loading, error: summaryError, refetch } = useApi(() => api.getCognitiveSummary(), [])
+  // Extraction failures the browser extension already decided to drop (e.g.
+  // a DOM selector gone stale after YouTube/Instagram changes their markup)
+  // — same class of bug as the "untitled" caption issue, now surfaced
+  // instead of only living in the extension's own console.
+  const { data: extractionWarnings } = useApi(
+    () => api.getAdminErrors('extension_extraction_failed', 20), []
+  )
+  const warningList = extractionWarnings?.errors || []
   const [seeding, setSeeding] = useState(false)
   const [seedResult, setSeedResult] = useState(null)
   const [error, setError] = useState(null)
@@ -65,6 +73,37 @@ export default function IngestionPage() {
           </p>
         </div>
       </div>
+
+      {summaryError && (
+        <div className="empty-state" style={{ marginBottom: 20, padding: '24px 20px' }}>
+          <div className="empty-state-icon" style={{ fontSize: 32, marginBottom: 8 }}>⚠️</div>
+          <div className="empty-state-title" style={{ fontSize: 15 }}>Couldn't load your ingestion summary</div>
+          <div className="empty-state-description">{typeof summaryError === 'string' ? summaryError : 'Something went wrong talking to the backend.'}</div>
+          <button className="btn btn-secondary" onClick={refetch} style={{ marginTop: 12 }}>Try again</button>
+        </div>
+      )}
+
+      {warningList.length > 0 && (
+        <GlassCard style={{ marginBottom: 20, border: '1px solid rgba(244,63,94,0.25)', background: 'rgba(244,63,94,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 16 }}>⚠️</span>
+            <h3 style={{ fontSize: 14, fontWeight: 600, color: '#fca5a5' }}>
+              {warningList.length} extraction warning{warningList.length === 1 ? '' : 's'} from the browser extension
+            </h3>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            The extension couldn't read a watched item's title/creator — usually means Instagram or YouTube changed
+            their page structure and a selector needs updating. That item was dropped rather than recorded wrong.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 140, overflow: 'auto' }}>
+            {warningList.slice(0, 8).map(w => (
+              <div key={w.id} style={{ fontSize: 11, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+                {w.created_at?.slice(0, 19).replace('T', ' ')} — {w.message}
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
 
       <div style={{ marginBottom: 20 }}>
         <LiveIngestionPulse />

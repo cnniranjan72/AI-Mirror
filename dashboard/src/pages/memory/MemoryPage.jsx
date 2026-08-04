@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useReflections, useInferences, useBehaviorObjects } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
+import AsyncState from '../../components/ui/AsyncState'
 import { BrainIcon, LayersIcon, SearchIcon } from '../../icons/icons'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 import MemoryTree from '../../components/memory/MemoryTree'
@@ -18,9 +19,9 @@ const memoryTypes = [
 const PATTERN_STATES = new Set(['growing', 'stable', 'mature', 'declining'])
 
 export default function MemoryPage() {
-  const { data: reflections, loading: refLoading } = useReflections()
-  const { data: inferences, loading: infLoading } = useInferences()
-  const { data: behaviorObjects, loading: patLoading } = useBehaviorObjects()
+  const { data: reflections, loading: refLoading, error: refError, refetch: refetchRefs } = useReflections()
+  const { data: inferences, loading: infLoading, error: infError, refetch: refetchInfs } = useInferences()
+  const { data: behaviorObjects, loading: patLoading, error: patError, refetch: refetchBos } = useBehaviorObjects()
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('all')
 
@@ -54,6 +55,8 @@ export default function MemoryPage() {
   ]
 
   const memoryLoading = refLoading || infLoading || patLoading
+  const memoryError = refError || infError || patError
+  const retryAll = useCallback(() => { refetchRefs(); refetchInfs(); refetchBos() }, [refetchRefs, refetchInfs, refetchBos])
   const avgPatternConfidence = patterns.length
     ? patterns.reduce((s, p) => s + (p.confidence || 0), 0) / patterns.length
     : 0.3
@@ -77,6 +80,15 @@ export default function MemoryPage() {
         </div>
       </div>
 
+      <AsyncState
+        loading={memoryLoading}
+        error={memoryError}
+        onRetry={retryAll}
+        empty={!memoryLoading && refs.length + infs.length + patterns.length === 0}
+        emptyIcon="🧠"
+        emptyTitle="No memory yet"
+        emptyDescription="Reflections, inferences, and patterns build up as you browse with the extension enabled."
+      >
       <div style={{ display: 'flex', gap: 16, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 200, position: 'relative' }}>
           <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}><SearchIcon /></div>
@@ -158,6 +170,7 @@ export default function MemoryPage() {
           </GlassCard>
         ))}
       </div>
+      </AsyncState>
     </div>
   )
 }

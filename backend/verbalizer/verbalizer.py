@@ -18,7 +18,7 @@ from backend.rag.context_builder import CharacterContext
 from backend.cognitive_planning.planner_models import (
     CharacterPlan, CommunicationStyleVector, ResponseStructure,
 )
-from .llm_provider import get_llm_call
+from .llm_provider import get_llm_call, resolve_provider, DEFAULT_MODEL_BY_PROVIDER
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +135,11 @@ class VerbalizerResponse(BaseModel):
     success: bool = False
     used_fallback: bool = False
     error: Optional[str] = None
+    # Which LLM actually produced `content` — "fallback" (not a real vendor
+    # name) when used_fallback is True, so downstream consumers never claim
+    # a specific model answered when the deterministic template did.
+    provider: Optional[str] = None
+    model: Optional[str] = None
 
 
 class LLMVerbalizer:
@@ -145,9 +150,12 @@ class LLMVerbalizer:
     ):
         self.llm_call = llm_call
         self.config = config or {}
+        # Which provider llm_call actually calls — resolved the same way
+        # get_llm_call() picks the function, so this is never guessed.
+        self.provider = resolve_provider(self.config.get("provider"))
         # Provider-agnostic: when unset, each provider call resolves its own
         # default model (see llm_provider). Avoids sending a gpt-* id to Claude.
-        self.model = self.config.get("model") or os.getenv("LLM_MODEL") or None
+        self.model = self.config.get("model") or os.getenv("LLM_MODEL") or DEFAULT_MODEL_BY_PROVIDER[self.provider]
         self.max_tokens = self.config.get("max_tokens", 2048)
         self.temperature = self.config.get("temperature", 0.7)
         # Circuit breaker: after an unrecoverable LLM error (bad key, no billing)
@@ -212,6 +220,10 @@ class LLMVerbalizer:
                 token_count=len(content.split()),
                 success=True,
                 used_fallback=used_fallback,
+                # "fallback" (not a vendor name) whenever the deterministic
+                # template produced content, since no LLM actually answered.
+                provider="fallback" if used_fallback else self.provider,
+                model=None if used_fallback else self.model,
             )
         except Exception as e:
             logger.error(f"Verbalization failed: {e}", exc_info=True)

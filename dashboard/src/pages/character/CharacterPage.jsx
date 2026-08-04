@@ -22,7 +22,7 @@ function avgQColor(policy) {
 }
 
 export default function CharacterPage() {
-  const { data: state, loading } = useApi(() => api.getCharacterState(), [])
+  const { data: state, loading, error, refetch } = useApi(() => api.getCharacterState(), [])
   const { data: activity } = useApi(() => api.getCharacterActivity(), [])
   const { data: learning } = useApi(() => api.getCharacterLearningSummary(), [])
 
@@ -38,7 +38,16 @@ export default function CharacterPage() {
         </p>
       </div>
 
-      {!loading && state && !state.built && (
+      {!loading && error && (
+        <GlassCard gradient>
+          <div style={{ padding: 24, textAlign: 'center' }}>
+            <div style={{ color: '#f87171', marginBottom: 10 }}>Couldn't load the character runtime: {typeof error === 'string' ? error : 'request failed'}</div>
+            <button className="btn btn-secondary" onClick={refetch}>Try again</button>
+          </div>
+        </GlassCard>
+      )}
+
+      {!loading && !error && state && !state.built && (
         <GlassCard gradient>
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
             Character runtime could not be built: {(state.errors || []).join(', ') || 'no identity yet'}

@@ -13,9 +13,11 @@ import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from app.api.deps import enforce_write_match
+from app.core.error_tracking import record_error
 from backend.core.behavior_gateway import get_behavior_gateway
 from backend.shared.contracts import BehaviorEvent, EventSource
 from pipeline.orchestrator import V3Pipeline
@@ -74,9 +76,23 @@ class EventItem(BaseModel):
     video_length: Optional[float] = None   # seconds; YouTube exposes this, IG does not
 
 
+class ExtractionWarning(BaseModel):
+    type: str = "extraction_failed"
+    platform: str = ""
+    surface: str = ""
+    content_id: str = ""
+    tier: Optional[int] = None
+    timestamp: str = ""
+
+
 class IngestRequest(BaseModel):
     user_id: str = "default"
     events: List[EventItem]
+    # Extraction failures the content script already decided to drop (e.g. a
+    # stale DOM selector after YouTube changes its markup) — recorded so the
+    # failure is visible (GET /admin/errors) instead of only a console.log
+    # that disappears the moment the tab closes.
+    warnings: List[ExtractionWarning] = Field(default_factory=list)
 
 
 class ExtractRequest(BaseModel):
@@ -151,7 +167,11 @@ async def cleanup_old_snapshots(user_id: str, keep_count: int = 20):
 
 
 @router.post("/ingest", response_model=IngestResponse)
-async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
+async def ingest_events(
+    req: IngestRequest,
+    background_tasks: BackgroundTasks,
+    authorization: Optional[str] = Header(default=None),
+):
     """
     V3 Pipeline: Extension → BehaviorGateway → KnowledgeConsolidation
     → BehaviorObjects → Evidence → Inference → Identity → Snapshot → SelfModel
@@ -159,7 +179,21 @@ async def ingest_events(req: IngestRequest, background_tasks: BackgroundTasks):
     Backward-compatible: Persona derived from Identity via PersonaAdapter.
     Legacy: V2 services (embedding, vector_store, RL) still run alongside.
     """
+    enforce_write_match(authorization, req.user_id)
+
+    if req.warnings:
+        for w in req.warnings:
+            background_tasks.add_task(
+                record_error,
+                Exception(f"Extension extraction failed: {w.platform}/{w.surface} {w.content_id} (tier {w.tier})"),
+                user_id=req.user_id,
+                error_type="extension_extraction_failed",
+                message=f"{w.platform} {w.content_id}: extraction failed, event dropped (tier {w.tier})",
+            )
+
     if not req.events:
+        if req.warnings:
+            return IngestResponse(success=True, events_stored=0, embeddings_created=0, message="No events (warnings recorded)")
         raise HTTPException(status_code=400, detail="No events provided")
 
     user_id = req.user_id

@@ -171,15 +171,25 @@ class TestExplainAPI:
             "/reasoning/evidence", "/reasoning/inferences", "/reasoning/reflections",
             "/reasoning/behavior-objects", "/query/traces", "/query/traces/{trace_id}",
             "/cognitive/metrics", "/cognitive/summary",
+            "/explain/{trace_id}", "/explain/evidence/{evidence_id}", "/explain/identity/{identity_id}",
+            "/search",
         ])
         assert route_paths == expected, f"Missing routes. Got: {route_paths}"
 
     def test_explain_endpoints_accept_user_id(self):
         from app.api.explain import router
         import inspect
+        # These derive their scope from a path param (trace_id/evidence_id/
+        # identity_id) or, for /search, aren't user-scoped at all — they
+        # legitimately have no user_id parameter of their own.
+        no_user_id_param = {
+            "/query/traces/{trace_id}", "/explain/{trace_id}",
+            "/explain/evidence/{evidence_id}", "/explain/identity/{identity_id}",
+            "/search",
+        }
         for r in router.routes:
             sig = inspect.signature(r.endpoint)
-            if r.path in ("/query/traces/{trace_id}",):
+            if r.path in no_user_id_param:
                 continue
             assert "user_id" in sig.parameters, f"{r.path}: missing user_id param"
 

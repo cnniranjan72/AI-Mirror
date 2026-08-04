@@ -94,22 +94,24 @@ export default function IdentityInspector({ identityId, onClose }) {
                 </div>
               </Field>
 
-              <Field label="Contribution Breakdown">
+              <Field label="Composition of Grounding Data">
                 <div style={{ padding: 16, borderRadius: 10, background: 'rgba(0,0,0,0.2)' }}>
-                  {data.contribution_breakdown && Object.entries(data.contribution_breakdown).map(([key, val]) => (
+                  {data.grounding_composition && Object.entries(data.grounding_composition).map(([key, val]) => (
                     <ContributionBar
                       key={key}
                       label={key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                       value={val}
                       color={
-                        key === 'behavior_events' ? '#6366f1' :
+                        key === 'behavior_objects' ? '#6366f1' :
                         key === 'evidence' ? '#10b981' :
-                        key === 'reflection' ? '#8b5cf6' :
-                        key === 'semantic_memory' ? '#f59e0b' :
+                        key === 'reflections' ? '#8b5cf6' :
                         '#ec4899'
                       }
                     />
                   ))}
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.5 }}>
+                    Real row counts behind this identity, by share — not a weighting of how much each category influenced its confidence score.
+                  </p>
                 </div>
               </Field>
 
@@ -159,17 +161,6 @@ export default function IdentityInspector({ identityId, onClose }) {
                     <button key={i} onClick={() => navigate(`/behavior?topic=${bo.unique_id}`)}
                       style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', color: 'var(--violet-400)', cursor: 'pointer' }}>
                       {bo.topic} · {(bo.importance_score || 0).toFixed(2)}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-
-              <Field label="Related Memories">
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {data.memories?.slice(0, 5).map((mem, i) => (
-                    <button key={i} onClick={() => navigate(`/memory?memory_id=${mem.memory_id}`)}
-                      style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.2)', color: 'var(--amber-400)', cursor: 'pointer' }}>
-                      {mem.memory_type} · {(mem.content || '').slice(0, 24)}
                     </button>
                   ))}
                 </div>

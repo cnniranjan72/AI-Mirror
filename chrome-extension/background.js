@@ -167,10 +167,26 @@ async function sendEventsToBackend(payload) {
     }
     const data = await response.json();
     console.log(`[AIMirror Background] ✓ Sent ${payload.events?.length || 0} events:`, data);
+    if (payload.warnings && payload.warnings.length > 0) {
+      await recordExtractionWarnings(payload.warnings.length);
+    }
     return { success: true, data };
   } catch (error) {
     console.error('[AIMirror Background] Send error:', error);
     return { success: false, error: error.message };
+  }
+}
+
+// Tracked so the popup can show "N items couldn't be read this session"
+// instead of extraction failures being invisible (console-only) the way
+// they were before — this is exactly the failure mode that let the
+// "untitled" caption bug go unnoticed.
+async function recordExtractionWarnings(count) {
+  try {
+    const { extractionFailureCount = 0 } = await chrome.storage.local.get(['extractionFailureCount']);
+    await chrome.storage.local.set({ extractionFailureCount: extractionFailureCount + count });
+  } catch (err) {
+    console.warn('[AIMirror Background] Could not record extraction warning count:', err.message);
   }
 }
 

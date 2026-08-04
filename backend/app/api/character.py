@@ -7,8 +7,9 @@ This endpoint builds it on demand for inspection, so a viewer can see
 exactly what the character "knows" right now.
 """
 import logging
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api.deps import resolve_user_id
 from app.services import rl_layer
 from app.db.postgres import fetch, fetchrow
 
@@ -17,7 +18,7 @@ router = APIRouter()
 
 
 @router.get("/character/state")
-async def get_character_state(user_id: str = Query(default="default")):
+async def get_character_state(user_id: str = Depends(resolve_user_id)):
     """Build the runtime (character_core + character_state) fresh and
     summarize it — identity snapshot version, self-model beliefs, active
     goals, inference/reflection counts. Offloaded to a thread since
@@ -97,7 +98,7 @@ async def get_character_state(user_id: str = Query(default="default")):
 
 
 @router.get("/character/activity")
-async def get_character_activity(user_id: str = Query(default="default"), limit: int = Query(default=10)):
+async def get_character_activity(user_id: str = Depends(resolve_user_id), limit: int = Query(default=10)):
     """Recent turns the character has actually spoken through (query traces),
     proof this is the live thing being talked to, not a static profile."""
     rows = await fetch(
@@ -110,7 +111,7 @@ async def get_character_activity(user_id: str = Query(default="default"), limit:
 
 
 @router.get("/character/learning-summary")
-async def get_character_learning_summary(user_id: str = Query(default="default")):
+async def get_character_learning_summary(user_id: str = Depends(resolve_user_id)):
     """How the RL loop is currently steering the character's behavior —
     the learned policy plus the most recent action taken for this user."""
     policy = await rl_layer.get_policy()

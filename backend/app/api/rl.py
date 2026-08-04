@@ -8,9 +8,10 @@ RL API — inspect and drive the contextual-bandit policy.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 
+from app.api.deps import resolve_user_id
 from app.services import rl_layer
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ async def get_rl_policy():
 
 @router.get("/rl/history", response_model=list)
 async def get_rl_history(
-    user_id: str = Query(default="default"),
+    user_id: str = Depends(resolve_user_id),
     limit: int = Query(default=20, le=100),
 ):
     """Recent RL actions and their rewards for a user."""

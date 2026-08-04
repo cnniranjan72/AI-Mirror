@@ -275,38 +275,6 @@ export default function ExplainabilityPanel({ traceId, onClose }) {
                 </div>
               </Section>
 
-              {/* Retrieved Memories */}
-              <Section title="Retrieved Memories" icon={<span style={{ fontSize: 16 }}>📝</span>}>
-                {Object.entries(data.memories?.grouped || {}).filter(([_, items]) => items.length > 0).map(([type, items]) => (
-                  <div key={type} style={{ marginBottom: 12 }}>
-                    <div style={{
-                      fontSize: 12, fontWeight: 600, color: 'var(--text-muted)',
-                      textTransform: 'capitalize', marginBottom: 6,
-                    }}>{type}</div>
-                    {items.slice(0, 4).map((mem, i) => (
-                      <div key={mem.memory_id || i} style={{
-                        padding: '6px 10px', borderRadius: 6,
-                        background: 'rgba(148,163,184,0.04)', marginBottom: 4,
-                        fontSize: 12, color: 'var(--text-tertiary)',
-                      }}>
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 2 }}>
-                          <Badge variant="neutral">imp: {mem.importance_score?.toFixed(2)}</Badge>
-                          {mem.similarity && <Badge variant="neutral">sim: {mem.similarity.toFixed(2)}</Badge>}
-                        </div>
-                        {(mem.content || '').slice(0, 120)}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-                {data.memories?.items?.length > 0 && (
-                  <LinkedChip
-                    label="View All Memories"
-                    to="/memory"
-                    icon={<span>📝</span>}
-                  />
-                )}
-              </Section>
-
               {/* Planner Output */}
               <Section title="Planner Output" icon={<span style={{ fontSize: 16 }}>📋</span>}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>

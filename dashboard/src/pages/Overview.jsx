@@ -19,7 +19,7 @@ const parseJSON = (v) => {
 
 export default function Overview() {
   const navigate = useNavigate()
-  const { current: identityRaw, summary, loading: idLoading } = useIdentity()
+  const { current: identityRaw, summary, loading: idLoading, error: idError, refetch: refetchIdentity } = useIdentity()
   const { data: traces, loading: traceLoading } = useTraces()
   const { data: reflections } = useReflections()
   const { data: health } = useApi(() => api.v3Health())
@@ -34,7 +34,10 @@ export default function Overview() {
 
   const online = health?.status === 'ok' || health?.status === 'healthy' || health?.database?.status === 'healthy'
   const isLoading = idLoading && !identity && !summary
-  const hasNoData = !idLoading && !summary?.behavior_object_count && !identity && !(traces?.length)
+  // A fetch failure isn't "no data" — showing the welcome banner on an error
+  // would misleadingly read as "you have a fresh, empty account" instead of
+  // "something's broken."
+  const hasNoData = !idLoading && !idError && !summary?.behavior_object_count && !identity && !(traces?.length)
 
   const confidence = summary?.current_identity?.overall_confidence ?? identity?.overall_confidence
   const identityVersion = summary?.current_identity?.identity_version ?? identity?.identity_version
@@ -104,6 +107,16 @@ export default function Overview() {
           </button>
         </div>
       </div>
+
+      {/* Error banner — distinct from the empty-state welcome below */}
+      {idError && (
+        <div className="empty-state" style={{ marginBottom: 32 }}>
+          <div className="empty-state-icon">⚠️</div>
+          <div className="empty-state-title">Couldn't load your dashboard</div>
+          <div className="empty-state-description">{typeof idError === 'string' ? idError : 'Something went wrong talking to the backend.'}</div>
+          <button className="btn btn-secondary" onClick={refetchIdentity} style={{ marginTop: 16 }}>Try again</button>
+        </div>
+      )}
 
       {/* Empty state banner */}
       {hasNoData && (

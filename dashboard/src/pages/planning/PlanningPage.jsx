@@ -1,6 +1,7 @@
 import { useTraces } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
+import AsyncState from '../../components/ui/AsyncState'
 import { LayersIcon, CpuIcon, TargetIcon, ZapIcon, NetworkIcon } from '../../icons/icons'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 
@@ -13,7 +14,7 @@ const stages = [
 ]
 
 export default function PlanningPage() {
-  const { data: traces, loading } = useTraces()
+  const { data: traces, loading, error, refetch } = useTraces()
   const traceList = Array.isArray(traces) ? traces : (traces?.traces || [])
 
   const avgPlanConfidence = traceList.length
@@ -32,6 +33,7 @@ export default function PlanningPage() {
         </div>
       </div>
 
+      <AsyncState loading={loading} error={error} onRetry={refetch}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
         <GlassCard>
           <div style={{ textAlign: 'center', padding: '16px 0' }}>
@@ -105,6 +107,7 @@ export default function PlanningPage() {
           </div>
         )}
       </GlassCard>
+      </AsyncState>
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useCognitiveMetrics, useIdentity } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
-import LoadingSkeleton from '../../components/ui/LoadingSkeleton'
+import AsyncState from '../../components/ui/AsyncState'
 import {
   CartesianGrid, Tooltip, ResponsiveContainer,
   AreaChart, Area, PieChart, Pie, Cell, Legend,
@@ -21,7 +21,7 @@ const metricConfig = [
 ]
 
 export default function AnalyticsPage() {
-  const { metrics, loading } = useCognitiveMetrics()
+  const { metrics, loading, error, refetch } = useCognitiveMetrics()
   const { current: identityData, summary } = useIdentity()
 
   const metricList = Array.isArray(metrics) ? metrics : []
@@ -40,18 +40,17 @@ export default function AnalyticsPage() {
     }
   }
 
+  // Fewer than 3 real points reads as noise, not a trend — a synthetic flat
+  // line here would visually claim "stable over time" when the honest fact
+  // is "not enough history yet". Show that explicitly instead (per-card,
+  // since some metrics can have real history while others are still sparse).
+  const MIN_HISTORY_POINTS = 3
   const groupedMetrics = metricConfig.map(mc => {
     const series = metricList
       .filter(m => m.metric_name === mc.key)
       .slice(-20)
       .map((m, i) => ({ index: i + 1, value: m.metric_value || 0, timestamp: m.recorded_at }))
-    // Fall back to a flat two-point line at the current value so the card is
-    // never blank while historical metrics are absent.
-    const values = series.length ? series : [
-      { index: 1, value: currentValue(mc.key) },
-      { index: 2, value: currentValue(mc.key) },
-    ]
-    return { ...mc, values }
+    return { ...mc, values: series, hasHistory: series.length >= MIN_HISTORY_POINTS }
   })
 
   const pieData = metricConfig
@@ -70,9 +69,7 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {loading ? (
-        <LoadingSkeleton type="card" count={3} />
-      ) : (
+      <AsyncState loading={loading} error={error} onRetry={refetch}>
         <>
           {/* Metric Trends */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
@@ -81,24 +78,33 @@ export default function AnalyticsPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                   <h3 style={{ fontSize: 14, fontWeight: 600 }}>{mc.label}</h3>
                   <Badge variant="neutral">
-                    {mc.values.length > 0 ? mc.values[mc.values.length - 1].value.toFixed(2) : '--'}
+                    {mc.values.length > 0 ? mc.values[mc.values.length - 1].value.toFixed(2) : currentValue(mc.key).toFixed(2)}
                   </Badge>
                 </div>
-                <ResponsiveContainer width="100%" height={180}>
-                  <AreaChart data={mc.values}>
-                    <defs>
-                      <linearGradient id={`grad_${mc.key}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={mc.color} stopOpacity={0.2} />
-                        <stop offset="95%" stopColor={mc.color} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.06)" />
-                    <XAxis dataKey="index" tick={false} axisLine={false} />
-                    <YAxis tick={false} axisLine={false} />
-                    <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#e2e8f0' }} itemStyle={{ color: '#e2e8f0' }} />
-                    <Area type="monotone" dataKey="value" stroke={mc.color} fill={`url(#grad_${mc.key})`} strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {mc.hasHistory ? (
+                  <ResponsiveContainer width="100%" height={180}>
+                    <AreaChart data={mc.values}>
+                      <defs>
+                        <linearGradient id={`grad_${mc.key}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={mc.color} stopOpacity={0.2} />
+                          <stop offset="95%" stopColor={mc.color} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.06)" />
+                      <XAxis dataKey="index" tick={false} axisLine={false} />
+                      <YAxis tick={false} axisLine={false} />
+                      <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#e2e8f0' }} itemStyle={{ color: '#e2e8f0' }} />
+                      <Area type="monotone" dataKey="value" stroke={mc.color} fill={`url(#grad_${mc.key})`} strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{
+                    height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--text-muted)', fontSize: 12, textAlign: 'center', padding: '0 20px',
+                  }}>
+                    Not enough history yet to chart a trend ({mc.values.length} of {MIN_HISTORY_POINTS} points needed)
+                  </div>
+                )}
               </GlassCard>
             ))}
           </div>
@@ -145,7 +151,7 @@ export default function AnalyticsPage() {
             </GlassCard>
           </div>
         </>
-      )}
+      </AsyncState>
     </div>
   )
 }

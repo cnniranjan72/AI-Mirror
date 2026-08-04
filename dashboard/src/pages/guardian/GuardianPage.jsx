@@ -3,6 +3,7 @@ import { api } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
+import AsyncState from '../../components/ui/AsyncState'
 import { AlertIcon, ClockIcon, CheckIcon, TargetIcon } from '../../icons/icons'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
@@ -10,7 +11,7 @@ import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 const RISK_COLOR = { low: '#10b981', moderate: '#f59e0b', elevated: '#f43f5e' }
 
 export default function GuardianPage() {
-  const { data: report, loading } = useApi(() => api.getGuardianReport(), [])
+  const { data: report, loading, error, refetch } = useApi(() => api.getGuardianReport(), [])
   const { data: alertLog, refetch: refetchAlertLog } = useApi(() => api.getGuardianAlertLog(), [])
 
   const acknowledge = async (alertId) => {
@@ -38,6 +39,7 @@ export default function GuardianPage() {
         </p>
       </div>
 
+      <AsyncState loading={loading} error={error} onRetry={refetch}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
         <StatCard label="Risk Level" value={report?.risk_level ? report.risk_level.toUpperCase() : '--'} icon={AlertIcon} accent={report?.risk_level === 'elevated' ? 'rose' : report?.risk_level === 'moderate' ? 'amber' : 'emerald'} loading={loading} />
         <StatCard label="Content Alerts" value={report?.content_alerts?.length ?? '--'} icon={AlertIcon} accent="rose" loading={loading} />
@@ -211,6 +213,7 @@ export default function GuardianPage() {
           })}
         </div>
       </GlassCard>
+      </AsyncState>
     </div>
   )
 }
