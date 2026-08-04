@@ -39,7 +39,106 @@ function formatWatch(seconds) {
   return s ? `${m}m ${s}s` : `${m}m`
 }
 
-function EventCard({ ev }) {
+function ReplayStage({ index, label, color, children }) {
+  return (
+    <div className="animate-fade" style={{ animationDelay: `${index * 140}ms` }}>
+      {index > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0' }}>
+          <div style={{ width: 2, height: 20, background: `linear-gradient(${color}, transparent)` }} />
+        </div>
+      )}
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color, marginBottom: 8 }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function ReplayModal({ ev, onClose }) {
+  const meta = PLATFORM_META[ev.platform] || { label: ev.platform, icon: '•', color: '#94a3b8' }
+  const attn = ATTENTION_META[ev.attention] || ATTENTION_META.shallow
+  const verb = ev.platform === 'youtube' ? (ev.surface === 'shorts' ? 'Watched (Short)' : 'Watched') : 'Watched'
+  let stage = 0
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(2,6,23,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+      onClick={onClose}
+    >
+      <div className="animate-scale" style={{ width: 520, maxWidth: '100%', maxHeight: '85vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+        <GlassCard padding="xl" style={{ background: 'rgba(15,23,42,0.95)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700 }}>Event Replay</h3>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+          </div>
+
+          <ReplayStage index={stage++} label="Event" color="#818cf8">
+            <div style={{ padding: 14, borderRadius: 10, background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{formatWhen(ev.timestamp)} · {meta.icon} {meta.label}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{verb} "{ev.caption || 'untitled'}"</div>
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>by @{ev.username || 'unknown'} · {formatWatch(ev.watch_time)} watched</div>
+              <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Badge variant={attn.variant}>{attn.label} attention</Badge>
+                {ev.liked && <Badge variant="pink">Liked</Badge>}
+                {ev.saved && <Badge variant="indigo">Saved</Badge>}
+              </div>
+            </div>
+          </ReplayStage>
+
+          {ev.behavior_objects.length > 0 && (
+            <ReplayStage index={stage++} label="Behavior Object" color="#a5b4fc">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {ev.behavior_objects.map((bo, i) => (
+                  <div key={i} style={{ padding: 12, borderRadius: 10, background: 'rgba(148,163,184,0.05)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{bo.topic}</span>
+                    <Badge variant="indigo">{Math.round((bo.confidence_score || 0) * 100)}% confidence</Badge>
+                  </div>
+                ))}
+              </div>
+            </ReplayStage>
+          )}
+
+          {ev.evidence.length > 0 && (
+            <ReplayStage index={stage++} label="Evidence" color="#fbbf24">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {ev.evidence.map((e, i) => (
+                  <div key={i} style={{ padding: 12, borderRadius: 10, background: 'rgba(148,163,184,0.05)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{e.explanation}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{e.evidence_type} · {Math.round((e.confidence || 0) * 100)}% confidence</div>
+                  </div>
+                ))}
+              </div>
+            </ReplayStage>
+          )}
+
+          {ev.memories.length > 0 && (
+            <ReplayStage index={stage++} label="Memory" color="#6ee7b7">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {ev.memories.map((m, i) => (
+                  <div key={i} style={{ padding: 12, borderRadius: 10, background: 'rgba(148,163,184,0.05)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{m.content}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{m.memory_type}</div>
+                  </div>
+                ))}
+              </div>
+            </ReplayStage>
+          )}
+
+          <ReplayStage index={stage++} label="Identity Impact" color="#f472b6">
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              {ev.impact === 'none'
+                ? 'This event has not yet been linked into any behavior object, evidence, or memory.'
+                : `This event contributed to a ${ev.impact}-impact shift in your cognitive profile.`}
+            </div>
+          </ReplayStage>
+        </GlassCard>
+      </div>
+    </div>
+  )
+}
+
+function EventCard({ ev, onReplay }) {
   const [open, setOpen] = useState(false)
   const meta = PLATFORM_META[ev.platform] || { label: ev.platform, icon: '•', color: '#94a3b8' }
   const attn = ATTENTION_META[ev.attention] || ATTENTION_META.shallow
@@ -71,6 +170,16 @@ function EventCard({ ev }) {
             {ev.commented && <Badge variant="amber">Commented</Badge>}
           </div>
         </div>
+        <button
+          onClick={() => onReplay(ev)}
+          title="Replay this event's journey through the pipeline"
+          style={{
+            flexShrink: 0, padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+            border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-tertiary)', cursor: 'pointer',
+          }}
+        >
+          ▶ Replay
+        </button>
       </div>
 
       {hasImpact && (
@@ -141,6 +250,7 @@ export default function TimelinePage() {
   const [likedOnly, setLikedOnly] = useState(false)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [replayEvent, setReplayEvent] = useState(null)
 
   const load = useCallback(async (opts = {}) => {
     const append = !!opts.beforeId
@@ -243,7 +353,7 @@ export default function TimelinePage() {
         </GlassCard>
       )}
 
-      {!loading && events.map(ev => <EventCard key={ev.id} ev={ev} />)}
+      {!loading && events.map(ev => <EventCard key={ev.id} ev={ev} onReplay={setReplayEvent} />)}
 
       {!loading && nextBeforeId && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
@@ -260,6 +370,8 @@ export default function TimelinePage() {
           </button>
         </div>
       )}
+
+      {replayEvent && <ReplayModal ev={replayEvent} onClose={() => setReplayEvent(null)} />}
     </div>
   )
 }
