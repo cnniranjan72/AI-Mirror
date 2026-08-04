@@ -114,7 +114,7 @@ async def score_campaign(user_id: str, campaign_text: str) -> Dict[str, Any]:
         explanation.append(f"References creator(s) this user actually engages with: {', '.join(creator_matches[:3])}.")
     if motivation_alignment:
         top_dim = max(motivation_alignment, key=motivation_alignment.get)
-        explanation.append(f"Language matches '{top_dim.replace('_', ' ')}' — this user scores {round(motivation_alignment[top_dim]*100)}% on that dimension.")
+        explanation.append(f"Language matches '{top_dim.replace('_', ' ')}' - this user scores {round(motivation_alignment[top_dim]*100)}% on that dimension.")
     else:
         explanation.append("Campaign language doesn't clearly speak to any tracked motivation dimension.")
 
@@ -131,5 +131,5 @@ async def score_campaign(user_id: str, campaign_text: str) -> Dict[str, Any]:
         "motivation_alignment": motivation_alignment,
         "explanation": explanation,
         "identity_confidence": float(identity["overall_confidence"] or 0),
-        "method": "deterministic keyword/overlap scoring against real identity fields — no LLM involved",
+        "method": "deterministic keyword/overlap scoring against real identity fields - no LLM involved",
     }

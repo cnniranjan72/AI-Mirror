@@ -115,16 +115,16 @@ async def build_algorithmic_identity_profile(user_id: str) -> Dict[str, Any]:
         },
         "audience_segment": {
             "tags": segment_tags,
-            "note": "Derived from persona label, engagement-depth inference, and creator dependence — not demographic data.",
+            "note": "Derived from persona label, engagement-depth inference, and creator dependence - not demographic data.",
         },
         "wellbeing_signal": {
-            "source": "app/services/wellbeing.py — same computation as the Guardian tab",
+            "source": "app/services/wellbeing.py - same computation as the Guardian tab",
             "risk_score": wb["risk_score"],
             "risk_level": wb["risk_level"],
             "risk_factors": wb["risk_factors"],
         },
         "behavioral_alignment": {
-            "source": "rl_layer — contextual bandit alignment dimensions",
+            "source": "rl_layer - contextual bandit alignment dimensions",
             "note": "Recorded per-ingest in actions_log; latest snapshot only shown here.",
         },
     }

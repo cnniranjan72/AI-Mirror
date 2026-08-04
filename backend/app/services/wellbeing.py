@@ -192,13 +192,13 @@ async def compute_wellbeing_report(user_id: str) -> Dict[str, Any]:
         recommendations.append("Consider a wind-down reminder before late-night sessions.")
     if alerts:
         cats = sorted({c for a in alerts for c in a["categories"]})
-        recommendations.append(f"Sensitive content categories present: {', '.join(cats)} — worth a check-in conversation.")
+        recommendations.append(f"Sensitive content categories present: {', '.join(cats)} - worth a check-in conversation.")
     if scanning:
         recommendations.append("Encourage longer-form, single-focus content to build attention span.")
     if dependence:
         recommendations.append("Suggest exploring new creators to reduce parasocial dependence.")
     if not recommendations:
-        recommendations.append("No elevated risk factors detected — usage pattern looks balanced.")
+        recommendations.append("No elevated risk factors detected - usage pattern looks balanced.")
 
     risk_level = "low" if risk < 0.3 else ("moderate" if risk < 0.6 else "elevated")
     await _maybe_log_alert(user_id, risk_level, risk, risk_factors)

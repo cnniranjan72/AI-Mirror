@@ -665,7 +665,7 @@ class CreatorDiversityRule(Rule):
             top3 = sum(c for _, c in counts.most_common(3))
             return (
                 f"Broad creator exploration: {len(counts)} distinct creators, "
-                f"top 3 only {top3 / total:.0%} of activity — low creator dependence"
+                f"top 3 only {top3 / total:.0%} of activity - low creator dependence"
             )
         except Exception:
             return "Error generating explanation"
