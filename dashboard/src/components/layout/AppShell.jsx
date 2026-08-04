@@ -12,6 +12,7 @@ import IngestionPage from '../../pages/ingestion/IngestionPage'
 import TimelinePage from '../../pages/timeline/TimelinePage'
 import KnowledgeGraphPage from '../../pages/graph/KnowledgeGraphPage'
 import DiaryPage from '../../pages/diary/DiaryPage'
+import GoalsPage from '../../pages/goals/GoalsPage'
 import IdentityPage from '../../pages/identity/IdentityPage'
 import MemoryPage from '../../pages/memory/MemoryPage'
 import EvidencePage from '../../pages/evidence/EvidencePage'
@@ -92,6 +93,7 @@ export default function AppShell() {
                 <Route path="/timeline" element={<TimelinePage />} />
                 <Route path="/graph" element={<KnowledgeGraphPage />} />
                 <Route path="/diary" element={<DiaryPage />} />
+                <Route path="/goals" element={<GoalsPage />} />
                 <Route path="/identity" element={<IdentityPage />} />
                 <Route path="/memory" element={<MemoryPage />} />
                 <Route path="/evidence" element={<EvidencePage />} />

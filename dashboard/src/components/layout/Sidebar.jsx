@@ -4,7 +4,7 @@ import {
   DashboardIcon, IdentityIcon, MemoryIcon, EvidenceIcon, BehaviorIcon,
   PlanningIcon, DecisionIcon, PipelineIcon, AnalyticsIcon, ChatIcon, SettingsIcon,
   SearchIcon, ChevronLeftIcon, ZapIcon, AlertIcon, CpuIcon, DownloadIcon,
-  UploadIcon, BookIcon, CompassIcon, ClockIcon, NetworkIcon, DiaryIcon
+  UploadIcon, BookIcon, CompassIcon, ClockIcon, NetworkIcon, DiaryIcon, TargetIcon
 } from '../../icons/icons'
 import { api, isAuthed, displayName } from '../../api/client'
 import AuthModal from '../auth/AuthModal'
@@ -15,6 +15,7 @@ const navItems = [
   { path: '/timeline', label: 'Timeline', icon: ClockIcon },
   { path: '/graph', label: 'Knowledge Graph', icon: NetworkIcon },
   { path: '/diary', label: 'Diary', icon: DiaryIcon },
+  { path: '/goals', label: 'Goals', icon: TargetIcon },
   { path: '/identity', label: 'Identity', icon: IdentityIcon },
   { path: '/character', label: 'Character', icon: CpuIcon },
   { path: '/memory', label: 'Memory', icon: MemoryIcon },

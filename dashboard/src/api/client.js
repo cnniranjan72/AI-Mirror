@@ -215,6 +215,27 @@ export const api = {
     return data;
   },
 
+  // === Goals ===
+  getGoals: async (userId = activeUser(), status) => {
+    const { data } = await client.get('/goals', { params: { user_id: userId, status } });
+    return data;
+  },
+  createGoal: async (goalDescription, goalType, targetKeywords, targetDate, userId = activeUser()) => {
+    const { data } = await client.post('/goals', {
+      user_id: userId, goal_description: goalDescription, goal_type: goalType,
+      target_keywords: targetKeywords, target_date: targetDate || undefined,
+    });
+    return data;
+  },
+  updateGoal: async (goalId, updates) => {
+    const { data } = await client.patch(`/goals/${goalId}`, updates);
+    return data;
+  },
+  deleteGoal: async (goalId) => {
+    const { data } = await client.delete(`/goals/${goalId}`);
+    return data;
+  },
+
   // === Seed (demo data) ===
   seedDemo: async () => {
     const { data } = await client.post('/seed');

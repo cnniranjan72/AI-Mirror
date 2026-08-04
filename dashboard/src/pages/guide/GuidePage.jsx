@@ -21,6 +21,10 @@ const FEATURE_GUIDE = [
     body: 'A weekly or monthly "story" narrated entirely from real, computed stats over your actual events — no LLM call, just the same deterministic-facts-to-prose pattern used elsewhere in the app. Every sentence (including the comparisons to the previous period) traces back to a real number.',
   },
   {
+    path: '/goals', icon: '🎯', title: 'Goals',
+    body: 'Set a real intention ("do more of X", "do less of Y") against real topic keywords, and get back an alignment score computed from your actual behavior_objects — their importance and whether they\'re growing or declining — not a number you type in yourself. Re-scored live every time you open the page.',
+  },
+  {
     path: '/graph', icon: '🕸️', title: 'Knowledge Graph',
     body: 'A living, physics-driven map of your topics and creators — node size is real importance, color shows which platform a topic came from, and lines are real relationships (shared keywords between topics, or a creator who made content in that topic). Click any node for its full stats, or search to fly the camera to it.',
   },
