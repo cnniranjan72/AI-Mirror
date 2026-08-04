@@ -5,6 +5,7 @@ import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import LoadingSkeleton from '../../components/ui/LoadingSkeleton'
 import PipelineStage from '../../components/pipeline/PipelineStage'
+import PipelineWaterfall from '../../components/pipeline/PipelineWaterfall'
 import { RefreshIcon } from '../../icons/icons'
 import ExplainabilityPanel from '../../components/explain/ExplainabilityPanel'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
@@ -168,6 +169,12 @@ export default function PipelinePage() {
               </div>
             )}
           </div>
+
+          <PipelineWaterfall
+            traceKey={activeTrace.trace_id}
+            stages={pipelineStages.map(name => ({ name, ms: getStageLatency(name) || 0 }))}
+          />
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {pipelineStages.map((stage, i) => (
               <div
