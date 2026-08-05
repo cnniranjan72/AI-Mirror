@@ -2,15 +2,17 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../api/client'
 
 export function useApi(fn, deps = [], options = {}) {
-  const { enabled = true, onError } = options
+  const { enabled = true, onError, pollMs = 0 } = options
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const mountedRef = useRef(true)
 
-  const execute = useCallback(async () => {
+  const execute = useCallback(async (opts = {}) => {
     if (!enabled) { setLoading(false); return }
-    setLoading(true)
+    // Polling re-fetches use `silent` so an in-flight background refresh
+    // doesn't flash the loading skeleton over data the user is looking at.
+    if (!opts.silent) setLoading(true)
     setError(null)
     try {
       const result = await fn()
@@ -31,6 +33,18 @@ export function useApi(fn, deps = [], options = {}) {
     return () => { mountedRef.current = false }
   }, [execute])
 
+  // Optional background polling — off by default. Skips ticks while the tab
+  // is hidden so a page left open in a background tab doesn't keep hammering
+  // the backend, and catches back up on the next visible tick.
+  useEffect(() => {
+    if (!pollMs) return
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
+      execute({ silent: true })
+    }, pollMs)
+    return () => clearInterval(id)
+  }, [pollMs, execute])
+
   return { data, loading, error, refetch: execute }
 }
 
@@ -45,16 +59,16 @@ export function useEvidence(userId) {
   return useApi(() => api.getEvidence(userId, '', 100), [userId])
 }
 
-export function useInferences(userId) {
-  return useApi(() => api.getInferences(userId, 50), [userId])
+export function useInferences(userId, options) {
+  return useApi(() => api.getInferences(userId, 50), [userId], options)
 }
 
-export function useReflections(userId) {
-  return useApi(() => api.getReflections(userId, 20), [userId])
+export function useReflections(userId, options) {
+  return useApi(() => api.getReflections(userId, 20), [userId], options)
 }
 
-export function useBehaviorObjects(userId) {
-  return useApi(() => api.getBehaviorObjects(userId, 50), [userId])
+export function useBehaviorObjects(userId, options) {
+  return useApi(() => api.getBehaviorObjects(userId, 50), [userId], options)
 }
 
 export function useTraces(userId) {
@@ -87,11 +101,5 @@ export function useV3Health() {
 }
 
 export function useCharacterState(userId, pollMs = 0) {
-  const { data, loading, error, refetch } = useApi(() => api.getCharacterState(userId), [userId])
-  useEffect(() => {
-    if (!pollMs) return
-    const id = setInterval(refetch, pollMs)
-    return () => clearInterval(id)
-  }, [pollMs, refetch])
-  return { data, loading, error, refetch }
+  return useApi(() => api.getCharacterState(userId), [userId], { pollMs })
 }

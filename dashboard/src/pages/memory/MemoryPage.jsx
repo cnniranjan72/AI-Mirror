@@ -18,10 +18,16 @@ const memoryTypes = [
 // behavior-object data (no separate pattern store exists in the backend).
 const PATTERN_STATES = new Set(['growing', 'stable', 'mature', 'declining'])
 
+// Keeps the Memory Tree (3D) — and the list views feeding it — current
+// without a manual reload while new reflections/inferences/behavior objects
+// land from background ingestion. Silent (no loading-skeleton flash) and
+// paused while the tab is hidden, via useApi's pollMs option.
+const MEMORY_POLL_MS = 30000
+
 export default function MemoryPage() {
-  const { data: reflections, loading: refLoading, error: refError, refetch: refetchRefs } = useReflections()
-  const { data: inferences, loading: infLoading, error: infError, refetch: refetchInfs } = useInferences()
-  const { data: behaviorObjects, loading: patLoading, error: patError, refetch: refetchBos } = useBehaviorObjects()
+  const { data: reflections, loading: refLoading, error: refError, refetch: refetchRefs } = useReflections(undefined, { pollMs: MEMORY_POLL_MS })
+  const { data: inferences, loading: infLoading, error: infError, refetch: refetchInfs } = useInferences(undefined, { pollMs: MEMORY_POLL_MS })
+  const { data: behaviorObjects, loading: patLoading, error: patError, refetch: refetchBos } = useBehaviorObjects(undefined, { pollMs: MEMORY_POLL_MS })
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('all')
 
