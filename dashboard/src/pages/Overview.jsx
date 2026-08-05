@@ -22,7 +22,7 @@ export default function Overview() {
   const { current: identityRaw, summary, loading: idLoading, error: idError, refetch: refetchIdentity } = useIdentity()
   const { data: traces, loading: traceLoading } = useTraces()
   const { data: reflections } = useReflections()
-  const { data: health } = useApi(() => api.v3Health())
+  const { data: health, loading: healthLoading } = useApi(() => api.v3Health())
 
   const [refreshing, setRefreshing] = useState(false)
   const handleRefresh = () => { setRefreshing(true); setTimeout(() => setRefreshing(false), 800) }
@@ -32,6 +32,8 @@ export default function Overview() {
   const behaviorProfile = parseJSON(identity?.behavior_profile)
   const interestGraph = parseJSON(identity?.interest_graph)
 
+  // health starts null until the request resolves — reading that as "Offline"
+  // misrepresents "still checking" as "confirmed down" on every page load.
   const online = health?.status === 'ok' || health?.status === 'healthy' || health?.database?.status === 'healthy'
   const isLoading = idLoading && !identity && !summary
   // A fetch failure isn't "no data" — showing the welcome banner on an error
@@ -94,8 +96,8 @@ export default function Overview() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Badge variant={online ? 'emerald' : 'danger'} dot>
-            {online ? 'Live' : 'Offline'}
+          <Badge variant={healthLoading ? 'neutral' : online ? 'emerald' : 'danger'} dot>
+            {healthLoading ? 'Checking...' : online ? 'Live' : 'Offline'}
           </Badge>
           <button onClick={handleRefresh} style={{
             padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)',

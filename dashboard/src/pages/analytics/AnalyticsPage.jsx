@@ -46,9 +46,16 @@ export default function AnalyticsPage() {
   // since some metrics can have real history while others are still sparse).
   const MIN_HISTORY_POINTS = 3
   const groupedMetrics = metricConfig.map(mc => {
+    // /cognitive/metrics returns newest-first (ORDER BY recorded_at DESC) —
+    // take the most recent 20, then reverse so the chart reads oldest (left)
+    // to newest (right). The previous `.slice(-20)` took the OLDEST 20 of
+    // the fetched window instead (last elements of a newest-first array),
+    // so a metric with a long history showed a stale, backwards trend
+    // instead of what actually happened recently.
     const series = metricList
       .filter(m => m.metric_name === mc.key)
-      .slice(-20)
+      .slice(0, 20)
+      .reverse()
       .map((m, i) => ({ index: i + 1, value: m.metric_value || 0, timestamp: m.recorded_at }))
     return { ...mc, values: series, hasHistory: series.length >= MIN_HISTORY_POINTS }
   })

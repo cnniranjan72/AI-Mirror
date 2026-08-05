@@ -21,9 +21,22 @@ router = APIRouter()
 # needs to be purged before a clean rebuild so re-clustering (which mints
 # fresh behavior_object ids) doesn't leave orphaned evidence/inferences
 # pointing at ids that no longer exist.
+#
+# cognitive_metrics is included too even though V3Pipeline.run() itself
+# never writes it (app/api/ingest.py's record_cognitive_metrics() does, per
+# ingest, as a running history of behavior_object_count/evidence_count/
+# inference_count/identity_version/identity_confidence at that point in
+# time). Found live: after a reprocess rebuilds identity from scratch, the
+# OLD rows referencing the discarded lineage (e.g. identity_version 60 from
+# before a reset) stay in the table forever and get spliced together with
+# the new post-rebuild history in any "recent trend" query — producing a
+# chart that jumps between two unrelated eras instead of showing what
+# actually happened. Wiping it here keeps the metric history consistent
+# with whatever lineage the rebuild actually produced.
 REPROCESS_TABLES = [
     "behavior_objects", "evidence", "inferences",
     "reflections", "self_models", "identity_snapshots", "identities",
+    "cognitive_metrics",
 ]
 
 

@@ -27,14 +27,18 @@ export default function DecisionPage() {
     ? decisions.reduce((s, d) => s + (d.aggregate_confidence || 0), 0) / decisions.length
     : 0
 
-  const chartData = decisions.slice(-10).reverse().map((d, i) => ({
+  // /query/traces returns newest-first — slice(0, N) is the most recent N,
+  // then reverse() puts them oldest-to-newest for left-to-right charting.
+  // (slice(-N) would instead grab the OLDEST N of whatever the API's limit
+  // window returned — the same stale-window bug found on the Analytics page.)
+  const chartData = decisions.slice(0, 10).reverse().map((d, i) => ({
     name: `#${i + 1}`,
     Input: d.decision_input_facts || 0,
     Output: d.decision_output_facts || 0,
     Conflicts: d.decision_conflicts || 0,
   }))
 
-  const confidenceData = decisions.slice(-10).reverse().map((d, i) => ({
+  const confidenceData = decisions.slice(0, 10).reverse().map((d, i) => ({
     name: `#${i + 1}`,
     confidence: d.aggregate_confidence || 0,
   }))
@@ -124,7 +128,9 @@ export default function DecisionPage() {
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No decisions recorded</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {decisions.slice(-10).reverse().map((d, i) => (
+            {/* Recent-activity list, not a chart — newest first, no reverse
+                (same convention as Overview.jsx's Recent Queries). */}
+            {decisions.slice(0, 10).map((d, i) => (
               <div
                 key={d.trace_id || i}
                 onClick={() => setTreeTrace(d.trace_id)}

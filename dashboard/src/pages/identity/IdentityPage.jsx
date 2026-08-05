@@ -208,7 +208,11 @@ export default function IdentityPage() {
           <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>No identity snapshots yet</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {snapshotList.slice(-10).reverse().map((s, i) => (
+            {/* /identity/snapshot returns newest-first — slice(0, N) for the
+                N most recent, no reverse (recent-activity list, not a chart;
+                slice(-N) would grab the OLDEST N of the fetch window instead,
+                the same stale-window bug found on the Analytics page). */}
+            {snapshotList.slice(0, 10).map((s, i) => (
               <div key={s.snapshot_id || i} style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
                 borderRadius: 8, background: 'rgba(148,163,184,0.04)',
