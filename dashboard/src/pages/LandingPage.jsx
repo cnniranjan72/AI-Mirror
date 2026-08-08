@@ -74,6 +74,10 @@ export default function LandingPage() {
         await new Promise(r => setTimeout(r, 800))
         setDemoStatus('Demo data ready! Redirecting...')
         await new Promise(r => setTimeout(r, 1000))
+        // Explicit opt-in: unauthenticated visits to inner routes redirect
+        // to this landing page by default (see AppShell.jsx) — this flag is
+        // what lets a signed-out demo session keep browsing past this point.
+        localStorage.setItem('aim_demo_mode', 'true')
         navigate('/dashboard')
       }
     } catch (err) {
@@ -296,7 +300,7 @@ export default function LandingPage() {
         {/* Already have data */}
         <div style={{ marginTop: 32 }}>
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => { localStorage.setItem('aim_demo_mode', 'true'); navigate('/dashboard') }}
             style={{
               background: 'none', border: 'none',
               color: 'var(--text-muted)', fontSize: 14, cursor: 'pointer',

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AIMirror Settings</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a; color: #f8fafc;
+      max-width: 480px; margin: 40px auto; padding: 0 24px;
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    p.sub { color: #94a3b8; font-size: 13px; margin-bottom: 24px; }
+    label { display: block; font-size: 13px; color: #cbd5e1; margin-bottom: 6px; font-weight: 600; }
+    input {
+      width: 100%; padding: 10px 12px; border-radius: 8px;
+      background: #1e293b; border: 1px solid rgba(148,163,184,0.25);
+      color: #f8fafc; font-size: 14px; box-sizing: border-box; margin-bottom: 8px;
+    }
+    .hint { font-size: 12px; color: #64748b; line-height: 1.6; margin-bottom: 20px; }
+    button {
+      padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;
+      font-size: 13px; font-weight: 600;
+    }
+    #status { margin-top: 12px; font-size: 13px; color: #34d399; }
+  </style>
+</head>
+<body>
+  <h1>AIMirror — Connection Settings</h1>
+  <p class="sub">Where the extension sends events, and where "Dashboard" opens.</p>
+
+  <label for="backendUrl">Backend URL</label>
+  <input id="backendUrl" type="text" placeholder="http://localhost:8000" />
+  <p class="hint">
+    Use <code>http://localhost:8000</code> only if you're running the AIMirror backend on this
+    same computer. If you're using a deployed instance, enter its real URL
+    (e.g. <code>https://your-app.onrender.com</code>) instead — do not include a trailing slash.
+  </p>
+
+  <label for="dashboardUrl">Dashboard URL</label>
+  <input id="dashboardUrl" type="text" placeholder="http://localhost:5173" />
+  <p class="hint">Where the popup's "Dashboard" button opens.</p>
+
+  <button id="saveBtn">Save</button>
+  <div id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

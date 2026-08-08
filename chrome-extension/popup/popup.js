@@ -32,6 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
   syncBtn.addEventListener('click', handleSync);
   dashboardBtn.addEventListener('click', handleDashboard);
   clearBtn.addEventListener('click', handleClear);
+  document.getElementById('settingsLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.runtime.openOptionsPage();
+  });
 
   // ==================== FUNCTIONS ====================
 
@@ -146,7 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleDashboard() {
-    chrome.tabs.create({ url: 'http://localhost:5173' });
+    chrome.storage.local.get(['dashboardUrl'], (result) => {
+      chrome.tabs.create({ url: result.dashboardUrl || 'http://localhost:5173' });
+    });
   }
 
   async function handleClear() {

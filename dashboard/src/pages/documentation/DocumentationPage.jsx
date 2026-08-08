@@ -92,6 +92,29 @@ export default function DocumentationPage() {
         </div>
       </Section>
 
+      <Section title="Getting Started" badge={<Badge variant="emerald">setup</Badge>}>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+          <p style={{ fontWeight: 600, marginBottom: 6 }}>1. Set up an AI provider (optional, recommended)</p>
+          <p style={{ color: 'var(--text-tertiary)', marginBottom: 14 }}>
+            Chat and reflections work off a shared server key by default, but bringing your own —
+            OpenAI, Anthropic, Gemini, or a reachable Ollama endpoint — is faster and not subject to
+            shared rate limits. Set it under{' '}
+            <a href="/settings" style={{ color: '#818cf8' }}>Settings → AI Provider</a>.
+          </p>
+          <p style={{ fontWeight: 600, marginBottom: 6 }}>2. Install the Chrome extension</p>
+          <p style={{ color: 'var(--text-tertiary)', marginBottom: 6 }}>
+            Not published to the Chrome Web Store yet — load it unpacked:
+          </p>
+          <ol style={{ paddingLeft: 20, margin: 0, color: 'var(--text-tertiary)', lineHeight: 1.9 }}>
+            <li>Download or clone the <code>chrome-extension/</code> folder from the repository.</li>
+            <li>Open <code>chrome://extensions</code> in Chrome.</li>
+            <li>Enable <strong>Developer mode</strong> (top right).</li>
+            <li>Click <strong>Load unpacked</strong> and select the <code>chrome-extension/</code> folder.</li>
+            <li>Browse Instagram or YouTube normally — your identity builds up automatically.</li>
+          </ol>
+        </div>
+      </Section>
+
       <Section title="Cognitive Pipeline" badge={<Badge variant="neutral">{PIPELINE_STAGES.length} stages</Badge>}>
         <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16 }}>
           Every ingested event and every chat query flows through this chain, in order. See it running live on the{' '}

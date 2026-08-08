@@ -18,6 +18,9 @@ export default function AuthModal({ onClose, initialMode = 'login' }) {
       } else {
         await api.login(username, password)
       }
+      // Shown once on the next dashboard load if they haven't set up an AI
+      // provider key yet — see components/ui/SetupToast.jsx.
+      sessionStorage.setItem('aim_show_setup_prompt', 'true')
       // Reload so every hook re-fetches against the now-authenticated user.
       window.location.href = '/dashboard'
     } catch (err) {

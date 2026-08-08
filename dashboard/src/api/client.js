@@ -354,6 +354,22 @@ export const api = {
     return data;
   },
 
+  // === AI Provider settings (per-user LLM key, falls back to server default) ===
+  getLlmSettings: async () => {
+    const { data } = await client.get('/settings/llm');
+    return data;
+  },
+  setLlmSettings: async (provider, apiKey, baseUrl, model) => {
+    const { data } = await client.post('/settings/llm', {
+      provider, api_key: apiKey || undefined, base_url: baseUrl || undefined, model: model || undefined,
+    });
+    return data;
+  },
+  clearLlmSettings: async () => {
+    const { data } = await client.delete('/settings/llm');
+    return data;
+  },
+
   // === Admin (local debugging — no per-user auth, not a data endpoint) ===
   getAdminErrors: async (errorType, limit = 20) => {
     const { data } = await client.get('/admin/errors', { params: { error_type: errorType, limit } });

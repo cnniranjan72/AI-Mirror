@@ -5,6 +5,7 @@ import { View } from '@react-three/drei'
 import Sidebar from './Sidebar'
 import ErrorBoundary from '../ErrorBoundary'
 import LoadingSkeleton from '../ui/LoadingSkeleton'
+import SetupToast from '../ui/SetupToast'
 import { isAuthed } from '../../api/client'
 
 // Lazy-loaded so each route's code (and the vendor chunks it pulls in —
@@ -62,6 +63,16 @@ export default function AppShell() {
         <LandingPage />
       </Suspense>
     )
+  }
+
+  // Default to the sign-in/landing gate for everyone else too — a
+  // bookmarked or direct link to an inner route while signed out used to
+  // silently show the demo account's data with no gate at all. The demo
+  // account itself is untouched; it just now requires the explicit opt-in
+  // set by LandingPage.jsx's "Load Demo Data" / "Already have data?" CTAs
+  // instead of being the silent default.
+  if (!isAuthed() && localStorage.getItem('aim_demo_mode') !== 'true') {
+    return <Navigate to="/" replace />
   }
 
   return (
@@ -145,6 +156,8 @@ export default function AppShell() {
           AIMirror — Cognitive Digital Twin
         </footer>
       </main>
+
+      <SetupToast />
     </div>
   )
 }

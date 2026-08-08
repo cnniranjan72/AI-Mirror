@@ -35,6 +35,50 @@ export default function SettingsPage() {
     setResearchBusy(false)
   }
 
+  const [llmSettings, setLlmSettingsState] = useState(null)
+  const [llmProvider, setLlmProvider] = useState('openai')
+  const [llmApiKey, setLlmApiKey] = useState('')
+  const [llmBaseUrl, setLlmBaseUrl] = useState('')
+  const [llmBusy, setLlmBusy] = useState(false)
+  const [llmError, setLlmError] = useState(null)
+  const [llmSaved, setLlmSaved] = useState(false)
+
+  const loadLlmSettings = () => {
+    if (!authed) return
+    api.getLlmSettings().then(s => {
+      setLlmSettingsState(s)
+      if (s.provider) setLlmProvider(s.provider)
+      setLlmBaseUrl(s.base_url || '')
+    }).catch(() => {})
+  }
+  useEffect(loadLlmSettings, [authed])
+
+  const saveLlmSettings = async () => {
+    setLlmBusy(true); setLlmError(null); setLlmSaved(false)
+    try {
+      const s = await api.setLlmSettings(llmProvider, llmApiKey, llmBaseUrl, undefined)
+      setLlmSettingsState(s)
+      setLlmApiKey('')
+      setLlmSaved(true)
+      setTimeout(() => setLlmSaved(false), 2500)
+    } catch (err) {
+      setLlmError(err?.response?.data?.detail || err.message)
+    }
+    setLlmBusy(false)
+  }
+
+  const clearLlmSettingsHandler = async () => {
+    setLlmBusy(true); setLlmError(null)
+    try {
+      await api.clearLlmSettings()
+      setLlmSettingsState({ provider: null, has_key: false, key_preview: null, base_url: null, model: null })
+      setLlmApiKey(''); setLlmBaseUrl(''); setLlmProvider('openai')
+    } catch (err) {
+      setLlmError(err?.response?.data?.detail || err.message)
+    }
+    setLlmBusy(false)
+  }
+
   const runDelete = async () => {
     setDeleteStep('deleting')
     try {
@@ -295,6 +339,104 @@ export default function SettingsPage() {
           </div>
         )}
       </GlassCard>
+
+      {authed && (
+        <GlassCard gradient style={{ marginTop: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#818cf8' }}>
+              <NetworkIcon />
+            </div>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600 }}>AI Provider</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {llmSettings?.has_key
+                  ? `Using your own ${llmSettings.provider} key (${llmSettings.key_preview})`
+                  : llmSettings?.provider === 'ollama'
+                    ? 'Using your configured Ollama endpoint'
+                    : 'Using the server’s shared key — bring your own for priority access'}
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <select
+              value={llmProvider}
+              onChange={e => setLlmProvider(e.target.value)}
+              style={{
+                padding: '8px 12px', borderRadius: 8, background: 'rgba(30,41,59,0.5)',
+                border: '1px solid var(--border-subtle)', color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+              }}
+            >
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="gemini">Gemini</option>
+              <option value="ollama">Ollama / custom endpoint</option>
+            </select>
+            {llmProvider !== 'ollama' && (
+              <input
+                type="password"
+                value={llmApiKey}
+                onChange={e => setLlmApiKey(e.target.value)}
+                placeholder={llmSettings?.provider === llmProvider && llmSettings?.has_key ? 'Key saved — enter a new one to replace it' : 'API key'}
+                style={{
+                  flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 8,
+                  background: 'rgba(30,41,59,0.5)', border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)', fontSize: 13, outline: 'none', colorScheme: 'dark',
+                }}
+              />
+            )}
+          </div>
+
+          {llmProvider === 'ollama' && (
+            <div style={{ marginBottom: 12 }}>
+              <input
+                value={llmBaseUrl}
+                onChange={e => setLlmBaseUrl(e.target.value)}
+                placeholder="https://your-ollama-endpoint.example.com/v1"
+                style={{
+                  width: '100%', padding: '8px 12px', borderRadius: 8,
+                  background: 'rgba(30,41,59,0.5)', border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)', fontSize: 13, outline: 'none', marginBottom: 6,
+                }}
+              />
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                Must be reachable from the server, not just your own computer — a laptop's
+                <code style={{ margin: '0 4px' }}>localhost:11434</code> only works when you're running
+                the AIMirror backend locally yourself. Leave blank for that local-dev case.
+              </p>
+            </div>
+          )}
+
+          {llmError && <div style={{ color: '#f87171', fontSize: 12, marginBottom: 10 }}>{llmError}</div>}
+
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button
+              onClick={saveLlmSettings}
+              disabled={llmBusy || (llmProvider !== 'ollama' && !llmApiKey)}
+              style={{
+                padding: '9px 16px', borderRadius: 8, border: 'none',
+                background: 'var(--accent-gradient)', color: 'white', fontSize: 13, fontWeight: 600,
+                cursor: llmBusy ? 'wait' : 'pointer',
+                opacity: (llmProvider !== 'ollama' && !llmApiKey) ? 0.5 : 1,
+              }}
+            >
+              {llmSaved ? 'Saved ✓' : 'Save'}
+            </button>
+            {llmSettings?.has_key || llmSettings?.provider ? (
+              <button
+                onClick={clearLlmSettingsHandler}
+                disabled={llmBusy}
+                style={{
+                  padding: '9px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)',
+                  background: 'transparent', color: 'var(--text-tertiary)', fontSize: 13, cursor: llmBusy ? 'wait' : 'pointer',
+                }}
+              >
+                Revert to server default
+              </button>
+            ) : null}
+          </div>
+        </GlassCard>
+      )}
 
       {authed && (
         <GlassCard gradient style={{ marginTop: 24 }}>

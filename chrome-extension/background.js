@@ -4,13 +4,33 @@
 console.log('[AIMirror Background] Service worker loaded');
 
 // Configuration
+// Local-dev default — a deployed backend can't be guessed at build time, so
+// real users set their actual URL once on the extension's Options page
+// (chrome.storage.local.backendUrl), loaded below. This constant is only
+// what's used until that's configured, or if it never is.
+const DEFAULT_BACKEND_URL = 'http://localhost:8000';
+
 const CONFIG = {
-  // Keep in sync with content.js and API_BASE_URL below.
-  BACKEND_URL: 'http://localhost:8000/ingest',
-  API_BASE_URL: 'http://localhost:8000',
+  BACKEND_URL: `${DEFAULT_BACKEND_URL}/ingest`,
+  API_BASE_URL: DEFAULT_BACKEND_URL,
   SYNC_INTERVAL: 30000, // Sync every 30 seconds
   MAX_STORAGE_EVENTS: 1000 // Maximum events to keep in storage
 };
+
+function applyBackendUrl(url) {
+  if (!url) return;
+  CONFIG.API_BASE_URL = url;
+  CONFIG.BACKEND_URL = `${url}/ingest`;
+  console.log('[AIMirror Background] Using configured backend URL:', url);
+}
+
+chrome.storage.local.get(['backendUrl'], (result) => applyBackendUrl(result.backendUrl));
+
+// Picks up a change made on the Options page while this service worker is
+// already running, without needing the extension reloaded.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.backendUrl) applyBackendUrl(changes.backendUrl.newValue);
+});
 
 // User ID management
 let userId = null;
