@@ -101,7 +101,15 @@ async def similarity_search(
 
     where = " AND ".join(filters)
     idx += 1
-    params.append(query_embedding)
+    # asyncpg has no built-in codec for pgvector's `vector` type — it must
+    # be sent as its text format ("[0.1,0.2,...]"), not a raw Python list,
+    # for the `::vector` cast below to work. insert_embedding() already did
+    # this correctly; this function didn't, and would fail with "expected
+    # str, got list" the moment this fallback path actually ran (confirmed
+    # live: a fresh account with too little data for the main pipeline
+    # falls back to this query, hits the bug, and the whole /query request
+    # 500s).
+    params.append("[" + ",".join(map(str, query_embedding)) + "]")
     idx += 1
     lim_p = f"${idx}"
     params.append(top_k)
@@ -144,7 +152,9 @@ async def hybrid_search(
     if len(query_embedding) != 384:
         raise ValueError(f"Query embedding dimension mismatch: expected 384, got {len(query_embedding)}")
     
-    params: list = [user_id, query_embedding, query_text, vector_weight, keyword_weight, top_k]
+    # Same fix as similarity_search() above — pgvector needs the text format.
+    vec_str = "[" + ",".join(map(str, query_embedding)) + "]"
+    params: list = [user_id, vec_str, query_text, vector_weight, keyword_weight, top_k]
     type_filter = ""
     if doc_types:
         type_filter = "AND doc_type = ANY($7)"
