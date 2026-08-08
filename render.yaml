@@ -31,6 +31,17 @@ services:
         value: openai
       - key: LOG_LEVEL
         value: INFO
+      # The codebase uses absolute imports rooted at the repo root (e.g.
+      # `from backend.core...` inside app/api/ingest.py), matching how this
+      # was always run locally (PYTHONPATH set to both the repo root and
+      # backend/ — see RUN.md). With rootDir: backend, Render's start
+      # command runs with cwd=backend/, so only backend/ itself lands on
+      # sys.path — "backend" as a top-level package isn't importable
+      # without this. ".." resolves to the repo root relative to that cwd.
+      # Confirmed live: omitting this fails at startup with
+      # "ModuleNotFoundError: No module named 'backend'".
+      - key: PYTHONPATH
+        value: ".."
       # fromService's "host" property returns the private-network hostname
       # (only reachable from other Render services), not the public HTTPS
       # URL — CORS_ORIGINS needs the real public frontend origin a browser
