@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: aimirror-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # Secrets — values set manually after the blueprint deploys (Render
+      # dashboard or API), never stored in this file.
+      - key: DATABASE_URL
+        sync: false
+      - key: HF_API_TOKEN
+        sync: false
+      - key: AUTH_SECRET
+        sync: false
+      - key: API_KEY_ENCRYPTION_SECRET
+        sync: false
+      - key: RESEARCH_EXPORT_SALT
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      # Non-secret defaults.
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LOG_LEVEL
+        value: INFO
+      # fromService's "host" property returns the private-network hostname
+      # (only reachable from other Render services), not the public HTTPS
+      # URL — CORS_ORIGINS needs the real public frontend origin a browser
+      # actually sends, so it's set manually after both services exist and
+      # their public *.onrender.com URLs are known, not derived here.
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: aimirror-dashboard
+    runtime: static
+    rootDir: dashboard
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      # Same reasoning as CORS_ORIGINS above — this needs the backend's
+      # public URL (it's baked into the static JS bundle browsers run),
+      # which fromService.host would not provide correctly.
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

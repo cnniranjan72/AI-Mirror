@@ -4,11 +4,11 @@
 console.log('[AIMirror Background] Service worker loaded');
 
 // Configuration
-// Local-dev default — a deployed backend can't be guessed at build time, so
-// real users set their actual URL once on the extension's Options page
-// (chrome.storage.local.backendUrl), loaded below. This constant is only
-// what's used until that's configured, or if it never is.
-const DEFAULT_BACKEND_URL = 'http://localhost:8000';
+// Points at the deployed backend by default so the extension works out of
+// the box for real users — override via the Options page
+// (chrome.storage.local.backendUrl) if you're running the backend locally
+// yourself instead (http://localhost:8000).
+const DEFAULT_BACKEND_URL = 'https://aimirror-backend-cu00.onrender.com';
 
 const CONFIG = {
   BACKEND_URL: `${DEFAULT_BACKEND_URL}/ingest`,

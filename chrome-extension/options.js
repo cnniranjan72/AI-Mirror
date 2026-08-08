@@ -1,5 +1,5 @@
-const DEFAULT_BACKEND_URL = 'http://localhost:8000';
-const DEFAULT_DASHBOARD_URL = 'http://localhost:5173';
+const DEFAULT_BACKEND_URL = 'https://aimirror-backend-cu00.onrender.com';
+const DEFAULT_DASHBOARD_URL = 'https://aimirror-dashboard.onrender.com';
 
 const backendInput = document.getElementById('backendUrl');
 const dashboardInput = document.getElementById('dashboardUrl');
