@@ -57,7 +57,7 @@ async def query(
         {answer, sources, query}
     """
     # 1. Embed the query
-    query_vec = emb.encode(query_text)
+    query_vec = await emb.encode(query_text)
 
     # 2. Hybrid retrieval (vector + keyword)
     docs = await vector_store.hybrid_search(

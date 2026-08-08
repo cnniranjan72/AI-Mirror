@@ -381,7 +381,11 @@ class CognitivePipeline:
 
             # ── Stage 7: Verbalization ────────────────────────────────────
             t0 = time.perf_counter()
-            vresponse = await self.verbalizer.verbalize(context=ctx, plan=plan, conversation_history=conversation_history)
+            from app.services.user_llm_config import get_resolved_llm_config
+            llm_override = await get_resolved_llm_config(user_id)
+            vresponse = await self.verbalizer.verbalize(
+                context=ctx, plan=plan, conversation_history=conversation_history, override=llm_override,
+            )
 
             trace.verbalization_ms = (time.perf_counter() - t0) * 1000
             trace.token_count = vresponse.token_count

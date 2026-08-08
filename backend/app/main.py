@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 
 from app.db.postgres import init_pool, close_pool, run_schema, health as db_health
-from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary, goals, admin, orgs, research
+from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary, goals, admin, orgs, research, settings as settings_api
 
 load_dotenv()
 
@@ -57,9 +57,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -109,6 +110,7 @@ app.include_router(goals.router, tags=["Goals"])
 app.include_router(admin.router, tags=["Admin"])
 app.include_router(orgs.router, tags=["Organizations"])
 app.include_router(research.router, tags=["Research"])
+app.include_router(settings_api.router, tags=["Settings"])
 
 
 @app.get("/")

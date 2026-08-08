@@ -371,7 +371,7 @@ async def ingest_events(
 
         # ── STEP 3: Generate embeddings (for vector search) ──
         if texts_to_embed:
-            embeddings = emb.encode_batch(texts_to_embed)
+            embeddings = await emb.encode_batch(texts_to_embed)
             embed_count = await vector_store.insert_embeddings_batch(
                 user_id=user_id,
                 texts=texts_to_embed,
@@ -401,7 +401,7 @@ async def ingest_events(
 
         # Store behavioral summary embedding
         if features["summary_text"]:
-            summary_vec = emb.encode(features["summary_text"])
+            summary_vec = await emb.encode(features["summary_text"])
             await vector_store.insert_embedding(
                 user_id=user_id,
                 text=features["summary_text"],

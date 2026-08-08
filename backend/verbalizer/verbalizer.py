@@ -175,20 +175,40 @@ class LLMVerbalizer:
         context: CharacterContext,
         plan: CharacterPlan,
         conversation_history: Optional[List[Dict[str, str]]] = None,
+        override: Optional[Dict[str, Any]] = None,
     ) -> VerbalizerResponse:
+        """override (from user_llm_config.get_resolved_llm_config): when a
+        user has their own provider/key configured via /settings/llm, use
+        it for this call instead of the server-wide default. None (the
+        common case — no override configured) behaves exactly as before."""
         start = time.perf_counter()
         try:
             prompt = self._build_prompt(context, plan, conversation_history)
             content = ""
 
-            if self.llm_call and not self._llm_disabled:
+            call_provider = self.provider
+            call_model = self.model
+            call_kwargs = {}
+            llm_call = self.llm_call
+            if override and override.get("provider"):
+                llm_call = get_llm_call(override["provider"])
+                call_provider = resolve_provider(override["provider"])
+                call_model = override.get("model") or DEFAULT_MODEL_BY_PROVIDER[call_provider]
+                call_kwargs = {"api_key": override.get("api_key")}
+                # base_url is only a valid kwarg for ollama_call — the other
+                # providers don't accept one and would raise a TypeError.
+                if call_provider == "ollama" and override.get("base_url"):
+                    call_kwargs["base_url"] = override["base_url"]
+
+            if llm_call and not self._llm_disabled:
                 try:
-                    content = await self.llm_call(
+                    content = await llm_call(
                         system_prompt=prompt.system_prompt,
                         user_prompt=prompt.prompt_text,
-                        model=self.model,
+                        model=call_model,
                         max_tokens=self.max_tokens,
                         temperature=self.temperature,
+                        **call_kwargs,
                     )
                 except Exception as e:
                     # Missing API key, network error, unavailable SDK — never
@@ -222,8 +242,8 @@ class LLMVerbalizer:
                 used_fallback=used_fallback,
                 # "fallback" (not a vendor name) whenever the deterministic
                 # template produced content, since no LLM actually answered.
-                provider="fallback" if used_fallback else self.provider,
-                model=None if used_fallback else self.model,
+                provider="fallback" if used_fallback else call_provider,
+                model=None if used_fallback else call_model,
             )
         except Exception as e:
             logger.error(f"Verbalization failed: {e}", exc_info=True)

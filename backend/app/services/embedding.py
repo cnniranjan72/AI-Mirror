@@ -1,41 +1,56 @@
 """
-Embedding Layer
-Uses sentence-transformers (all-MiniLM-L6-v2) for 384-dim embeddings.
+Embedding Layer — Hugging Face's hosted Inference API for the same model
+this app always used (sentence-transformers/all-MiniLM-L6-v2, 384-dim),
+instead of loading it in-process.
+
+Why: the local path pulled in torch + sentence-transformers (600MB-1GB of
+dependencies, a model held resident in RAM) — fine for a dev laptop, but
+too heavy for Render's free tier and tight even on cheap paid tiers. HF's
+API serves the identical model, so this is a transport change only: same
+vectors, same 384 dims, no pgvector schema change, no accuracy difference.
 """
 
 import logging
-from typing import List, TYPE_CHECKING
+import os
+from typing import List
 
-if TYPE_CHECKING:
-    from sentence_transformers import SentenceTransformer
+import httpx
 
 logger = logging.getLogger(__name__)
 
-_model = None
+HF_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# api-inference.huggingface.co (the old serverless Inference API host) is
+# retired — HF now routes all providers, including their own "hf-inference"
+# one, through router.huggingface.co. The plain .../models/{model} path
+# routes this particular model to a SentenceSimilarityPipeline by default
+# (400: "missing 1 required positional argument: 'sentences'") — the
+# explicit /pipeline/feature-extraction suffix is what forces plain
+# embeddings instead. Confirmed against the real live endpoint.
+HF_API_URL = f"https://router.huggingface.co/hf-inference/models/{HF_MODEL}/pipeline/feature-extraction"
 
 
-def _get_model() -> "SentenceTransformer":
-    # Imported lazily so the API can boot (and serve /query, /profile, /explain,
-    # the dashboard) without the heavy torch/sentence-transformers stack. Only
-    # the embedding path (ingest) requires it.
-    global _model
-    if _model is None:
-        from sentence_transformers import SentenceTransformer
-        logger.info("Loading embedding model: all-MiniLM-L6-v2")
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
-        logger.info("Embedding model loaded (dim=384)")
-    return _model
+async def encode_batch(texts: List[str]) -> List[List[float]]:
+    """Encode multiple texts into 384-dim vectors via HF's hosted API."""
+    token = os.getenv("HF_API_TOKEN")
+    if not token:
+        raise ValueError("HF_API_TOKEN not configured")
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            HF_API_URL,
+            headers={"Authorization": f"Bearer {token}"},
+            # normalize=True matches sentence-transformers' own
+            # normalize_embeddings=True the local model always used — keeps
+            # cosine-similarity behavior identical to before this switch.
+            # wait_for_model absorbs HF's cold-start queueing instead of
+            # erroring out on the caller.
+            json={"inputs": texts, "normalize": True, "options": {"wait_for_model": True}},
+        )
+        resp.raise_for_status()
+        return resp.json()
 
 
-def encode(text: str) -> List[float]:
+async def encode(text: str) -> List[float]:
     """Encode a single text string into a 384-dim vector."""
-    model = _get_model()
-    vec = model.encode(text, normalize_embeddings=True)
-    return vec.tolist()
-
-
-def encode_batch(texts: List[str]) -> List[List[float]]:
-    """Encode multiple texts into vectors."""
-    model = _get_model()
-    vecs = model.encode(texts, normalize_embeddings=True, batch_size=32)
-    return [v.tolist() for v in vecs]
+    vecs = await encode_batch([text])
+    return vecs[0]

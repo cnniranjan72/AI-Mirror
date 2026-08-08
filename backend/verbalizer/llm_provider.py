@@ -7,11 +7,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_OPENAI_MODEL = "gpt-4o"
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_OLLAMA_MODEL = "llama3.2"
 
 DEFAULT_MODEL_BY_PROVIDER = {
     "openai": DEFAULT_OPENAI_MODEL,
     "anthropic": DEFAULT_ANTHROPIC_MODEL,
+    "gemini": DEFAULT_GEMINI_MODEL,
     "ollama": DEFAULT_OLLAMA_MODEL,
 }
 
@@ -29,6 +31,7 @@ async def openai_call(
     model: Optional[str] = None,
     max_tokens: int = 2048,
     temperature: float = 0.7,
+    api_key: Optional[str] = None,
 ) -> str:
     # A model id may arrive from a provider-agnostic caller (e.g. the verbalizer
     # default). Reject ids that clearly belong to another provider.
@@ -41,7 +44,9 @@ async def openai_call(
         logger.error("openai package not installed. Run `pip install openai`")
         raise
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    # A per-user key (from users.llm_api_key_encrypted, decrypted by the
+    # caller) takes priority over the server's shared key.
+    api_key = api_key or os.getenv("OPENAI_API_KEY")
     if not api_key:
         logger.error("OPENAI_API_KEY not set")
         raise ValueError("OPENAI_API_KEY not configured")
@@ -71,6 +76,7 @@ async def anthropic_call(
     model: Optional[str] = None,
     max_tokens: int = 2048,
     temperature: float = 0.7,
+    api_key: Optional[str] = None,
 ) -> str:
     # Ignore ids that belong to another provider (see openai_call).
     if not model or not model.lower().startswith("claude"):
@@ -82,7 +88,7 @@ async def anthropic_call(
         logger.error("anthropic package not installed. Run `pip install anthropic`")
         raise
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
+    api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         logger.error("ANTHROPIC_API_KEY not set")
         raise ValueError("ANTHROPIC_API_KEY not configured")
@@ -102,20 +108,60 @@ async def anthropic_call(
     return response.content[0].text if response.content else ""
 
 
+async def gemini_call(
+    system_prompt: str,
+    user_prompt: str,
+    model: Optional[str] = None,
+    max_tokens: int = 2048,
+    temperature: float = 0.7,
+    api_key: Optional[str] = None,
+) -> str:
+    if not model or not model.lower().startswith("gemini"):
+        model = DEFAULT_GEMINI_MODEL
+
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        logger.error("google-genai package not installed. Run `pip install google-genai`")
+        raise
+
+    api_key = api_key or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        logger.error("GEMINI_API_KEY not set")
+        raise ValueError("GEMINI_API_KEY not configured")
+
+    client = genai.Client(api_key=api_key)
+    response = await client.aio.models.generate_content(
+        model=model,
+        contents=user_prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+        ),
+    )
+    return response.text or ""
+
+
 async def ollama_call(
     system_prompt: str,
     user_prompt: str,
     model: Optional[str] = None,
     max_tokens: int = 2048,
     temperature: float = 0.7,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> str:
-    """Local Ollama via its OpenAI-compatible endpoint (no quota, no cost).
-
-    Reuses the OpenAI SDK pointed at Ollama's /v1 server. The model must be a
-    tag that has been pulled locally (e.g. `ollama pull llama3.2`).
+    """Ollama (or any OpenAI-compatible endpoint) via the OpenAI SDK pointed
+    at a custom base_url. A deployed backend can't reach a user's own
+    laptop, so base_url must be reachable from wherever this server runs —
+    it only defaults to localhost when the backend itself is being run
+    locally. The model must be a tag already pulled on that server
+    (e.g. `ollama pull llama3.2`).
     """
-    # gpt-*/claude-* defaults can leak in from a provider-agnostic caller.
-    if not model or model.lower().startswith(("gpt", "o1", "o3", "chatgpt", "claude")):
+    # gpt-*/claude-*/gemini-* defaults can leak in from a provider-agnostic caller.
+    if not model or model.lower().startswith(("gpt", "o1", "o3", "chatgpt", "claude", "gemini")):
         model = os.getenv("LLM_MODEL_OLLAMA") or DEFAULT_OLLAMA_MODEL
 
     try:
@@ -124,10 +170,10 @@ async def ollama_call(
         logger.error("openai package not installed. Run `pip install openai`")
         raise
 
-    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+    base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
     client = AsyncOpenAI(
         base_url=base_url,
-        api_key="ollama",  # required by the SDK but ignored by Ollama
+        api_key=api_key or "ollama",  # required by the SDK; ignored by stock Ollama
         max_retries=int(os.getenv("LLM_MAX_RETRIES", "0")),
         timeout=float(os.getenv("LLM_TIMEOUT", "120")),  # local CPU can be slow
     )
@@ -147,6 +193,8 @@ def get_llm_call(provider: Optional[str] = None):
     provider = resolve_provider(provider)
     if provider == "anthropic":
         return anthropic_call
+    if provider == "gemini":
+        return gemini_call
     if provider == "ollama":
         return ollama_call
     return openai_call

@@ -68,7 +68,7 @@ async def main():
         test_caption = events[0]['caption']
         print(f"Test caption: {test_caption[:50]}...")
         
-        query_emb = encode(test_caption)
+        query_emb = await encode(test_caption)
         print(f"✓ Query embedding generated (length: {len(query_emb)})")
         
         # Simple vector similarity test
