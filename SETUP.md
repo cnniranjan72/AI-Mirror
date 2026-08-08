@@ -1,5 +1,9 @@
 # AIMirror — Local Setup Guide
 
+> Just want to look at it? It's deployed: **https://aimirror-dashboard.onrender.com**
+> (backend: https://aimirror-backend-cu00.onrender.com). No setup needed — the rest of this guide
+> is for running your own copy locally.
+
 Get the backend, dashboard, and browser extension running locally after cloning from GitHub. This
 guide reflects the current V3 architecture (Identity/Evidence/Inference pipeline, dashboard, auth,
 and dual Instagram+YouTube ingestion) — not the earlier V1/V2 persona-archetype system some older
@@ -7,10 +11,11 @@ docs in this repo still describe.
 
 ## Prerequisites
 
-- **Python 3.11+** (built and tested on 3.13)
+- **Python 3.11** specifically — not 3.13/3.14. `asyncpg`'s C extension doesn't compile against newer CPython's changed C API (confirmed deploying to Render, which defaults to 3.14); `backend/.python-version` pins this for you if your tool respects it.
 - **Node.js 18+** (tested on 22) and npm
 - **A PostgreSQL database with the `pgvector` extension** — [Neon](https://neon.tech) has a free tier and is what this project was built against; any Postgres with pgvector works. There is no SQLite or offline fallback — `DATABASE_URL` is required and the backend refuses to start without it.
-- **Either** [Ollama](https://ollama.com) (free, runs locally, no API costs) **or** an OpenAI/Anthropic API key, for the LLM verbalization layer
+- **A free [Hugging Face](https://huggingface.co/settings/tokens) access token** (Read scope) — required for embeddings (`app/services/embedding.py` calls HF's hosted Inference API; there's no local-model fallback anymore).
+- **One LLM provider key** for the verbalization layer — [Ollama](https://ollama.com) (free, runs locally, no API costs), OpenAI, Anthropic, or Gemini. This is just the server-wide default; once signed in, each user can override it with their own key from Settings → AI Provider.
 
 ## 1. Clone
 
@@ -44,19 +49,38 @@ Create **`backend/.env`**:
 # https://console.neon.tech
 DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require
 
+# Required — embeddings via Hugging Face's hosted Inference API (free tier).
+# https://huggingface.co/settings/tokens (Read scope is enough)
+HF_API_TOKEN=
+
 # LLM verbalization layer — the ONLY place an LLM is used. By design it
 # never reasons or decides anything; it only turns already-decided facts
-# (produced by the deterministic pipeline) into prose.
-LLM_PROVIDER=ollama          # "ollama" (local/free), "openai", or "anthropic"
+# (produced by the deterministic pipeline) into prose. This is the
+# server-wide default; signed-in users can override it per-account from
+# Settings → AI Provider (see app/api/settings.py), which takes priority.
+LLM_PROVIDER=ollama          # "ollama" (local/free), "openai", "anthropic", or "gemini"
 OLLAMA_BASE_URL=http://localhost:11434/v1
 LLM_MODEL_OLLAMA=llama3.2
 # OPENAI_API_KEY=
 # ANTHROPIC_API_KEY=
+# GEMINI_API_KEY=
 
 # Signs auth tokens. Defaults to a placeholder — set your own random
 # value before this backend is reachable by anyone besides you (see
 # "Known limitations" below for why this matters).
 AUTH_SECRET=change-me-to-something-random
+
+# Encrypts per-user AI provider keys at rest. Also set your own random
+# value for this before going beyond local/solo use.
+API_KEY_ENCRYPTION_SECRET=change-me-to-something-random
+
+# Salts the one-way participant IDs in the researcher bulk export
+# (GET /research/export) — keep distinct from AUTH_SECRET.
+RESEARCH_EXPORT_SALT=change-me-to-something-random
+
+# Comma-separated allowed dashboard origins (browser CORS). Add your
+# deployed frontend's real URL in production — never use "*".
+CORS_ORIGINS=http://localhost:5173
 
 PORT=8000
 LOG_LEVEL=INFO
@@ -66,7 +90,7 @@ LOG_LEVEL=INFO
 ```bash
 ollama pull llama3.2
 ```
-Ollama runs as a local background service on port 11434 automatically after install.
+Ollama runs as a local background service on port 11434 automatically after install. Only reachable when the backend itself runs on the same machine as Ollama — a deployed backend can't reach your laptop, which is why per-user Ollama configuration (Settings → AI Provider) takes a custom, server-reachable base URL instead of assuming `localhost`.
 
 ### Run
 
@@ -132,8 +156,9 @@ limitations" for exactly what that isolation does and doesn't guarantee).
 
 1. Open `chrome://extensions`, enable **Developer mode** (top right)
 2. **Load unpacked** → select the `chrome-extension/` folder from this repo
-3. Browse `instagram.com/reels` or `youtube.com` (both watch pages and Shorts are tracked) — the extension batches events and sends them to the backend automatically
-4. Check the **Import** tab in the dashboard to see your live source mix once you've watched a few things
+3. It defaults to the **deployed backend**. Since you're running your own locally, open the extension popup → **⚙️ Connection settings** and set Backend URL to `http://localhost:8000` and Dashboard URL to `http://localhost:5173`
+4. Browse `instagram.com/reels` or `youtube.com` (both watch pages and Shorts are tracked) — the extension batches events and sends them to the backend automatically
+5. Check the **Import** tab in the dashboard to see your live source mix once you've watched a few things
 
 A dashboard code change never requires reloading the extension; the reverse is not true — reload
 the extension at `chrome://extensions` after any change to files inside `chrome-extension/`.

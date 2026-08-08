@@ -1,6 +1,6 @@
 # AIMirror Chrome Extension
 
-Manifest V3 Chrome extension for tracking Instagram Reels behavioral data.
+Manifest V3 Chrome extension for tracking Instagram Reels and YouTube (Watch + Shorts) behavioral data. Not published to the Chrome Web Store — load it unpacked.
 
 ## 🚀 Installation
 
@@ -16,15 +16,17 @@ Manifest V3 Chrome extension for tracking Instagram Reels behavioral data.
 - You should see the AIMirror extension icon in your toolbar
 - Click the icon to open the popup and check status
 
-### 3. Configure Backend URL (Optional)
+### 3. Configure Backend URL
 
-If your backend is not running on `http://localhost:3000`, edit `content.js`:
+By default the extension points at the **deployed backend**
+(`https://aimirror-backend-cu00.onrender.com`) and dashboard
+(`https://aimirror-dashboard.onrender.com`), so it works out of the box with no configuration.
 
-```javascript
-const CONFIG = {
-  BACKEND_URL: 'http://your-backend-url:port/api/events'
-};
-```
+If you're running your own backend/dashboard (locally, or a different deployment), open the popup →
+**⚙️ Connection settings** (or right-click the extension icon → Options) and set the Backend URL and
+Dashboard URL fields. These are stored via `chrome.storage.local` (`options.html`/`options.js`) and
+read by `background.js` at runtime — no code edit or rebuild needed, unlike earlier versions of this
+extension.
 
 ## 📋 Features
 
@@ -91,13 +93,15 @@ Dashboard (visualization)
 
 ## ⚙️ Configuration
 
-Edit `content.js` to customize:
+Backend/Dashboard URLs: use the Options page (see Installation → step 3), not a code edit.
+
+Everything else is a code constant in `content.js`/`youtube-content.js` if you need to customize it:
 
 ```javascript
 const CONFIG = {
-  BATCH_INTERVAL: 60000,        // Sync interval (ms)
+  BATCH_INTERVAL: 30000,        // Sync interval (ms)
   MIN_WATCH_TIME: 0.5,          // Minimum watch time to record (s)
-  BACKEND_URL: 'http://...'     // Backend API endpoint
+  BATCH_SIZE: 10,               // Events per batch
 };
 ```
 

@@ -2,6 +2,9 @@
 
 Quick reference for running every service. Copy-paste these commands.
 
+> Just want to look at it without running anything locally? It's deployed:
+> **https://aimirror-dashboard.onrender.com** (backend: https://aimirror-backend-cu00.onrender.com). Free tier — first request after ~15 min idle takes 30-60s to wake up.
+
 ## Supervised (auto-restart + crash logs)
 
 The manual commands below work fine, but nothing watches the process — if it
@@ -114,8 +117,9 @@ VITE_USER_ID=test_user_001
 
 1. Open `chrome://extensions`, enable **Developer mode**
 2. **Load unpacked** → select the `chrome-extension/` folder
-3. Browse `instagram.com/reels` or `youtube.com`
-4. Reload the extension after any change to `chrome-extension/`
+3. It defaults to the **deployed backend** (`https://aimirror-backend-cu00.onrender.com`). For local dev against the servers above instead, open the popup → **⚙️ Connection settings** and set Backend URL to `http://localhost:8000` and Dashboard URL to `http://localhost:5173`.
+4. Browse `instagram.com/reels` or `youtube.com`
+5. Reload the extension after any change to `chrome-extension/`
 
 ---
 

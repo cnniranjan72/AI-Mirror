@@ -17,6 +17,14 @@
   <i>A production-grade cognitive digital twin engine that constructs, evolves, and explains a complete behavioral identity model from social media activity.</i>
 </p>
 
+<p align="center">
+  <b>🌐 Live:</b> <a href="https://aimirror-dashboard.onrender.com">aimirror-dashboard.onrender.com</a>
+  &nbsp;·&nbsp;
+  <b>API:</b> <a href="https://aimirror-backend-cu00.onrender.com/docs">aimirror-backend-cu00.onrender.com/docs</a>
+</p>
+
+> Both run on Render's free tier — the backend spins down after ~15 min idle, so the first request after a quiet period takes 30-60s to wake up. Click "Load Demo Data" on the landing page for an instant look without installing anything; the Chrome extension is only needed to build a twin from your own browsing (see [Load Chrome Extension](#load-chrome-extension)).
+
 ---
 
 ## Table of Contents
@@ -1174,17 +1182,21 @@ VITE_USER_ID=test_user_001
 
 ### Load Chrome Extension
 
+Not published to the Chrome Web Store — load it unpacked:
+
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable "Developer mode" (top right)
 3. Click "Load unpacked"
 4. Select the `chrome-extension/` directory
 5. The extension auto-detects Instagram Reels and YouTube (Watch + Shorts) — no manual switching needed
 
+By default the extension points at the **deployed backend** (`https://aimirror-backend-cu00.onrender.com`), so it works immediately without any local setup. If you're running the backend locally instead (e.g. `npm run dev` / `uvicorn` on your own machine), open the extension popup → **⚙️ Connection settings** (or right-click the extension icon → Options) and point the Backend URL and Dashboard URL fields at `http://localhost:8000` / `http://localhost:5173`.
+
 > **Note**: The extension uses two content scripts registered in the manifest:
 > - `content.js` activates on `https://www.instagram.com/*` — Instagram Reels tracking
 > - `youtube-content.js` activates on `https://www.youtube.com/*` — YouTube Watch + Shorts tracking
 >
-> Both scripts share the same background worker (`background.js`) for batching, sync, and CSP-bypassed backend communication.
+> Both scripts share the same background worker (`background.js`) for batching, sync, and CSP-bypassed backend communication. The backend/dashboard URLs are stored via `chrome.storage.local` (set through the Options page above) rather than hardcoded, so switching between local dev and the deployed instance never requires editing code.
 
 ### Verify Installation
 
@@ -1566,15 +1578,22 @@ Seat/roster grouping above individual accounts — every route requires a bearer
 
 ### Chrome Extension Config
 
+Backend/dashboard URLs are set via the extension's **Options page** (`chrome-extension/options.html`, reachable from the popup's "⚙️ Connection settings" link) — stored in `chrome.storage.local`, not hardcoded, so no code edit or rebuild is needed to switch between local dev and the deployed instance:
+
+| Setting | Storage key | Default | Description |
+|---|---|---|---|
+| Backend URL | `chrome.storage.local.backendUrl` | `https://aimirror-backend-cu00.onrender.com` | Where events are POSTed (`background.js`) |
+| Dashboard URL | `chrome.storage.local.dashboardUrl` | `https://aimirror-dashboard.onrender.com` | Where the popup's "Dashboard" button opens |
+
+Everything else stays as in-code constants (not exposed in the Options UI):
+
 | Variable | Location | Default | Description |
 |---|---|---|---|
-| `BACKEND_URL` | `background.js` | `http://localhost:8000/ingest` | Ingestion endpoint |
-| `API_BASE_URL` | `background.js` | `http://localhost:8000` | API base for status/health |
 | `SYNC_INTERVAL` | `background.js` | `30000` | Periodic sync interval (ms) |
 | `MAX_STORAGE_EVENTS` | `background.js` | `1000` | Local storage event limit |
 | `BATCH_SIZE` | `content.js` | `10` | Events per batch |
 | `BATCH_INTERVAL` | `content.js` | `30000` | Max batch wait time (ms) |
-| `USER_ID` | `content.js` | `test_user_001` | Default user ID |
+| `USER_ID` | `content.js` | `test_user_001` | Default user ID (used for unauthenticated/demo tracking) |
 
 ---
 
