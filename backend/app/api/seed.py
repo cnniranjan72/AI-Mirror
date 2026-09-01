@@ -9,10 +9,11 @@ import string
 from datetime import datetime, timedelta
 from typing import List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.db.postgres import execute, fetch, fetchrow
 from backend.shared.contracts import EventSource
+from app.core.rate_limit import seed_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -104,7 +105,7 @@ async def _run_pipeline(user_id: str, events: List[dict], reel_id_to_db_id: dict
         raise
 
 
-@router.post("/seed")
+@router.post("/seed", dependencies=[Depends(seed_rate_limit)])
 async def seed_demo_data():
     user_id = _random_user_id()
     events = _generate_events(user_id, 800)

@@ -13,7 +13,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile, Depends
 from pydantic import BaseModel, Field
 
 from app.api.deps import enforce_write_match
@@ -34,6 +34,7 @@ from app.services.persona_adapter import identity_to_persona
 from app.services import archive_import
 from app.db.postgres import fetchrow, execute, execute as db_execute
 from backend.providers import get_provider_manager
+from app.core.rate_limit import ingest_rate_limit, import_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -167,7 +168,7 @@ async def cleanup_old_snapshots(user_id: str, keep_count: int = 20):
         logger.warning(f"Snapshot cleanup failed: {e}")
 
 
-@router.post("/ingest", response_model=IngestResponse)
+@router.post("/ingest", response_model=IngestResponse, dependencies=[Depends(ingest_rate_limit)])
 async def ingest_events(
     req: IngestRequest,
     background_tasks: BackgroundTasks,
@@ -556,7 +557,7 @@ class ArchiveImportResponse(BaseModel):
     message: str
 
 
-@router.post("/import/archive", response_model=ArchiveImportResponse)
+@router.post("/import/archive", response_model=ArchiveImportResponse, dependencies=[Depends(import_rate_limit)])
 async def import_archive(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),

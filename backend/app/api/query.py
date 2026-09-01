@@ -8,6 +8,7 @@ from app.api.deps import enforce_write_match, resolve_user_id
 from app.services import rag, persona as persona_svc, chat_memory
 from backend.cognitive_pipeline.pipeline import get_cognitive_pipeline
 from backend.verbalizer.followups import generate_follow_ups
+from app.core.rate_limit import query_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,7 +39,7 @@ class QueryResponse(BaseModel):
     pipeline_time_ms: Optional[float] = None
 
 
-@router.post("/query", response_model=QueryResponse)
+@router.post("/query", response_model=QueryResponse, dependencies=[Depends(query_rate_limit)])
 async def query_insights(req: QueryRequest, authorization: Optional[str] = Header(default=None)):
     enforce_write_match(authorization, req.user_id)
     if not req.query.strip():

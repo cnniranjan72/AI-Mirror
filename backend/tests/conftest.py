@@ -20,6 +20,14 @@ if env_path.exists():
             os.environ[key] = value
 
 
+# The suite drives the rate-limited endpoints far harder than a person would,
+# and the limiters are process-global — leaving them on would make results
+# depend on test order and on how recently the suite last ran. The limiter's
+# own behaviour is covered directly in test_rate_limit.py, which enables it
+# explicitly.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
+
 @pytest_asyncio.fixture(scope="session")
 async def db():
     """Live DB pool for tests marked `db`. Skips (not errors) if the
