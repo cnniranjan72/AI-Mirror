@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useChatHistory, useCharacterState } from '../../hooks/useApi'
+import { useChatHistory, useCharacterState, useApi } from '../../hooks/useApi'
 import { api, DEFAULT_USER } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
@@ -13,6 +13,10 @@ const CONVERSATION_ID = `conv_${USER_ID}`
 export default function ChatPage() {
   const { data: history, loading: histLoading, error: histError, refetch } = useChatHistory(USER_ID, CONVERSATION_ID)
   const [messages, setMessages] = useState([])
+  // Whether a language model is phrasing these answers. Surfaced because the
+  // difference is visible in the output and was previously unexplained.
+  const { data: llmStatus } = useApi(() => api.getLlmStatus(), [])
+
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [streamingMsg, setStreamingMsg] = useState('')
@@ -108,7 +112,22 @@ export default function ChatPage() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {/* Framed as a mode, not a fault. Deterministic answers are the
+                product's actual claim; the model is a phrasing layer over
+                findings that are already decided. */}
+            {llmStatus && !llmStatus.llm_phrasing_available && (
+              <span
+                title="Answers are composed directly from your cognitive data. Add a provider key in Settings for natural-language phrasing."
+                style={{
+                  fontSize: 10.5, fontWeight: 600, padding: '4px 9px', borderRadius: 100,
+                  background: 'rgba(148,163,184,0.12)', border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-muted)', whiteSpace: 'nowrap',
+                }}
+              >
+                deterministic mode
+              </span>
+            )}
             <button onClick={clearChat} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
               <RefreshIcon /> Clear
             </button>

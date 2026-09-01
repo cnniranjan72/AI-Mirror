@@ -353,6 +353,29 @@ class LLMVerbalizer:
                 parts.append(template.format(level=level))
         return "".join(parts)
 
+    def phrasing_status(self) -> Dict[str, Any]:
+        """Whether the language model is actually phrasing answers right now.
+
+        The circuit breaker already records this precisely — it flips on a
+        fatal provider error (bad key, exhausted quota) and keeps the reason —
+        but nothing ever surfaced it. Meanwhile Settings told users they were
+        "using the server's shared key", which reads as a working feature. On
+        this deployment every answer has been deterministic for the whole of
+        its life, and no user could have known why.
+
+        Deliberately reports the ABSENCE of phrasing as a mode, not a fault:
+        the deterministic answer is the product's actual claim, and the model
+        is a presentation layer over it.
+        """
+        return {
+            "provider": resolve_provider(),
+            "llm_phrasing_available": not self._llm_disabled,
+            # Truncated and generic: provider errors can echo request details,
+            # and this endpoint is readable by any signed-in user.
+            "disabled_reason": self._llm_disabled_reason if self._llm_disabled else None,
+            "answers_are_deterministic": self._llm_disabled,
+        }
+
     def _audit_answer_lines(self, context: CharacterContext, intent) -> List[str]:
         """Answer an audit question from pre-computed findings, no LLM involved.
 

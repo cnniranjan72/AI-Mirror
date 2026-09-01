@@ -49,6 +49,19 @@ async def set_llm_settings(body: LlmSettingsRequest, username: str = Depends(req
     return await user_llm_config.get_settings_preview(username)
 
 
+@router.get("/settings/llm/status")
+async def llm_status():
+    """Whether answers are currently being phrased by a language model.
+
+    Unauthenticated on purpose: it exposes no key material and no user data,
+    and the Chat page needs it to caption its own answers honestly for
+    signed-out demo visitors too.
+    """
+    from verbalizer.verbalizer import get_verbalizer
+
+    return get_verbalizer().phrasing_status()
+
+
 @router.delete("/settings/llm")
 async def clear_llm_settings(username: str = Depends(require_auth)):
     await user_llm_config.clear_llm_settings(username)

@@ -127,10 +127,21 @@ async def root():
 @app.get("/health")
 async def health_check():
     db = await db_health()
+    # Reported alongside the database because it is the same class of fact: a
+    # dependency that can be down while the service is otherwise fine. It does
+    # NOT affect overall status — answers remain correct without it, they are
+    # just phrased deterministically.
+    try:
+        from verbalizer.verbalizer import get_verbalizer
+        llm = get_verbalizer().phrasing_status()
+    except Exception as e:
+        llm = {"llm_phrasing_available": False, "disabled_reason": f"status unavailable: {e}"}
+
     return {
         "status": db.get("status", "unknown"),
         "timestamp": datetime.utcnow().isoformat(),
         "database": db,
+        "llm": llm,
     }
 
 

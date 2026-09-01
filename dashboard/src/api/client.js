@@ -281,6 +281,11 @@ export const api = {
     return data;
   },
 
+  getLlmStatus: async () => {
+    const { data } = await client.get('/settings/llm/status');
+    return data;
+  },
+
   // === Search ===
   search: async (q, limit = 20) => {
     const { data } = await client.get('/search', { params: { q, limit } });

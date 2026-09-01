@@ -56,6 +56,9 @@ export default function SettingsPage() {
   // Opened by the sign-in placeholders below, so the account-gated sections
   // can be enabled without navigating away from Settings.
   const [authOpen, setAuthOpen] = useState(false)
+  // Whether a language model is actually phrasing answers. The card below used
+  // to assert the server key was in use regardless of whether it worked.
+  const { data: llmStatus } = useApi(() => api.getLlmStatus(), [])
 
   const [testForm, setTestForm] = useState({ userId: DEFAULT_USER })
   const [testResult, setTestResult] = useState(null)
@@ -401,7 +404,12 @@ export default function SettingsPage() {
                   ? `Using your own ${llmSettings.provider} key (${llmSettings.key_preview})`
                   : llmSettings?.provider === 'ollama'
                     ? 'Using your configured Ollama endpoint'
-                    : 'Using the server’s shared key — bring your own for priority access'}
+                    : llmStatus && !llmStatus.llm_phrasing_available
+                      // Previously claimed the shared key was in use whether or
+                      // not it worked, so a user had no way to know why answers
+                      // read like a template.
+                      ? 'The shared key is not currently working — answers are written deterministically. Add your own key below for natural-language phrasing.'
+                      : 'Using the server’s shared key — bring your own for priority access'}
               </p>
             </div>
           </div>
