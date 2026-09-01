@@ -1,0 +1,72 @@
+name: CI
+
+# Tests that nothing runs are decoration. Both suites exist and pass locally;
+# this is what keeps them honest on every push.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch makes the first run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches backend/.python-version and the Render deployment, which
+          # is pinned to 3.11 because asyncpg has no wheels for newer.
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run tests
+        # `-m "not db"` on purpose: the db-marked tests need a live Postgres
+        # with pgvector. Requiring a secret here would mean CI silently does
+        # nothing on forks and for anyone without the credentials. The db
+        # suite is run against the real database before deploys instead.
+        #
+        # PYTHONPATH carries both the repo root and backend/, matching how the
+        # app is run everywhere else — app/api modules import `backend.core.*`
+        # while the app itself is rooted in backend/.
+        run: python -m pytest tests -m "not db" -q -p no:warnings
+        working-directory: backend
+        env:
+          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/backend
+
+  frontend:
+    name: dashboard (vitest + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        # The build is a test in its own right here: most of this app's pages
+        # are only reachable through lazy imports, so a broken import or bad
+        # JSX in one of them fails nowhere else.
+        run: npm run build
