@@ -134,6 +134,42 @@ class TestFrequencyChoosesThePrimaryTopic:
         assert topics == ["robotics"]
 
 
+class TestUbiquitousTokensLose:
+    """Found by running a real demo, not by reasoning about the code.
+
+    Ranking candidates by raw batch frequency meant a token present in EVERY
+    item won by definition: 118 events titled "<hobby> clip number N" all
+    collapsed into the single topic "clip". Frequency rewards ubiquity, and
+    ubiquity is exactly what carries no information about the subject.
+    """
+
+    def test_boilerplate_common_to_every_event_never_wins(self):
+        engine = KnowledgeConsolidationEngine()
+        events = []
+        for topic in ("robotics", "pottery", "astronomy"):
+            for i in range(5):
+                events.append(_event(caption=f"{topic} clip number {i}"))
+
+        clusters, _ = engine.consolidate_events(events)
+        topics = {c.primary_topic for c in clusters if c.cluster_type == "topic"}
+
+        assert "clip" not in topics
+        assert "number" not in topics
+        assert topics == {"robotics", "pottery", "astronomy"}
+
+    def test_a_single_subject_account_still_gets_its_topic(self):
+        """The guard on the fix: if someone watches nothing but robotics,
+        "robotics" appears in 100% of events and its idf is zero — but it is
+        still the correct topic, so the ranking falls back to frequency."""
+        engine = KnowledgeConsolidationEngine()
+        events = [_event(hashtags=["#robotics"]) for _ in range(6)]
+
+        clusters, _ = engine.consolidate_events(events)
+        topics = [c.primary_topic for c in clusters if c.cluster_type == "topic"]
+
+        assert topics == ["robotics"]
+
+
 class TestCreatorsAreNotTopics:
     """Defect 2."""
 

@@ -43,6 +43,15 @@ yours yourself amazing awesome beautiful perfect perfection favorite favourite
 please thanks thank welcome subscribe comment share follow link click
 """.split())
 
+# A candidate appearing in at least this share of the batch is treated as
+# boilerplate ("clip", "number", "official video") rather than a subject — but
+# only when something else actually recurs; see _group_by_topic.
+_UBIQUITY_RATIO = 0.9
+
+# Appearing twice is the minimum for a token to count as a recurring theme
+# rather than a one-off tag.
+_MIN_RECURRENCE = 2
+
 # A token has to look like a word to be a topic. Hashtags such as "#2024" or
 # "#f4f" are noise, and single characters are never a subject.
 _MIN_TOPIC_LENGTH = 4
@@ -204,11 +213,23 @@ class KnowledgeConsolidationEngine:
         Returns:
             Dictionary mapping topic to events
         """
-        # Two passes. The first counts how often each candidate topic appears
-        # across the whole batch; the second assigns each event to its most
-        # BATCH-FREQUENT candidate rather than whichever hashtag the creator
-        # happened to type first. Positional choice is why a one-off tag like
-        # "perfection" could outrank a genuine recurring interest.
+        # Two passes. The first counts how often each candidate appears across
+        # the batch; the second assigns each event to its best candidate.
+        #
+        # Ranking by raw frequency alone was wrong in an instructive way: a
+        # token common to *every* item wins by definition, so a batch of
+        # "<hobby> clip number N" titles collapsed into the single topic
+        # "clip". Frequency rewards ubiquity, and ubiquity carries no
+        # information about the subject.
+        #
+        # But ubiquity is not always boilerplate. If four videos are all tagged
+        # #robotics plus a different one-off tag each, #robotics is in 100% of
+        # them and is exactly the right topic. Pure idf gets that case wrong in
+        # the opposite direction, handing the topic to a tag seen once.
+        #
+        # What separates the two is whether anything ELSE recurs. "clip" loses
+        # because a real theme (robotics, 5 events) is competing; "robotics"
+        # wins because its only competition appears once each.
         frequency: Dict[str, int] = defaultdict(int)
         per_event: List[Tuple[BehaviorEvent, List[str]]] = []
 
@@ -218,6 +239,7 @@ class KnowledgeConsolidationEngine:
             for token in set(candidates):
                 frequency[token] += 1
 
+        total_events = max(1, len(events))
         topic_groups = defaultdict(list)
 
         for event, candidates in per_event:
@@ -229,7 +251,16 @@ class KnowledgeConsolidationEngine:
                 # "interest". A bucket that means "we don't know" must never
                 # outrank things we do know.
                 continue
-            primary_topic = max(candidates, key=lambda t: (frequency[t], -candidates.index(t)))
+
+            # Candidates that are neither boilerplate nor one-offs.
+            substantive = [
+                t for t in candidates
+                if frequency[t] / total_events < _UBIQUITY_RATIO
+                and frequency[t] >= _MIN_RECURRENCE
+            ]
+            pool = substantive or candidates
+
+            primary_topic = max(pool, key=lambda t: (frequency[t], -candidates.index(t)))
             topic_groups[primary_topic].append(event)
 
         return dict(topic_groups)
