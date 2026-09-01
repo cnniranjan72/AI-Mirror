@@ -116,7 +116,7 @@ export default function ChatPage() {
             {/* Framed as a mode, not a fault. Deterministic answers are the
                 product's actual claim; the model is a phrasing layer over
                 findings that are already decided. */}
-            {llmStatus && !llmStatus.llm_phrasing_available && (
+            {llmStatus?.llm_phrasing_available === false && (
               <span
                 title="Answers are composed directly from your cognitive data. Add a provider key in Settings for natural-language phrasing."
                 style={{

@@ -404,7 +404,7 @@ export default function SettingsPage() {
                   ? `Using your own ${llmSettings.provider} key (${llmSettings.key_preview})`
                   : llmSettings?.provider === 'ollama'
                     ? 'Using your configured Ollama endpoint'
-                    : llmStatus && !llmStatus.llm_phrasing_available
+                    : llmStatus?.llm_phrasing_available === false
                       // Previously claimed the shared key was in use whether or
                       // not it worked, so a user had no way to know why answers
                       // read like a template.

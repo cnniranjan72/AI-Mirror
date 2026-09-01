@@ -164,6 +164,15 @@ class LLMVerbalizer:
         # ~20s for the provider to reject it again. Cleared on restart.
         self._llm_disabled = False
         self._llm_disabled_reason: Optional[str] = None
+        # Actual outcomes. The circuit breaker alone is not a status signal:
+        # it only trips on errors in _FATAL_LLM_ERRORS, so a provider failing
+        # every single call for a non-fatal reason (network, transient quota)
+        # falls back silently and leaves the breaker closed. Reporting the
+        # breaker as availability therefore claimed the LLM was working while
+        # every answer was deterministic.
+        self._llm_attempts = 0
+        self._llm_last_ok: Optional[bool] = None
+        self._llm_last_error: Optional[str] = None
 
     _FATAL_LLM_ERRORS = (
         "insufficient_quota", "authentication", "invalid_api_key",
@@ -201,6 +210,7 @@ class LLMVerbalizer:
                     call_kwargs["base_url"] = override["base_url"]
 
             if llm_call and not self._llm_disabled:
+                self._llm_attempts += 1
                 try:
                     content = await llm_call(
                         system_prompt=prompt.system_prompt,
@@ -210,7 +220,12 @@ class LLMVerbalizer:
                         temperature=self.temperature,
                         **call_kwargs,
                     )
+                    self._llm_last_ok = bool(content and content.strip())
+                    if not self._llm_last_ok:
+                        self._llm_last_error = "provider returned an empty response"
                 except Exception as e:
+                    self._llm_last_ok = False
+                    self._llm_last_error = str(e)[:200]
                     # Missing API key, network error, unavailable SDK — never
                     # return a blank response; fall back to deterministic text
                     # built directly from the character context.
@@ -367,13 +382,28 @@ class LLMVerbalizer:
         the deterministic answer is the product's actual claim, and the model
         is a presentation layer over it.
         """
+        if self._llm_disabled:
+            state, available, reason = "unavailable", False, self._llm_disabled_reason
+        elif self._llm_attempts == 0:
+            # Nothing has exercised the provider yet on this process, so any
+            # claim either way would be a guess. Reported as unknown rather
+            # than optimistically available.
+            state, available, reason = "unknown", None, None
+        elif self._llm_last_ok:
+            state, available, reason = "available", True, None
+        else:
+            state, available, reason = "unavailable", False, self._llm_last_error
+
         return {
             "provider": resolve_provider(),
-            "llm_phrasing_available": not self._llm_disabled,
-            # Truncated and generic: provider errors can echo request details,
-            # and this endpoint is readable by any signed-in user.
-            "disabled_reason": self._llm_disabled_reason if self._llm_disabled else None,
-            "answers_are_deterministic": self._llm_disabled,
+            "state": state,
+            # None means "not yet known" — callers must not treat that as true.
+            "llm_phrasing_available": available,
+            "attempts": self._llm_attempts,
+            # Truncated: provider errors can echo request details, and this
+            # endpoint is readable without authentication.
+            "disabled_reason": (reason or None) and str(reason)[:200],
+            "answers_are_deterministic": available is False,
         }
 
     def _audit_answer_lines(self, context: CharacterContext, intent) -> List[str]:
