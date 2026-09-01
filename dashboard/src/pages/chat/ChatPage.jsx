@@ -233,7 +233,7 @@ export default function ChatPage() {
               placeholder="Ask about your cognitive state..."
               rows={1}
               style={{
-                flex: 1, padding: '10px 14px', borderRadius: 10,
+                flex: 1, padding: '13px 16px', borderRadius: 13,
                 // Solid dark bg + explicit light text + dark color-scheme so the
                 // typed text is always high-contrast, regardless of the OS/browser
                 // light-mode form-control defaults.
@@ -241,21 +241,43 @@ export default function ChatPage() {
                 color: '#f8fafc', caretColor: '#818cf8', colorScheme: 'dark',
                 fontSize: 14, outline: 'none',
                 resize: 'none', fontFamily: 'var(--font-sans)', lineHeight: 1.5,
+                transition: 'border-color var(--dur-fast) var(--ease-swift), box-shadow var(--dur-fast) var(--ease-swift)',
+              }}
+              // Focus ring is applied imperatively because this is an inline-styled
+              // element — a :focus rule in CSS would lose to the inline style.
+              onFocus={e => {
+                e.target.style.borderColor = 'rgba(99,102,241,0.6)'
+                e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15), 0 0 26px -8px rgba(99,102,241,0.8)'
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = 'var(--border-strong, rgba(148,163,184,0.25))'
+                e.target.style.boxShadow = 'none'
               }}
               onInput={e => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px' }}
             />
             <button
               onClick={() => sendMessage()}
               disabled={!input.trim() || sending}
+              className={input.trim() && !sending ? 'btn-3d btn-aurora' : ''}
               style={{
-                padding: '10px 16px', borderRadius: 10,
-                background: input.trim() && !sending ? 'var(--accent-gradient)' : 'rgba(148,163,184,0.1)',
+                padding: '13px 22px', borderRadius: 13,
+                background: input.trim() && !sending ? undefined : 'rgba(148,163,184,0.1)',
                 border: 'none', color: 'white', cursor: input.trim() && !sending ? 'pointer' : 'not-allowed',
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 13, fontWeight: 600, opacity: input.trim() && !sending ? 1 : 0.5,
+                display: 'flex', alignItems: 'center', gap: 8,
+                fontSize: 13.5, fontWeight: 700, opacity: input.trim() && !sending ? 1 : 0.5,
               }}
             >
-              Send
+              {/* Spinner while the pipeline runs — a 7-stage query can take a
+                  few seconds, and the button previously gave no sign it was
+                  working. */}
+              {sending && (
+                <span style={{
+                  width: 13, height: 13, borderRadius: '50%', flexShrink: 0,
+                  border: '2px solid rgba(255,255,255,0.35)', borderTopColor: '#fff',
+                  animation: 'spin 0.7s linear infinite',
+                }} />
+              )}
+              {sending ? 'Thinking' : 'Send'}
             </button>
           </div>
         </div>

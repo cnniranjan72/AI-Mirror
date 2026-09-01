@@ -26,6 +26,7 @@ const navItems = [
   { path: '/decision', label: 'Decision', icon: DecisionIcon },
   { path: '/learning', label: 'Learning', icon: ZapIcon },
   { path: '/guardian', label: 'Guardian', icon: AlertIcon },
+  { path: '/report', label: 'Report', icon: BookIcon },
   { path: '/insights', label: 'Insights Export', icon: DownloadIcon },
   { path: '/pipeline', label: 'Pipeline', icon: PipelineIcon },
   { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },

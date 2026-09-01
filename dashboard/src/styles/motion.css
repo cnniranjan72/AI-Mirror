@@ -443,6 +443,15 @@
   border-radius: var(--radius-xl);
   box-shadow: var(--elev-1);
 }
+/* Several pages render an empty state INSIDE a GlassCard. Panel-on-panel
+   reads as a mistake, so nested ones drop back to plain centred content. */
+.card .empty-state {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 .empty-state-icon {
   animation: floatY 4.5s ease-in-out infinite;
   filter: drop-shadow(0 8px 20px rgba(99, 102, 241, 0.35));
@@ -513,6 +522,74 @@
   .shine::before { display: none; }
   .card:hover, .btn-3d:hover, .aim-nav-item:hover { transform: none !important; }
   * { transition-duration: 1ms !important; }
+}
+
+/* ------------------------------------------------------------ print */
+/* The Report page is meant to leave the app — "Print / Save as PDF" is how it
+   becomes a file someone can archive or hand over. Print is a different
+   medium, not a smaller screen: the app chrome, the WebGL canvases and the
+   dark glass all have to go, or the output is an unreadable grey slab that
+   also empties a toner cartridge. */
+@media print {
+  @page { margin: 14mm; }
+
+  /* Force a light document regardless of the app's dark theme. */
+  html, body {
+    background: #fff !important;
+    color: #0f172a !important;
+  }
+  body::before { display: none !important; }
+
+  /* Chrome that has no meaning on paper. */
+  aside,
+  footer,
+  canvas,
+  .ambient-canvas,
+  .route-progress,
+  .report-actions,
+  .halo {
+    display: none !important;
+  }
+
+  /* The shell reserves space for a sidebar that is no longer there. */
+  main { margin-left: 0 !important; }
+  main > div { padding: 0 !important; max-width: none !important; }
+
+  /* Flatten glass into plain bordered blocks that read on white. */
+  .card, .empty-state {
+    background: #fff !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: none !important;
+    /* Keep a section and its heading together across a page break. */
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .card-gradient::before,
+  .gradient-border::after,
+  .tilt-inner::after { display: none !important; }
+
+  /* Gradient-clipped headings print as invisible text — the gradient is a
+     background, and backgrounds are dropped by default in print. */
+  .gradient-text, .display-title {
+    -webkit-text-fill-color: #1e293b !important;
+    color: #1e293b !important;
+    background: none !important;
+  }
+
+  h1, h2, h3, h4, strong { color: #0f172a !important; }
+  p, li, td, th, span, div { color: #334155 !important; }
+
+  /* Entrances must not leave content mid-animation (or invisible) on paper. */
+  .reveal, .route-view, .stagger > * {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  a { text-decoration: underline; }
 }
 
 /* ------------------------------------------------------------ responsive */
