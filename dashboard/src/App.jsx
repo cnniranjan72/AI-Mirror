@@ -2,9 +2,12 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter as Router } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
 import { useIdleReady } from './hooks/useMotion'
+// Order matters: motion.css is the override layer and must load LAST, or
+// App.css's older .empty-state / .skeleton / .card rules win over it. (It was
+// imported before App.css at first, which silently disabled those overrides.)
 import './styles/design-system.css'
-import './styles/motion.css'
 import './App.css'
+import './styles/motion.css'
 
 // Lazy, not static: this pulls in three.js/fiber/drei (~1MB raw). Importing it
 // at the top level would put that chunk on the critical path for every visitor

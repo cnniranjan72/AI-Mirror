@@ -427,6 +427,71 @@
 /* ------------------------------------------------------------ scrollbar */
 ::-webkit-scrollbar-thumb { transition: box-shadow var(--dur-base) var(--ease-swift); }
 
+/* ---------------------------------------------------- shared page states */
+/* Every page reaches for these same three classes from App.css, so refining
+   them here upgrades empty states, loading and buttons app-wide without
+   editing a single page. */
+
+/* Empty/error states were bare centred text floating on the page. Now they
+   read as a deliberate panel — which also separates them from real content
+   once a live background is moving behind everything. */
+.empty-state {
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--elev-1);
+}
+.empty-state-icon {
+  animation: floatY 4.5s ease-in-out infinite;
+  filter: drop-shadow(0 8px 20px rgba(99, 102, 241, 0.35));
+}
+
+/* Skeletons: a travelling highlight rather than a background that pulses in
+   place, so loading reads as progress instead of a flashing block. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.08);
+  animation: none;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(148, 163, 184, 0.16) 45%,
+    rgba(199, 210, 254, 0.22) 55%,
+    transparent);
+  animation: skeletonSweep 1.6s var(--ease-glide) infinite;
+}
+@keyframes skeletonSweep {
+  100% { transform: translateX(100%); }
+}
+
+.btn { transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-swift), filter var(--dur-fast) linear, background var(--dur-fast) linear; }
+.btn-primary {
+  background: var(--accent-gradient-aurora);
+  background-size: 260% auto;
+  animation: auroraSlide 7s var(--ease-glide) infinite;
+  box-shadow: 0 8px 24px -10px rgba(99, 102, 241, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.btn-primary:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.07); }
+.btn-secondary {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-strong);
+}
+.btn-secondary:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+  background: rgba(99, 102, 241, 0.12);
+  transform: translateY(-1px);
+}
+
 /* --------------------------------------------------------------- a11y */
 /* One switch for the whole file. Transitions are collapsed rather than
    removed so state changes still commit — they just land instantly. */
@@ -436,9 +501,11 @@
   .tilt-inner::after { display: none; }
   .title-in { opacity: 1 !important; transform: none !important; animation: none !important; }
   .display-title,
+  .gradient-text,
   .gradient-border::after,
-  .btn-aurora,
+  .btn-aurora, .btn-primary,
   .float-y, .float-slow, .halo,
+  .empty-state-icon, .skeleton::after,
   .route-view, .stagger > *, .grow-w,
   .pulse-dot::after, .route-progress {
     animation: none !important;
