@@ -33,6 +33,7 @@ const GuardianPage = lazy(() => import('../../pages/guardian/GuardianPage'))
 const CharacterPage = lazy(() => import('../../pages/character/CharacterPage'))
 const InsightsPage = lazy(() => import('../../pages/insights/InsightsPage'))
 const ReportPage = lazy(() => import('../../pages/report/ReportPage'))
+const MirrorPage = lazy(() => import('../../pages/mirror/MirrorPage'))
 const PipelinePage = lazy(() => import('../../pages/pipeline/PipelinePage'))
 const TracePage = lazy(() => import('../../pages/trace/TracePage'))
 const AnalyticsPage = lazy(() => import('../../pages/analytics/AnalyticsPage'))
@@ -203,6 +204,7 @@ export default function AppShell() {
                 <Route path="/character" element={<CharacterPage />} />
                 <Route path="/insights" element={<InsightsPage />} />
                 <Route path="/report" element={<ReportPage />} />
+                <Route path="/mirror" element={<MirrorPage />} />
                 <Route path="/pipeline" element={<PipelinePage />} />
                 <Route path="/trace/:traceId" element={<TracePage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />

@@ -261,6 +261,16 @@ export const api = {
     return data;
   },
 
+  // === Algorithmic Mirror ===
+  getMirrorReport: async (userId = activeUser()) => {
+    const { data } = await client.get('/mirror/report', { params: { user_id: userId } });
+    return data;
+  },
+  getMirrorClaims: async (userId = activeUser()) => {
+    const { data } = await client.get('/mirror/claims', { params: { user_id: userId } });
+    return data;
+  },
+
   // === Search ===
   search: async (q, limit = 20) => {
     const { data } = await client.get('/search', { params: { q, limit } });

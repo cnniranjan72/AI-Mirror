@@ -32,7 +32,7 @@ from app.services import (
 )
 from app.services.persona_adapter import identity_to_persona
 from app.services import archive_import
-from app.db.postgres import fetchrow, execute
+from app.db.postgres import fetchrow, execute, execute as db_execute
 from backend.providers import get_provider_manager
 
 logger = logging.getLogger(__name__)
@@ -549,6 +549,7 @@ class ArchiveImportResponse(BaseModel):
     duplicates_removed: int = 0
     skipped_files: int = 0
     truncated: bool = False
+    profile_claims_imported: int = 0
     identity_version: Optional[int] = None
     confidence: Optional[float] = None
     message: str
@@ -580,8 +581,52 @@ async def import_archive(
         logger.error("Archive import failed: %s", e, exc_info=True)
         raise HTTPException(status_code=400, detail=f"Could not read this export: {e}")
 
+    # Persist what the PLATFORM claims about this user, kept in its own table
+    # and never fed to the pipeline — the twin has to stay an independent
+    # model, or it would end up confirming whatever it was told.
+    claims = parsed.get("profile_claims") or []
+    claims_stored = 0
+    if claims:
+        try:
+            platforms = {c["platform"] for c in claims}
+            for platform in platforms:
+                # Re-importing an export refreshes that platform's claim set
+                # rather than accumulating stale ones alongside it.
+                await db_execute(
+                    "DELETE FROM platform_profile_claims WHERE user_id = $1 AND platform = $2",
+                    user_id, platform,
+                )
+            for claim in claims:
+                await db_execute(
+                    """
+                    INSERT INTO platform_profile_claims
+                        (user_id, platform, claim_type, label, raw_label, source_file)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (user_id, platform, claim_type, label) DO NOTHING
+                    """,
+                    user_id, claim["platform"], claim["claim_type"],
+                    claim["label"], claim["raw_label"], claim.get("source_file"),
+                )
+                claims_stored += 1
+        except Exception as e:
+            # An import that carried claims but no events is still a failure
+            # worth reporting, but a claims-table problem must not discard the
+            # user's behavioural history.
+            logger.error("Could not store profile claims: %s", e, exc_info=True)
+
     events = parsed["events"]
     if not events:
+        if claims_stored:
+            # An ad-interests-only export is a legitimate upload: it is exactly
+            # what someone auditing their profile would send.
+            return ArchiveImportResponse(
+                success=True, events_found=0, events_stored=0,
+                sources=parsed["sources"], duplicates_removed=0,
+                skipped_files=parsed["skipped_files"], truncated=False,
+                profile_claims_imported=claims_stored,
+                message=f"Imported {claims_stored} platform ad-interest claims. "
+                        f"Open the Algorithmic Mirror to compare them against your behaviour.",
+            )
         # A specific, actionable message. "No events found" alone leaves the
         # user with no idea whether they uploaded the wrong file or the right
         # file from an unsupported vintage.
@@ -609,6 +654,7 @@ async def import_archive(
         duplicates_removed=parsed["duplicates_removed"],
         skipped_files=parsed["skipped_files"],
         truncated=parsed["truncated"],
+        profile_claims_imported=claims_stored,
         identity_version=result.identity_version,
         confidence=result.confidence,
         message=(

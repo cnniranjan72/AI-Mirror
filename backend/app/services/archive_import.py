@@ -11,6 +11,8 @@ Supported today:
   - Instagram "Download your information" (JSON): videos watched, posts seen,
     liked posts, saved posts.
   - Google Takeout, YouTube watch history (JSON).
+  - Ad-targeting interests from either, imported as PROFILE CLAIMS rather than
+    as behaviour — see _parse_profile_claims.
 
 Design notes:
 
@@ -234,6 +236,101 @@ def _parse_youtube_watch_history(records: List[Any]) -> List[Dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------
+# platform profile claims (ad-targeting interests)
+# --------------------------------------------------------------------------
+#
+# These are NOT behaviour. They are what the platform asserts about the person,
+# lifted verbatim from their own export, so that the twin's evidence-based
+# model can be checked against them. Everyone can already SEE this list in
+# their settings; what nobody can do is test whether it is true.
+
+# Key names that indicate a payload is a list of inferred interests. Matched
+# loosely because Meta has shipped at least three spellings of this file across
+# export vintages ("topics_your_interested_in", "inferred_topics", ...).
+_CLAIM_KEY_HINTS = ("interest", "topic", "ad_preference", "ads_interest")
+
+# Value fields inside the usual string_map_data wrapper.
+_CLAIM_VALUE_KEYS = ("Interest", "Name", "Topic", "Value", "Title")
+
+
+def _looks_like_claims_payload(name: str, payload: Any) -> bool:
+    lowered = name.lower()
+    if "ads_interest" in lowered or "ad_preferences" in lowered or "your_topics" in lowered:
+        return True
+    if not isinstance(payload, dict):
+        return False
+    return any(hint in key.lower() for key in payload.keys() for hint in _CLAIM_KEY_HINTS)
+
+
+def normalize_claim_label(raw: str) -> str:
+    """Casefold and collapse whitespace/punctuation so "Robotics " and
+    "robotics" are one claim. Deliberately conservative — it must not conflate
+    genuinely different claims, because a false merge here would silently make
+    a platform's assertion disappear from the audit."""
+    if not raw:
+        return ""
+    cleaned = " ".join(str(raw).split()).strip().strip(".,;:").lower()
+    return cleaned
+
+
+def _extract_claim_strings(payload: Any) -> List[str]:
+    """Pull interest labels out of whichever shape this export vintage used."""
+    found: List[str] = []
+
+    def walk(node: Any, depth: int = 0) -> None:
+        # Bounded: an export is user-supplied, and a pathological nesting depth
+        # should not be able to blow the stack.
+        if depth > 6:
+            return
+        if isinstance(node, str):
+            if 1 < len(node) <= 120:
+                found.append(node)
+            return
+        if isinstance(node, list):
+            for item in node:
+                walk(item, depth + 1)
+            return
+        if isinstance(node, dict):
+            string_map = node.get("string_map_data")
+            if isinstance(string_map, dict):
+                value = _ig_pick(string_map, *_CLAIM_VALUE_KEYS)
+                if value:
+                    found.append(value)
+                return
+            # Newer exports drop the wrapper and use a flat {"name": ...}.
+            for key in ("name", "title", "interest", "topic", "value"):
+                if isinstance(node.get(key), str):
+                    found.append(node[key])
+                    return
+            for item in node.values():
+                walk(item, depth + 1)
+
+    walk(payload)
+    return found
+
+
+def _parse_profile_claims(name: str, payload: Any, platform: str) -> List[Dict[str, Any]]:
+    claims = []
+    seen = set()
+    for raw in _extract_claim_strings(payload):
+        label = normalize_claim_label(raw)
+        # Single characters and pure numbers are export scaffolding, not claims.
+        if len(label) < 2 or not any(ch.isalpha() for ch in label) or label in seen:
+            continue
+        seen.add(label)
+        claims.append({
+            "platform": platform,
+            "claim_type": "ad_interest",
+            "label": label,
+            # Kept verbatim so the audit can quote the export rather than a
+            # normalised paraphrase of it.
+            "raw_label": str(raw).strip(),
+            "source_file": name,
+        })
+    return claims
+
+
+# --------------------------------------------------------------------------
 # dispatch
 # --------------------------------------------------------------------------
 
@@ -302,9 +399,16 @@ def _iter_json_documents(data: bytes, filename: str) -> Iterable[Tuple[str, Any]
 def parse_archive(data: bytes, filename: str = "export.zip") -> Dict[str, Any]:
     """Parse an export into EventItem-shaped dicts.
 
-    Returns {"events": [...], "sources": {parser: count}, "skipped_files": n,
-    "truncated": bool}. `sources` is surfaced to the user so an import that
-    found nothing can say WHICH files it looked at rather than failing mutely.
+    Returns {"events": [...], "profile_claims": [...], "sources": {parser:
+    count}, "skipped_files": n, "truncated": bool}. `sources` is surfaced to
+    the user so an import that found nothing can say WHICH files it looked at
+    rather than failing mutely.
+
+    `profile_claims` are what the PLATFORM asserts about the user (its
+    ad-targeting interests), kept strictly separate from `events`, which are
+    what the user actually did. The separation is the point: the twin is built
+    only from events, so it remains an independent model capable of testing
+    the claims.
     """
     if not data:
         raise ArchiveImportError("Empty file")
@@ -315,11 +419,23 @@ def parse_archive(data: bytes, filename: str = "export.zip") -> Dict[str, Any]:
         )
 
     events: List[Dict[str, Any]] = []
+    claims: List[Dict[str, Any]] = []
     sources: Dict[str, int] = {}
     skipped = 0
     truncated = False
 
     for member_name, payload in _iter_json_documents(data, filename):
+        # Checked BEFORE the event parsers: an ad-interests file is a set of
+        # assertions about the person, not a record of anything they did, and
+        # must never be able to enter the pipeline as behaviour.
+        if _looks_like_claims_payload(member_name, payload):
+            platform = "google" if "takeout" in member_name.lower() or "google" in member_name.lower() else "meta"
+            found = _parse_profile_claims(member_name, payload, platform)
+            if found:
+                claims.extend(found)
+                sources[f"{platform}_ad_interests"] = sources.get(f"{platform}_ad_interests", 0) + len(found)
+                continue
+
         kind, parsed = _classify_and_parse(member_name, payload)
         if not parsed:
             if kind == "unknown":
@@ -353,8 +469,20 @@ def parse_archive(data: bytes, filename: str = "export.zip") -> Dict[str, Any]:
     # happened — identity evolution is a sequence, not a set.
     deduped.sort(key=lambda e: e.get("timestamp") or "")
 
+    # Same claim can appear in several export files; identity is
+    # (platform, label).
+    seen_claims = set()
+    deduped_claims = []
+    for claim in claims:
+        key = (claim["platform"], claim["label"])
+        if key in seen_claims:
+            continue
+        seen_claims.add(key)
+        deduped_claims.append(claim)
+
     return {
         "events": deduped,
+        "profile_claims": deduped_claims,
         "sources": sources,
         "skipped_files": skipped,
         "truncated": truncated,

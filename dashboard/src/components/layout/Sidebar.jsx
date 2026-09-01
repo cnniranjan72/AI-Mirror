@@ -59,6 +59,7 @@ const navSections = [
   {
     label: 'Share & export',
     items: [
+      { path: '/mirror', label: 'Algorithmic Mirror', icon: EvidenceIcon },
       { path: '/report', label: 'Report', icon: BookIcon },
       { path: '/insights', label: 'Insights Export', icon: DownloadIcon },
       { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
