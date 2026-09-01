@@ -256,3 +256,72 @@ def test_resource_routes_check_ownership(method, path, endpoint):
         f"cannot be a dependency. If the endpoint truly exposes nothing "
         f"user-scoped, add it to RESOURCE_ROUTE_EXEMPT with a reason."
     )
+
+
+# --- User identifiers arriving in a request body ----------------------------
+#
+# The third way a route escapes the sweep at the top: on a POST the user_id
+# is a field of a Pydantic model, so the handler's signature has `req:
+# GoalCreate` and no user_id at all. Nothing here would have flagged it.
+#
+# This one was already clean when written — every such route enforces. It is
+# here so it stays that way, because the same blind spot in the user_id sweep
+# had already let two real bugs through (see the module docstring).
+
+BODY_ROUTE_EXEMPT = {
+    # Registration and login establish identity; there is no token to check.
+    ("POST", "/auth/register"),
+    ("POST", "/auth/login"),
+}
+
+_ID_FIELDS = {"user_id", "username", "target_username", "owner_id"}
+
+
+def _body_identified_routes():
+    from pydantic import BaseModel
+
+    from app.main import app
+
+    out = []
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        endpoint = getattr(route, "endpoint", None)
+        methods = getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}
+        if not path or not endpoint or not methods:
+            continue
+        try:
+            signature = inspect.signature(endpoint)
+        except (TypeError, ValueError):
+            continue
+        if "user_id" in signature.parameters:
+            continue  # covered by the sweep above
+        for parameter in signature.parameters.values():
+            annotation = parameter.annotation
+            if not (isinstance(annotation, type) and issubclass(annotation, BaseModel)):
+                continue
+            if set(getattr(annotation, "model_fields", {})) & _ID_FIELDS:
+                out.append((sorted(methods)[0], path, endpoint, annotation.__name__))
+                break
+    return out
+
+
+def test_the_body_route_audit_finds_routes():
+    assert _body_identified_routes(), "discovery is broken; the check below would pass vacuously"
+
+
+@pytest.mark.parametrize("method,path,endpoint,model", [
+    pytest.param(m, p, e, n, id=f"{m} {p}") for m, p, e, n in _body_identified_routes()
+])
+def test_body_identified_routes_enforce_auth(method, path, endpoint, model):
+    if (method, path) in BODY_ROUTE_EXEMPT:
+        pytest.skip("establishes identity; no token exists yet")
+
+    try:
+        source = inspect.getsource(endpoint)
+    except (OSError, TypeError):
+        pytest.fail(f"{method} {path}: source unreadable, enforcement unverifiable")
+
+    assert any(e in source for e in ENFORCERS), (
+        f"{method} {path} names a user in its {model} body and does not check "
+        f"the caller's token against it. Writes should use enforce_write_match."
+    )
