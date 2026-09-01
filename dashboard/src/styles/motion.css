@@ -1,0 +1,458 @@
+/* ============================================================================
+   motion.css — the app's 3D/animation layer.
+
+   Loaded AFTER design-system.css, so the `.card` refinements here are
+   deliberate overrides of the base card, not accidents. Everything is
+   opt-in through a class; nothing changes a component that doesn't ask for
+   it, which is what makes this safe to layer over 24 existing pages.
+
+   Every animated rule ends up disabled by the single reduced-motion block at
+   the bottom of this file rather than each rule guarding itself.
+   ========================================================================= */
+
+:root {
+  /* Springy easings. --ease-spring overshoots slightly, which is what makes a
+     card "land" instead of just stopping. */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-swift: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-glide: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --dur-fast: 180ms;
+  --dur-base: 320ms;
+  --dur-slow: 620ms;
+  --dur-slower: 1200ms;
+
+  /* Layered elevation — a real shadow ramp plus a coloured ambient bounce, so
+     raised surfaces read as lit by the scene behind them, not stamped on. */
+  --elev-1: 0 1px 2px rgba(2,6,23,0.4), 0 2px 8px -2px rgba(2,6,23,0.35);
+  --elev-2: 0 4px 12px -2px rgba(2,6,23,0.5), 0 12px 28px -8px rgba(2,6,23,0.45);
+  --elev-3: 0 8px 24px -4px rgba(2,6,23,0.55), 0 24px 56px -12px rgba(2,6,23,0.55);
+  --elev-glow: 0 0 0 1px rgba(99,102,241,0.14), 0 8px 40px -8px rgba(99,102,241,0.35);
+
+  --tilt-perspective: 1200px;
+}
+
+/* ---------------------------------------------------------------- reveals */
+/* Entrance states. The `.is-in` class is added by <Reveal> once the element
+   actually enters the viewport, so content below the fold animates when it's
+   reached rather than all at once during the first paint. */
+.reveal {
+  opacity: 0;
+  transform: translate3d(0, 22px, 0);
+  transition:
+    opacity var(--dur-slow) var(--ease-swift),
+    transform var(--dur-slow) var(--ease-swift);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.reveal.is-in { opacity: 1; transform: none; }
+.reveal.is-in.reveal-done { will-change: auto; }
+
+.reveal-left  { transform: translate3d(-28px, 0, 0); }
+.reveal-right { transform: translate3d(28px, 0, 0); }
+.reveal-scale { transform: scale(0.94); }
+/* A reveal that arrives out of depth — the page's signature entrance. */
+.reveal-depth { transform: perspective(1000px) translate3d(0, 30px, -120px) rotateX(9deg); }
+.reveal-blur  { filter: blur(10px); transition-property: opacity, transform, filter; }
+.reveal-blur.is-in { filter: blur(0); }
+
+/* ------------------------------------------------------------------ tilt */
+/* Two nodes by design: the wrapper owns perspective (so the child rotates in
+   the wrapper's depth space), the inner node owns the transform. Combining
+   them on one element makes the perspective origin follow the rotation and
+   the whole thing swims. */
+.tilt {
+  perspective: var(--tilt-perspective);
+  transform-style: preserve-3d;
+}
+.tilt-inner {
+  position: relative;
+  transform:
+    rotateX(var(--rx, 0deg))
+    rotateY(var(--ry, 0deg))
+    scale3d(var(--tilt-scale, 1), var(--tilt-scale, 1), 1);
+  transform-style: preserve-3d;
+  transition: transform var(--dur-base) var(--ease-swift), box-shadow var(--dur-base) var(--ease-swift);
+  will-change: transform;
+}
+.tilt:hover .tilt-inner { box-shadow: var(--elev-3), var(--elev-glow); }
+
+/* Specular glare that tracks the cursor across the tilted surface. */
+.tilt-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: calc(var(--glare, 0) * 0.5);
+  transition: opacity var(--dur-base) var(--ease-swift);
+  background: radial-gradient(
+    420px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255,255,255,0.13),
+    rgba(148,163,184,0.05) 32%,
+    transparent 62%
+  );
+  z-index: 2;
+}
+
+/* Lifts a child above the tilt plane so the card gains real parallax depth. */
+.tilt-layer { transform: translateZ(var(--z, 30px)); transform-style: preserve-3d; }
+
+/* ------------------------------------------------------------- spotlight */
+/* Cursor-tracking glow. GlassCard already publishes --x/--y (0..1) on
+   pointermove, so this hooks straight into the existing component.
+
+   Deliberately NOT a pseudo-element: `.card-gradient::before` (the animated
+   top hairline, in design-system.css) already owns ::before on exactly the
+   elements this class lands on, and `.gradient-border`/`.grain` own ::after.
+   A fourth effect competing for those two slots would silently delete one of
+   the other three. Painting into the element's own background-image layer
+   sidesteps the conflict entirely — `.card`'s background shorthand sets the
+   colour, this longhand (later in the cascade) adds the gradient over it. */
+@property --spot-a {
+  syntax: '<number>';
+  initial-value: 0;
+  inherits: false;
+}
+
+.spotlight {
+  --spot-a: 0;
+  background-image: radial-gradient(
+    460px circle at calc(var(--x, 0.5) * 100%) calc(var(--y, 0.5) * 100%),
+    rgba(129, 140, 248, calc(0.20 * var(--spot-a))),
+    rgba(167, 139, 250, calc(0.10 * var(--spot-a))) 38%,
+    transparent 70%
+  );
+  background-repeat: no-repeat;
+  /* Animates where @property is supported; degrades to an instant swap
+     elsewhere, which is a fine outcome for a hover highlight. */
+  transition: --spot-a var(--dur-base) var(--ease-swift),
+              transform var(--dur-base) var(--ease-swift),
+              box-shadow var(--dur-base) var(--ease-swift),
+              border-color var(--dur-base) var(--ease-swift);
+}
+.spotlight:hover { --spot-a: 1; }
+
+/* ------------------------------------------------------ gradient borders */
+/* Border-as-gradient without a wrapper element: paint the gradient over the
+   padding box and mask out everything but the 1px frame. */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(135deg,
+    rgba(34,211,238,0.55), rgba(99,102,241,0.5) 30%,
+    rgba(139,92,246,0.42) 55%, rgba(236,72,153,0.42) 80%, rgba(34,211,238,0.3));
+  background-size: 200% 200%;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.55;
+  animation: borderFlow 8s var(--ease-glide) infinite;
+}
+.gradient-border:hover::after { opacity: 0.95; }
+
+@keyframes borderFlow {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+/* ------------------------------------------------------------ card v2 */
+/* Refines the base .card from design-system.css: deeper glass, a lit top
+   edge, and a hover that moves in Z instead of just changing colour.
+   The opacity bump is required, not cosmetic: the base surface was 0.4 alpha,
+   which was legible over a near-black page but not over the live starfield
+   now rendering behind it — body copy was competing with moving particles.
+   Set as background-color (a longhand) so it never clobbers the
+   background-image the .spotlight glow paints into. */
+.card {
+  position: relative;
+  background-color: rgba(15, 23, 42, 0.66);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  box-shadow: var(--elev-1);
+  transition:
+    transform var(--dur-base) var(--ease-swift),
+    box-shadow var(--dur-base) var(--ease-swift),
+    border-color var(--dur-base) var(--ease-swift),
+    background var(--dur-base) var(--ease-swift);
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--elev-2), 0 0 32px -12px rgba(99,102,241,0.4);
+  border-color: rgba(148,163,184,0.22);
+}
+/* Cards inside a tilt already move in 3D; a second translate fights it. */
+.tilt-inner .card:hover { transform: none; }
+
+/* ------------------------------------------------------------ shine sweep */
+.shine { position: relative; overflow: hidden; }
+.shine::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: -70%;
+  width: 45%;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,0.14), transparent);
+  transform: skewX(-18deg);
+  transition: left var(--dur-slow) var(--ease-glide);
+}
+.shine:hover::before { left: 130%; }
+
+/* --------------------------------------------------------------- surfaces */
+/* Fine film grain. Kills the banding that big soft gradients show on wide
+   gamut panels, and keeps the glass from looking plasticky.
+   Uses ::after, so it must NOT be combined with .gradient-border (which also
+   owns ::after). .card-gradient's ::before is free to combine with either. */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.16;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+/* ------------------------------------------------------------- text fx */
+.text-glow { text-shadow: 0 0 22px rgba(99,102,241,0.45), 0 0 60px rgba(139,92,246,0.22); }
+
+/* Every one of the 23 page headers already renders <h1 class="gradient-text">,
+   so upgrading the class upgrades all of them at once — a richer aurora ramp
+   and tighter tracking, with no page file touched and no data logic at risk.
+   The mechanism (background-clip:text) is unchanged from design-system.css;
+   only the ramp, its travel, and the letter-spacing differ. */
+.gradient-text {
+  background: linear-gradient(110deg,
+    #e0e7ff 0%, #a5b4fc 20%, #22d3ee 38%, #818cf8 56%, #c4b5fd 72%, #f472b6 88%, #e0e7ff 100%);
+  background-size: 220% auto;
+  /* MUST be repeated here. The `background` shorthand above resets
+     background-clip to border-box, which would override the `clip: text` set
+     in design-system.css and paint the gradient as a solid block behind
+     glyphs that are still transparent — i.e. every page header would vanish. */
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: titleSweep 9s var(--ease-glide) infinite;
+  letter-spacing: -0.03em;
+}
+
+/* Display headline: a wide aurora sweep across the glyphs. Larger
+   background-size than .gradient-text so the ramp reads across big type. */
+.display-title {
+  background: linear-gradient(110deg,
+    #e0e7ff 0%, #a5b4fc 18%, #22d3ee 34%, #818cf8 52%, #c4b5fd 68%, #f472b6 84%, #e0e7ff 100%);
+  background-size: 260% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: titleSweep 9s var(--ease-glide) infinite;
+  letter-spacing: -0.045em;
+}
+@keyframes titleSweep {
+  0%, 100% { background-position: 0% center; }
+  50%      { background-position: 100% center; }
+}
+
+/* Headline entrance.
+   Deliberately applied to the WHOLE title, not per character: splitting the
+   text into child spans puts each glyph in its own inline-block box, and the
+   parent's `background-clip: text` then has no text of its own left to clip
+   to — the gradient stops painting and, with -webkit-text-fill-color
+   transparent inherited, the headline renders completely invisible. Animating
+   the single gradient-bearing element sidesteps that entirely. */
+.title-in {
+  animation: titleIn 1000ms var(--ease-spring) both;
+  animation-delay: var(--title-delay, 0ms);
+}
+@keyframes titleIn {
+  from { opacity: 0; transform: perspective(900px) translate3d(0, 0.35em, -180px) rotateX(-22deg); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ------------------------------------------------------------- floating */
+@keyframes floatY {
+  0%, 100% { transform: translateY(0) }
+  50%      { transform: translateY(-10px) }
+}
+@keyframes floatSlow {
+  0%, 100% { transform: translate3d(0,0,0) rotate(0deg) }
+  33%      { transform: translate3d(6px,-12px,0) rotate(2deg) }
+  66%      { transform: translate3d(-6px,-6px,0) rotate(-2deg) }
+}
+.float-y    { animation: floatY 5s ease-in-out infinite; }
+.float-slow { animation: floatSlow 14s ease-in-out infinite; }
+
+/* Breathing halo behind a focal element. */
+@keyframes haloPulse {
+  0%, 100% { opacity: 0.42; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.09); }
+}
+.halo {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(46px);
+  animation: haloPulse 6s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------- route transition */
+/* Keyed on pathname in AppShell, so each navigation replays the entrance. */
+.route-view { animation: routeIn 480ms var(--ease-swift) both; transform-origin: 50% 0%; }
+@keyframes routeIn {
+  from { opacity: 0; transform: perspective(1400px) translate3d(0, 14px, -60px) rotateX(2.2deg); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Top-edge indeterminate bar shown while a lazy route chunk loads. */
+.route-progress {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 900;
+  background: linear-gradient(90deg, transparent, var(--cyan-400), var(--indigo-500), var(--violet-500), var(--pink-500), transparent);
+  background-size: 40% 100%;
+  animation: progressSlide 1.1s var(--ease-glide) infinite;
+}
+@keyframes progressSlide {
+  0%   { background-position: -40% 0; }
+  100% { background-position: 140% 0; }
+}
+
+/* ------------------------------------------------------------- controls */
+.btn-3d {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-swift), filter var(--dur-fast) linear;
+}
+.btn-3d:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.06); }
+.btn-3d:active { transform: translateY(0) scale(0.985); transition-duration: 80ms; }
+
+/* Primary CTA: an aurora that keeps drifting, plus a soft cast light beneath. */
+.btn-aurora {
+  background: var(--accent-gradient-aurora);
+  background-size: 260% auto;
+  animation: auroraSlide 7s var(--ease-glide) infinite;
+  box-shadow: 0 10px 30px -10px rgba(99,102,241,0.8), inset 0 1px 0 rgba(255,255,255,0.22);
+}
+@keyframes auroraSlide {
+  0%, 100% { background-position: 0% center; }
+  50%      { background-position: 100% center; }
+}
+
+/* Focus ring — one definition for every interactive surface added here. */
+.btn-3d:focus-visible,
+.tilt-inner:focus-visible,
+.aim-nav-item:focus-visible {
+  outline: 2px solid var(--indigo-400);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------- sidebar */
+/* Nav items get a subtle slide + a light sweep on the active item's rail. */
+.aim-nav-item { transform: translateZ(0); transition: background var(--dur-fast) var(--ease-swift), color var(--dur-fast) var(--ease-swift), transform var(--dur-fast) var(--ease-spring), box-shadow var(--dur-fast) var(--ease-swift); }
+.aim-nav-item:hover { transform: translateX(3px); }
+.aim-nav-item.active { transform: translateX(2px); }
+
+/* ------------------------------------------------------------- data viz */
+/* Bars/rings draw themselves in on mount instead of popping to full size. */
+@keyframes growWidth { from { width: 0 !important; } }
+.grow-w { animation: growWidth 900ms var(--ease-swift) both; }
+
+@keyframes fadeUpIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.stagger > * { animation: fadeUpIn 520ms var(--ease-swift) both; }
+.stagger > *:nth-child(1) { animation-delay: 40ms }
+.stagger > *:nth-child(2) { animation-delay: 90ms }
+.stagger > *:nth-child(3) { animation-delay: 140ms }
+.stagger > *:nth-child(4) { animation-delay: 190ms }
+.stagger > *:nth-child(5) { animation-delay: 240ms }
+.stagger > *:nth-child(6) { animation-delay: 290ms }
+.stagger > *:nth-child(7) { animation-delay: 340ms }
+.stagger > *:nth-child(8) { animation-delay: 390ms }
+
+/* Live status dot with an expanding ring. */
+.pulse-dot { position: relative; }
+.pulse-dot::after {
+  content: '';
+  position: absolute; inset: -4px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  opacity: 0;
+  animation: pulseRing 2.4s var(--ease-glide) infinite;
+}
+@keyframes pulseRing {
+  0%   { opacity: 0.7; transform: scale(0.7); }
+  100% { opacity: 0;   transform: scale(1.9); }
+}
+
+/* Numeric readouts: tabular figures so a counting number doesn't jitter its
+   own width while it animates. */
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1; }
+
+/* --------------------------------------------------------- ambient canvas */
+/* The persistent WebGL field.
+   NOTE: the actual positioning is set INLINE in AmbientField.jsx, because
+   react-three-fiber writes `position: relative; height: 100%` inline on its
+   container and inline always beats a class. What's kept here is the intent
+   and a fallback, not the source of truth.
+
+   Layering contract — the canvas sits at z-index 0 and the app's content
+   wrappers claim z-index 1 (AppShell's shell div and LandingPage's root).
+   That ordering is explicit on BOTH sides on purpose:
+
+   - z-index -1 was tried first and rendered nothing at all. #root is a
+     stacking context (z-index 1) over a body whose background is an opaque
+     gradient, and the negative layer ended up under it.
+   - Leaving the content implicit (z-index auto) is worse than wrong, it's
+     intermittent: a positioned z-index:0 canvas paints above non-positioned
+     in-flow content, so pages only stayed on top while something happened to
+     give them a stacking context — e.g. .route-view's entrance animation,
+     which stops creating one the moment the animation finishes.
+
+   Card backdrop-filters blur whatever is behind them, so with the field here
+   that blur samples a live scene. That's what makes the glass read as glass. */
+.ambient-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ scrollbar */
+::-webkit-scrollbar-thumb { transition: box-shadow var(--dur-base) var(--ease-swift); }
+
+/* --------------------------------------------------------------- a11y */
+/* One switch for the whole file. Transitions are collapsed rather than
+   removed so state changes still commit — they just land instantly. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1 !important; transform: none !important; filter: none !important; }
+  .tilt-inner { transform: none !important; }
+  .tilt-inner::after { display: none; }
+  .title-in { opacity: 1 !important; transform: none !important; animation: none !important; }
+  .display-title,
+  .gradient-border::after,
+  .btn-aurora,
+  .float-y, .float-slow, .halo,
+  .route-view, .stagger > *, .grow-w,
+  .pulse-dot::after, .route-progress {
+    animation: none !important;
+  }
+  .shine::before { display: none; }
+  .card:hover, .btn-3d:hover, .aim-nav-item:hover { transform: none !important; }
+  * { transition-duration: 1ms !important; }
+}
+
+/* ------------------------------------------------------------ responsive */
+@media (max-width: 900px) {
+  /* Tilt depends on a hoverable pointer; on touch it only ever shows the
+     resting state, so drop the perspective cost entirely. */
+  .tilt { perspective: none; }
+  .tilt-inner { transform: none !important; }
+  .tilt-inner::after { display: none; }
+}

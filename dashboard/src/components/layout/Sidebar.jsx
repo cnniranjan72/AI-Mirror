@@ -115,29 +115,42 @@ export default function Sidebar({ collapsed, onToggle }) {
       <aside style={{
         width: collapsed ? 'var(--sidebar-collapsed)' : 'var(--sidebar-width)',
         height: '100vh', position: 'fixed', top: 0, left: 0,
-        background: 'rgba(15,23,42,0.85)', backdropFilter: 'blur(24px) saturate(1.5)',
-        WebkitBackdropFilter: 'blur(24px) saturate(1.5)',
+        // Slightly translucent over a vertical wash, so the ambient WebGL
+        // field reads faintly through the rail instead of the sidebar being a
+        // flat slab pasted over a living background.
+        background: 'linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.86) 55%, rgba(23,32,51,0.9) 100%)',
+        backdropFilter: 'blur(26px) saturate(1.6)',
+        WebkitBackdropFilter: 'blur(26px) saturate(1.6)',
         borderRight: '1px solid var(--border-subtle)',
+        // A lit inner edge on the right — the same trick the cards use to
+        // suggest the surface has thickness.
+        boxShadow: 'inset -1px 0 0 rgba(148,163,184,0.06), 8px 0 40px -20px rgba(2,6,23,0.9)',
         display: 'flex', flexDirection: 'column',
         transition: 'width 0.3s cubic-bezier(0.16,1,0.3,1)',
         zIndex: 100, overflow: 'hidden',
       }}>
+        {/* Accent seam running down the rail's outer edge. */}
+        <div aria-hidden="true" style={{
+          position: 'absolute', top: 0, bottom: 0, right: 0, width: 1,
+          background: 'linear-gradient(180deg, transparent, rgba(34,211,238,0.35) 18%, rgba(99,102,241,0.35) 50%, rgba(236,72,153,0.28) 82%, transparent)',
+          opacity: 0.7, pointerEvents: 'none',
+        }} />
         {/* Brand */}
         <div style={{
           height: 'var(--topbar-height)', display: 'flex', alignItems: 'center',
           padding: collapsed ? '0 16px' : '0 20px', gap: 12,
           borderBottom: '1px solid var(--border-subtle)', flexShrink: 0,
         }}>
-          <div className="aim-brand-mark" style={{
-            width: 32, height: 32, borderRadius: 10,
+          <div className="aim-brand-mark btn-3d" style={{
+            width: 34, height: 34, borderRadius: 11,
             background: 'var(--accent-gradient-aurora)',
             backgroundSize: '200% auto',
-            boxShadow: 'var(--shadow-glow)',
+            boxShadow: '0 0 22px -4px rgba(99,102,241,0.85), inset 0 1px 0 rgba(255,255,255,0.28)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 16, fontWeight: 700, color: 'white', flexShrink: 0,
+            fontSize: 16, fontWeight: 800, color: 'white', flexShrink: 0,
           }}>A</div>
           {!collapsed && (
-            <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+            <span className="gradient-text" style={{ fontSize: 17, fontWeight: 800 }}>
               AIMirror
             </span>
           )}

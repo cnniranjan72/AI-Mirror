@@ -39,12 +39,18 @@ const SettingsPage = lazy(() => import('../../pages/settings/SettingsPage'))
 const GuidePage = lazy(() => import('../../pages/guide/GuidePage'))
 const DocumentationPage = lazy(() => import('../../pages/documentation/DocumentationPage'))
 
+// Shown while a lazy route chunk is in flight. The top bar is the part that
+// matters: chunk fetches are usually too fast for skeletons to register, but
+// long enough that a click with zero feedback feels broken.
 const PageLoading = () => (
-  <div style={{ padding: '32px' }}>
-    <LoadingSkeleton type="card" count={3} />
-    <div style={{ height: 24 }} />
-    <LoadingSkeleton type="chart" />
-  </div>
+  <>
+    <div className="route-progress" />
+    <div style={{ padding: '32px' }}>
+      <LoadingSkeleton type="card" count={3} />
+      <div style={{ height: 24 }} />
+      <LoadingSkeleton type="chart" />
+    </div>
+  </>
 )
 
 export default function AppShell() {
@@ -76,7 +82,11 @@ export default function AppShell() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    // position/zIndex are load-bearing: the ambient WebGL field renders at
+    // z-index 0 as a sibling of this shell inside #root. Without an explicit
+    // positive layer here, this content is non-positioned and would paint
+    // BELOW that canvas. See the layering contract in motion.css.
+    <div style={{ display: 'flex', minHeight: '100vh', position: 'relative', zIndex: 1 }}>
       {/* Every CharacterCreature3D on every page renders into this single shared
           canvas via <View> instead of mounting its own <Canvas>. Route changes
           swap which View is in the DOM, not the WebGL context itself — this is
@@ -118,6 +128,11 @@ export default function AppShell() {
         }}>
           <ErrorBoundary>
             <Suspense fallback={<PageLoading />}>
+              {/* Keyed on pathname so React tears down and remounts this
+                  wrapper on every navigation, which is what replays the
+                  .route-view entrance. Keying the <Routes> element itself
+                  would remount the router internals instead. */}
+              <div key={location.pathname} className="route-view">
               <Routes>
                 <Route path="/dashboard" element={<Overview />} />
                 <Route path="/import" element={<IngestionPage />} />
@@ -144,6 +159,7 @@ export default function AppShell() {
                 <Route path="/documentation" element={<DocumentationPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
+              </div>
             </Suspense>
           </ErrorBoundary>
         </div>
@@ -152,7 +168,12 @@ export default function AppShell() {
           textAlign: 'center', padding: '20px',
           fontSize: 12, color: 'var(--text-muted)',
           borderTop: '1px solid var(--border-subtle)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
         }}>
+          <span className="pulse-dot" style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: 'var(--emerald-400)', color: 'var(--emerald-400)', display: 'inline-block',
+          }} />
           AIMirror — Cognitive Digital Twin
         </footer>
       </main>

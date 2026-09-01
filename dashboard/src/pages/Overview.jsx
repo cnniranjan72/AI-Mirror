@@ -8,6 +8,15 @@ import Badge from '../components/ui/Badge'
 import { ActivityIcon, BrainIcon, TargetIcon, LayersIcon, NetworkIcon, CpuIcon, RefreshIcon } from '../icons/icons'
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import CharacterCreature3D from '../components/character/CharacterCreature3D'
+import Reveal from '../components/motion/Reveal'
+
+// Shared tooltip chrome — the charts on this page were each carrying their own
+// copy of these three style objects.
+const TOOLTIP_STYLE = {
+  contentStyle: { background: 'rgba(15,23,42,0.94)', border: '1px solid rgba(148,163,184,0.22)', borderRadius: 10, fontSize: 12, backdropFilter: 'blur(10px)', boxShadow: '0 12px 32px -8px rgba(2,6,23,0.8)' },
+  labelStyle: { color: '#e2e8f0' },
+  itemStyle: { color: '#e2e8f0' },
+}
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#f43f5e', '#a78bfa']
 
@@ -83,32 +92,44 @@ export default function Overview() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 68, height: 68, flexShrink: 0, margin: '-8px 0' }}>
-            <CharacterCreature3D size={68} variant="pulse" confidence={confidence ?? 0.4} thinking={isLoading} showLabels={false} />
+      <Reveal variant="depth">
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 32, flexWrap: 'wrap', gap: 16,
+          position: 'relative',
+        }}>
+          {/* Ambient pool behind the creature, tying the page header into the
+              WebGL field rendering behind the whole app. */}
+          <div className="halo" style={{ width: 260, height: 260, top: -90, left: -60, background: 'rgba(99,102,241,0.20)' }} />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
+            <div style={{ width: 76, height: 76, flexShrink: 0, margin: '-8px 0' }}>
+              <CharacterCreature3D size={76} variant="pulse" confidence={confidence ?? 0.4} thinking={isLoading} showLabels={false} />
+            </div>
+            <div>
+              <h1 className="display-title" style={{ fontSize: 36, fontWeight: 800, marginBottom: 6, lineHeight: 1.1 }}>
+                Cognitive Dashboard
+              </h1>
+              <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Real-time view of your Digital Cognitive Twin</p>
+            </div>
           </div>
-          <div>
-            <h1 className="gradient-text" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 6 }}>
-              Cognitive Dashboard
-            </h1>
-            <p style={{ color: 'var(--text-tertiary)', fontSize: 15 }}>Real-time view of your Digital Cognitive Twin</p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Badge variant={healthLoading ? 'neutral' : online ? 'emerald' : 'danger'} dot>
+              {healthLoading ? 'Checking...' : online ? 'Live' : 'Offline'}
+            </Badge>
+            <button onClick={handleRefresh} className="btn-3d" style={{
+              padding: '9px 18px', borderRadius: 10, border: '1px solid var(--border-subtle)',
+              background: 'var(--bg-surface)', color: 'var(--text-secondary)', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500,
+              backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+            }}>
+              <div style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}><RefreshIcon /></div>
+              Refresh
+            </button>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Badge variant={healthLoading ? 'neutral' : online ? 'emerald' : 'danger'} dot>
-            {healthLoading ? 'Checking...' : online ? 'Live' : 'Offline'}
-          </Badge>
-          <button onClick={handleRefresh} style={{
-            padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border-subtle)',
-            background: 'var(--bg-surface)', color: 'var(--text-secondary)', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500,
-          }}>
-            <div style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}><RefreshIcon /></div>
-            Refresh
-          </button>
-        </div>
-      </div>
+      </Reveal>
 
       {/* Error banner — distinct from the empty-state welcome below */}
       {idError && (
@@ -162,7 +183,7 @@ export default function Overview() {
       )}
 
       {/* Stats Grid — all sourced from /cognitive/summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
+      <div className="stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
         <StatCard label="Identity Confidence" value={confidence != null ? `${Math.round(confidence * 100)}%` : '--'} icon={TargetIcon} accent="indigo" loading={isLoading} />
         <StatCard label="Identity Version" value={identityVersion != null ? `v${identityVersion}` : '--'} icon={ActivityIcon} accent="violet" loading={isLoading} />
         <StatCard label="Behavior Objects" value={summary?.behavior_object_count ?? 0} icon={NetworkIcon} accent="pink" loading={!summary} />
@@ -174,23 +195,39 @@ export default function Overview() {
       {/* Main Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24, marginBottom: 32 }}>
         {/* Cognitive Profile Radar */}
-        <GlassCard gradient>
+        <Reveal variant="depth" style={{ height: '100%' }}>
+        <GlassCard gradient style={{ height: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>Cognitive Profile</h3>
             <Badge variant="indigo">v{identityVersion ?? '?'}</Badge>
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <RadarChart data={radarData}>
+              <defs>
+                <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.45} />
+                  <stop offset="60%" stopColor="#6366f1" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.12} />
+                </radialGradient>
+              </defs>
               <PolarGrid stroke="rgba(148,163,184,0.15)" />
               <PolarAngleAxis dataKey="trait" tick={{ fill: '#94a3b8', fontSize: 12 }} />
               <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-              <Radar name="Identity" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} strokeWidth={2} />
+              <Radar
+                name="Identity" dataKey="value"
+                stroke="#818cf8" fill="url(#radarFill)" fillOpacity={1} strokeWidth={2}
+                dot={{ r: 3, fill: '#22d3ee', stroke: 'none' }}
+                isAnimationActive animationDuration={900} animationEasing="ease-out"
+              />
+              <Tooltip {...TOOLTIP_STYLE} />
             </RadarChart>
           </ResponsiveContainer>
         </GlassCard>
+        </Reveal>
 
         {/* Recent Activity — recent pipeline queries */}
-        <GlassCard gradient>
+        <Reveal variant="depth" delay={110} style={{ height: '100%' }}>
+        <GlassCard gradient style={{ height: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>Recent Queries</h3>
             <Badge variant="neutral">{recentActivity.length}</Badge>
@@ -207,8 +244,20 @@ export default function Overview() {
                 onClick={() => act.id && navigate(`/trace/${act.id}`)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                  borderRadius: 8, background: 'rgba(148,163,184,0.04)', cursor: act.id ? 'pointer' : 'default',
+                  borderRadius: 10, background: 'rgba(148,163,184,0.04)', cursor: act.id ? 'pointer' : 'default',
+                  border: '1px solid transparent',
                   animation: `fadeIn 0.3s ease-out ${i * 0.05}s both`,
+                  transition: 'background var(--dur-fast) var(--ease-swift), border-color var(--dur-fast) var(--ease-swift), transform var(--dur-fast) var(--ease-spring)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(99,102,241,0.10)'
+                  e.currentTarget.style.borderColor = 'rgba(99,102,241,0.28)'
+                  e.currentTarget.style.transform = 'translateX(3px)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(148,163,184,0.04)'
+                  e.currentTarget.style.borderColor = 'transparent'
+                  e.currentTarget.style.transform = 'none'
                 }}
               >
                 <div style={{ width: 8, height: 8, borderRadius: '50%', background: act.success ? 'var(--emerald-400, #10b981)' : 'var(--danger, #f43f5e)', flexShrink: 0 }} />
@@ -224,39 +273,57 @@ export default function Overview() {
             ))}
           </div>
         </GlassCard>
+        </Reveal>
       </div>
 
       {/* Second Row */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 32 }}>
         {/* Pipeline Latency */}
-        <GlassCard gradient>
+        <Reveal variant="depth" style={{ height: '100%' }}>
+        <GlassCard gradient style={{ height: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>Pipeline Latency</h3>
             <Badge variant="neutral">Last 10 traces</Badge>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={traceLatencyData}>
+              <defs>
+                <linearGradient id="barLatency" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.95} />
+                  <stop offset="55%" stopColor="#6366f1" stopOpacity={0.85} />
+                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.35} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
               <XAxis dataKey="name" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} unit="ms" />
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#e2e8f0' }} itemStyle={{ color: '#e2e8f0' }} />
-              <Bar dataKey="latency" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Tooltip {...TOOLTIP_STYLE} cursor={{ fill: 'rgba(99,102,241,0.08)' }} />
+              <Bar
+                dataKey="latency" fill="url(#barLatency)" radius={[5, 5, 0, 0]}
+                isAnimationActive animationDuration={800} animationEasing="ease-out"
+              />
             </BarChart>
           </ResponsiveContainer>
         </GlassCard>
+        </Reveal>
 
         {/* Topic Distribution */}
-        <GlassCard gradient>
+        <Reveal variant="depth" delay={110} style={{ height: '100%' }}>
+        <GlassCard gradient style={{ height: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>Topic Distribution</h3>
             <Badge variant="neutral">Interests</Badge>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={topicData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value">
+              <Pie
+                data={topicData} cx="50%" cy="50%" innerRadius={50} outerRadius={80}
+                paddingAngle={3} dataKey="value" stroke="rgba(2,6,23,0.5)" strokeWidth={1}
+                isAnimationActive animationDuration={850} animationEasing="ease-out"
+              >
                 {topicData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid rgba(148,163,184,0.2)', borderRadius: 8, fontSize: 12 }} labelStyle={{ color: '#e2e8f0' }} itemStyle={{ color: '#e2e8f0' }} />
+              <Tooltip {...TOOLTIP_STYLE} />
             </PieChart>
           </ResponsiveContainer>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
@@ -267,9 +334,11 @@ export default function Overview() {
             ))}
           </div>
         </GlassCard>
+        </Reveal>
       </div>
 
       {/* Reflection Summary */}
+      <Reveal variant="depth">
       <GlassCard gradient>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h3 style={{ fontSize: 16, fontWeight: 600 }}>Latest Reflection</h3>
@@ -298,6 +367,7 @@ export default function Overview() {
           </div>
         )}
       </GlassCard>
+      </Reveal>
     </div>
   )
 }

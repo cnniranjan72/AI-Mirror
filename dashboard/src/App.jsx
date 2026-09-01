@@ -1,11 +1,40 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter as Router } from 'react-router-dom'
 import AppShell from './components/layout/AppShell'
+import { useIdleReady } from './hooks/useMotion'
 import './styles/design-system.css'
+import './styles/motion.css'
 import './App.css'
+
+// Lazy, not static: this pulls in three.js/fiber/drei (~1MB raw). Importing it
+// at the top level would put that chunk on the critical path for every visitor
+// before a single pixel of dashboard renders.
+const AmbientField = lazy(() => import('./three/AmbientField'))
+
+/**
+ * Mounts the ambient WebGL field only once the browser has gone idle, so the
+ * three.js fetch never competes with the app's first data requests. The page
+ * is fully usable before this appears, and equally usable if it never does.
+ */
+function DeferredAmbientField() {
+  const ready = useIdleReady(700)
+  if (!ready) return null
+  return (
+    <Suspense fallback={null}>
+      <AmbientField />
+    </Suspense>
+  )
+}
 
 function App() {
   return (
     <Router>
+      {/* Inside the Router but outside AppShell, for two reasons: it needs
+          useLocation to tint itself per route, and living above the shell
+          means route changes never unmount it — one WebGL context is acquired
+          for the whole session instead of one per navigation. It renders
+          behind #root and self-disables on unsupported/low-end setups. */}
+      <DeferredAmbientField />
       <AppShell />
     </Router>
   )
