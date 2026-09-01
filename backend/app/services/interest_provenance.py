@@ -243,3 +243,165 @@ async def build_provenance_report(user_id: str) -> Dict[str, Any]:
             "there is no evidence of seeking to weigh against exposure."
         ]),
     }
+
+
+# --------------------------------------------------------------------------
+# capture timeline — the temporal half of the same question
+# --------------------------------------------------------------------------
+#
+# Provenance answers "did you seek this out". This answers "when did it arrive,
+# and how fast did it take over". A topic that went from absent to a third of
+# someone's attention in six weeks, with no searches behind it, is a different
+# and much sharper claim than the same topic simply scoring low on agency.
+
+# A month needs this many events before its shares mean anything; otherwise a
+# single view in a quiet month reads as 100% of that month's attention.
+MIN_EVENTS_PER_BUCKET = 5
+
+
+async def _load_dated_events(user_id: str) -> List[Dict[str, Any]]:
+    rows = await fetch(
+        """
+        SELECT caption, hashtags, timestamp
+        FROM events
+        WHERE user_id = $1 AND timestamp IS NOT NULL
+        ORDER BY timestamp
+        """,
+        user_id,
+    )
+    import json
+    out = []
+    for row in rows:
+        record = dict(row)
+        tags = record.get("hashtags")
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except Exception:
+                tags = []
+        record["hashtags"] = tags if isinstance(tags, list) else []
+        out.append(record)
+    return out
+
+
+async def build_capture_timeline(user_id: str) -> Dict[str, Any]:
+    """Per-topic share of attention over time, joined to the chosen/fed verdict.
+
+    Attention is measured in events rather than watch time: an official export
+    records that something was watched but never for how long, so watch time is
+    zero for imported history and would silently make every imported month look
+    empty.
+    """
+    provenance = await build_provenance_report(user_id)
+    verdicts = {t["topic"]: t for t in provenance["topics"]}
+
+    topics = await _load_topics(user_id)
+    events = await _load_dated_events(user_id)
+
+    if not events or not topics:
+        return {
+            "user_id": user_id,
+            "buckets": [],
+            "topics": [],
+            "measurable": provenance["measurable"],
+            "caveats": provenance["caveats"],
+        }
+
+    vocabularies = {t.get("topic"): _topic_vocabulary(t) for t in topics}
+
+    # month -> {topic: count}, plus the month's total.
+    from collections import defaultdict
+    per_month: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    month_totals: Dict[str, int] = defaultdict(int)
+
+    for event in events:
+        when = event.get("timestamp")
+        if not when:
+            continue
+        bucket = when.strftime("%Y-%m")
+        month_totals[bucket] += 1
+
+        tokens = _tokens(" ".join(
+            [event.get("caption") or ""] + [str(t) for t in event.get("hashtags") or []]
+        ))
+        for topic, vocab in vocabularies.items():
+            if vocab & tokens:
+                per_month[bucket][topic] += 1
+
+    months = sorted(month_totals)
+    # Sparse months are kept in the series (dropping them would imply the user
+    # was absent) but are flagged so the UI can refuse to draw shares from them.
+    buckets = [
+        {
+            "month": m,
+            "events": month_totals[m],
+            "reliable": month_totals[m] >= MIN_EVENTS_PER_BUCKET,
+            "shares": {
+                topic: round(count / month_totals[m], 4)
+                for topic, count in per_month[m].items()
+            },
+        }
+        for m in months
+    ]
+
+    reliable_months = [b for b in buckets if b["reliable"]]
+
+    series = []
+    for topic in vocabularies:
+        points = [(b["month"], b["shares"].get(topic, 0.0)) for b in reliable_months]
+        present = [(m, share) for m, share in points if share > 0]
+        if not present:
+            continue
+
+        first_month, _ = present[0]
+        peak_month, peak_share = max(present, key=lambda p: p[1])
+        latest_month, latest_share = points[-1]
+
+        verdict = verdicts.get(topic, {})
+        series.append({
+            "topic": topic,
+            "verdict": verdict.get("verdict", "unknown"),
+            "agency": verdict.get("agency"),
+            "searches": verdict.get("searches", 0),
+            "first_month": first_month,
+            "peak_month": peak_month,
+            "peak_share": peak_share,
+            "latest_share": latest_share,
+            # How many reliable months passed between a topic first appearing
+            # and reaching its peak share. Small numbers on a fed topic are the
+            # interesting case: it took over quickly and unbidden.
+            "months_to_peak": max(0, [m for m, _ in points].index(peak_month) - [m for m, _ in points].index(first_month)),
+            "points": [{"month": m, "share": share} for m, share in points],
+        })
+
+    # Fed topics that grew fastest, first.
+    series.sort(key=lambda t: (
+        {"fed": 0, "mixed": 1, "chosen": 2, "unknown": 3}[t["verdict"]],
+        -t["peak_share"],
+    ))
+
+    fed_latest = sum(t["latest_share"] for t in series if t["verdict"] == "fed")
+    fed_first = sum(
+        t["points"][0]["share"] for t in series
+        if t["verdict"] == "fed" and t["points"]
+    )
+
+    return {
+        "user_id": user_id,
+        "measurable": provenance["measurable"],
+        "buckets": buckets,
+        "topics": series,
+        "summary": {
+            "months": len(buckets),
+            "reliable_months": len(reliable_months),
+            "fed_share_first_month": round(fed_first, 4) if series else None,
+            "fed_share_latest_month": round(fed_latest, 4) if series else None,
+        },
+        "caveats": provenance["caveats"] + [
+            "Attention is counted in events, not watch time: an export records "
+            "that something was watched but never for how long.",
+            f"Months with fewer than {MIN_EVENTS_PER_BUCKET} events are shown but "
+            "excluded from shares — one view in a quiet month is not 100% of "
+            "your attention.",
+        ],
+    }

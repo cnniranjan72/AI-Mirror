@@ -46,6 +46,7 @@ function AgencyBar({ agency, verdict }) {
 export default function ProvenancePage() {
   const navigate = useNavigate()
   const { data, loading, error } = useApi(() => api.getProvenanceReport())
+  const { data: timeline } = useApi(() => api.getProvenanceTimeline())
 
   const summary = data?.summary || {}
   const fedShare = summary.fed_share_of_attention
@@ -166,11 +167,84 @@ export default function ProvenancePage() {
             </GlassCard>
           </Reveal>
 
+          {/* The temporal half: when a topic arrived and how fast it grew.
+              A stacked bar per month, so a fed topic swallowing the mix is
+              visible as a shape rather than a number. */}
+          {timeline?.topics?.length > 0 && (
+            <Reveal variant="depth">
+              <GlassCard gradient style={{ marginBottom: 22 }}>
+                <div style={{ marginBottom: 4 }}>
+                  <h3 style={{ fontSize: 17, fontWeight: 700 }}>How it happened</h3>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                    Share of each month's watching, by topic. Red is fed, green is chosen.
+                  </div>
+                </div>
+
+                {timeline.summary?.fed_share_latest_month != null && timeline.summary?.fed_share_first_month != null && (
+                  <div style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '14px 0 18px', lineHeight: 1.6 }}>
+                    Topics you never sought went from{' '}
+                    <strong style={{ color: 'var(--text-primary)' }}>
+                      {Math.round(timeline.summary.fed_share_first_month * 100)}%
+                    </strong>{' '}
+                    of your watching in the first month to{' '}
+                    <strong style={{ color: 'var(--rose-400)' }}>
+                      {Math.round(timeline.summary.fed_share_latest_month * 100)}%
+                    </strong>{' '}
+                    in the most recent.
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, minHeight: 150, marginBottom: 10 }}>
+                  {timeline.buckets.map(bucket => (
+                    <div key={bucket.month} style={{ flex: 1, minWidth: 34, textAlign: 'center' }}>
+                      <div style={{
+                        height: 120, display: 'flex', flexDirection: 'column-reverse',
+                        borderRadius: 6, overflow: 'hidden',
+                        background: 'rgba(148,163,184,0.08)',
+                        // A month too sparse to score is drawn hollow rather
+                        // than as a confident stack of shares.
+                        opacity: bucket.reliable ? 1 : 0.3,
+                      }}>
+                        {bucket.reliable && timeline.topics.map(t => {
+                          const share = bucket.shares[t.topic] || 0
+                          if (!share) return null
+                          return (
+                            <div
+                              key={t.topic}
+                              title={`${t.topic}: ${Math.round(share * 100)}% (${t.verdict})`}
+                              style={{ height: `${share * 100}%`, background: VERDICT[t.verdict].color, opacity: 0.85 }}
+                            />
+                          )
+                        })}
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+                        {bucket.month.slice(5)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'grid', gap: 7, marginTop: 14 }}>
+                  {timeline.topics.slice(0, 8).map(t => (
+                    <div key={t.topic} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, flexWrap: 'wrap' }}>
+                      <span style={{ width: 9, height: 9, borderRadius: 2, background: VERDICT[t.verdict].color, flexShrink: 0 }} />
+                      <span style={{ fontWeight: 600, minWidth: 100 }}>{t.topic}</span>
+                      <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11.5 }}>
+                        first seen {t.first_month} · peaked {t.peak_month} at {Math.round(t.peak_share * 100)}%
+                        {t.verdict === 'fed' && t.months_to_peak === 0 && ' · peaked the month it appeared'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </GlassCard>
+            </Reveal>
+          )}
+
           <Reveal variant="depth">
             <GlassCard>
               <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>How this is measured</h3>
               <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 9 }}>
-                {(data.caveats || []).map((c, i) => (
+                {(timeline?.caveats || data.caveats || []).map((c, i) => (
                   <li key={i} style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.7 }}>{c}</li>
                 ))}
               </ul>

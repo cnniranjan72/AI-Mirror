@@ -276,6 +276,11 @@ export const api = {
     return data;
   },
 
+  getProvenanceTimeline: async (userId = activeUser()) => {
+    const { data } = await client.get('/provenance/timeline', { params: { user_id: userId } });
+    return data;
+  },
+
   // === Search ===
   search: async (q, limit = 20) => {
     const { data } = await client.get('/search', { params: { q, limit } });

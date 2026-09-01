@@ -10,7 +10,7 @@ to be defended against.
 import pytest
 
 from app.services.interest_provenance import (
-    _tokens, _classify, build_provenance_report,
+    _tokens, _classify, build_provenance_report, build_capture_timeline,
     MIN_DELIBERATE_SIGNALS, MIN_EXPOSURE_TO_JUDGE, FED_CEILING, MIXED_CEILING,
 )
 from app.services.archive_import import parse_archive
@@ -184,3 +184,78 @@ class TestReport:
         # Ten following=true events must not make the account measurable.
         assert report["measurable"] is False
         assert report["summary"]["engagement_signals"] == 0
+
+
+class TestCaptureTimeline:
+    """When a topic arrived and how fast it took over."""
+
+    pytestmark = pytest.mark.db
+
+    async def _topic(self, user_id, topic, exposure):
+        from app.db.postgres import execute
+        import json
+        await execute(
+            """
+            INSERT INTO behavior_objects
+                (unique_id, user_id, topic, keywords, temporal_statistics,
+                 importance_score, confidence_score, metadata)
+            VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,0.5,0.5,$6::jsonb)
+            """,
+            f"bo_{topic}_{user_id}", user_id, topic, json.dumps([topic]),
+            json.dumps({"occurrence_count": exposure}), json.dumps({"cluster_type": "topic"}),
+        )
+
+    async def _events(self, user_id, topic, month, count):
+        from datetime import datetime
+        from app.db.postgres import execute
+        for i in range(count):
+            await execute(
+                """
+                INSERT INTO events (user_id, reel_id, username, caption, hashtags,
+                                    watch_time, timestamp, session_id, platform)
+                VALUES ($1,$2,'chan',$3,'[]'::jsonb,0,$4,'s','youtube')
+                """,
+                user_id, f"{topic}_{month}_{i}", f"{topic} deep dive",
+                datetime.fromisoformat(f"{month}-0{(i % 8) + 1}T12:00:00+00:00"),
+            )
+
+    @pytest.mark.asyncio
+    async def test_reports_when_a_topic_arrived_and_peaked(self, db, disposable_user_id):
+        await self._topic(disposable_user_id, "robotics", 20)
+        await self._topic(disposable_user_id, "outrage", 30)
+
+        # robotics present throughout; outrage appears later and takes over.
+        await self._events(disposable_user_id, "robotics", "2025-01", 10)
+        await self._events(disposable_user_id, "robotics", "2025-02", 10)
+        await self._events(disposable_user_id, "outrage", "2025-02", 30)
+
+        timeline = await build_capture_timeline(disposable_user_id)
+        by_topic = {t["topic"]: t for t in timeline["topics"]}
+
+        assert by_topic["robotics"]["first_month"] == "2025-01"
+        assert by_topic["outrage"]["first_month"] == "2025-02"
+        # In February outrage is 30 of 40 events.
+        assert by_topic["outrage"]["peak_share"] == pytest.approx(0.75, abs=0.01)
+
+    @pytest.mark.asyncio
+    async def test_sparse_months_are_kept_but_not_scored(self, db, disposable_user_id):
+        """One view in a quiet month is not 100% of someone's attention."""
+        await self._topic(disposable_user_id, "robotics", 20)
+        await self._events(disposable_user_id, "robotics", "2025-01", 1)   # sparse
+        await self._events(disposable_user_id, "robotics", "2025-02", 10)  # reliable
+
+        timeline = await build_capture_timeline(disposable_user_id)
+        months = {b["month"]: b for b in timeline["buckets"]}
+
+        assert months["2025-01"]["reliable"] is False
+        assert months["2025-02"]["reliable"] is True
+        # The sparse month is still shown — dropping it would imply absence.
+        assert len(timeline["buckets"]) == 2
+        # ...but it does not become the topic's first appearance.
+        assert timeline["topics"][0]["first_month"] == "2025-02"
+
+    @pytest.mark.asyncio
+    async def test_empty_history_returns_an_empty_timeline(self, db, disposable_user_id):
+        timeline = await build_capture_timeline(disposable_user_id)
+        assert timeline["buckets"] == []
+        assert timeline["topics"] == []

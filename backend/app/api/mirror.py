@@ -73,3 +73,11 @@ async def provenance_report(user_id: str = Query(default="default"), authorizati
     """Interest Provenance: for each topic, evidence of seeking vs exposure."""
     resolved = await resolve_user_id(user_id=user_id, authorization=authorization)
     return await interest_provenance.build_provenance_report(resolved)
+
+
+@router.get("/provenance/timeline")
+async def provenance_timeline(user_id: str = Query(default="default"), authorization: Optional[str] = Header(default=None)):
+    """When each topic arrived and how fast it took over, joined to whether it
+    was ever sought out."""
+    resolved = await resolve_user_id(user_id=user_id, authorization=authorization)
+    return await interest_provenance.build_capture_timeline(resolved)
