@@ -7,6 +7,7 @@ numpy==1.26.4  # used by engines/knowledge_consolidation.py, independent of embe
 scikit-learn>=1.3.0
 cryptography>=42.0.0  # encrypts per-user LLM provider API keys at rest
 httpx==0.28.1  # runtime: calls the Hugging Face embeddings API; also used by tests
+python-multipart>=0.0.9  # required by FastAPI for the multipart upload on POST /import/archive
 
 # LLM verbalization layer — at least one required; provider selected via LLM_PROVIDER
 # (or overridden per-user via /settings/llm — see app/api/settings.py)

@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApi } from '../../hooks/useApi'
 import { api, DEFAULT_USER } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
-import { CheckIcon, RefreshIcon } from '../../icons/icons'
+import { CheckIcon, RefreshIcon, UploadIcon } from '../../icons/icons'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 import LiveIngestionPulse from '../../components/ingestion/LiveIngestionPulse'
 
@@ -37,12 +37,36 @@ export default function IngestionPage() {
   const [seedResult, setSeedResult] = useState(null)
   const [error, setError] = useState(null)
 
+  // Data-export import
+  const fileInputRef = useRef(null)
+  const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState(0)
+  const [importResult, setImportResult] = useState(null)
+  const [importError, setImportError] = useState(null)
+  const [dragging, setDragging] = useState(false)
+
   const cur = summary?.current_identity || {}
   const platformBreakdown = summary?.platform_breakdown || {}
   const platformTotal = Object.values(platformBreakdown).reduce((a, b) => a + b, 0)
   const PLATFORM_META = {
     instagram: { label: 'Instagram', color: '#ec4899', icon: '📸' },
     youtube: { label: 'YouTube', color: '#f43f5e', icon: '▶️' },
+  }
+
+  const runImport = async (fileObj) => {
+    if (!fileObj) return
+    setImportError(null); setImportResult(null); setImporting(true); setImportProgress(0)
+    try {
+      const res = await api.importArchive(fileObj, undefined, setImportProgress)
+      setImportResult(res)
+      // The whole point of an import is the numbers changing, so pull the
+      // summary again rather than leaving stale counts on screen.
+      refetch()
+    } catch (err) {
+      setImportError(err?.response?.data?.detail || err.message || 'Import failed')
+    } finally {
+      setImporting(false)
+    }
   }
 
   const runSeed = async () => {
@@ -223,6 +247,113 @@ export default function IngestionPage() {
           )}
         </GlassCard>
       </div>
+
+      {/* Data-export import — the third ingestion path, and the only one that
+          does not depend on scraping a live logged-in session. */}
+      <GlassCard gradient style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{ fontSize: 24 }}>📦</div>
+          <h3 style={{ fontSize: 16, fontWeight: 600 }}>Import a data export</h3>
+          <Badge variant="emerald">Fastest way to fill your twin</Badge>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.6, marginBottom: 16 }}>
+          Upload the official export from Instagram or Google — your whole history at
+          once, no extension required. Instagram: <em>Settings → Accounts Center →
+          Your information and permissions → Download your information</em> (choose
+          <strong> JSON</strong>). YouTube: <em>Google Takeout → YouTube and YouTube
+          Music → history</em>.
+        </p>
+
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault(); setDragging(false)
+            if (!importing) runImport(e.dataTransfer.files?.[0])
+          }}
+          onClick={() => !importing && fileInputRef.current?.click()}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if ((e.key === 'Enter' || e.key === ' ') && !importing) {
+              e.preventDefault(); fileInputRef.current?.click()
+            }
+          }}
+          style={{
+            padding: '28px 20px', borderRadius: 14, textAlign: 'center',
+            border: `1.5px dashed ${dragging ? 'var(--indigo-400)' : 'var(--border-strong)'}`,
+            background: dragging ? 'rgba(99,102,241,0.10)' : 'rgba(148,163,184,0.04)',
+            cursor: importing ? 'wait' : 'pointer',
+            transition: 'all var(--dur-base) var(--ease-swift)',
+          }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip,.json,application/zip,application/json"
+            style={{ display: 'none' }}
+            onChange={(e) => { runImport(e.target.files?.[0]); e.target.value = '' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10, color: 'var(--indigo-300)' }}>
+            {importing
+              ? <div style={{ animation: 'spin 1s linear infinite', display: 'flex' }}><RefreshIcon /></div>
+              : <UploadIcon />}
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+            {importing ? 'Running your history through the pipeline…' : 'Drop your export here, or click to choose'}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            .zip archive or a single .json file · up to 200MB
+          </div>
+
+          {/* Upload progress only covers the transfer. Processing afterwards has
+              no honest percentage to report, so none is invented. */}
+          {importing && importProgress > 0 && importProgress < 1 && (
+            <div style={{ marginTop: 14, height: 4, borderRadius: 2, background: 'rgba(148,163,184,0.15)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', width: `${Math.round(importProgress * 100)}%`,
+                background: 'var(--accent-gradient)', transition: 'width 0.2s linear',
+              }} />
+            </div>
+          )}
+        </div>
+
+        {importError && (
+          <div style={{ marginTop: 14, padding: 12, borderRadius: 8, fontSize: 13, color: '#fca5a5', background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.2)' }}>
+            {importError}
+          </div>
+        )}
+
+        {importResult && (
+          <div style={{ marginTop: 14, padding: 14, borderRadius: 10, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#34d399', marginBottom: 8 }}>
+              <CheckIcon /> Imported {importResult.events_stored} events
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {Object.entries(importResult.sources || {}).map(([source, count]) => (
+                <Badge key={source} variant="indigo">{source.replace(/_/g, ' ')}: {count}</Badge>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
+              {importResult.events_found} found in file
+              {importResult.duplicates_removed > 0 && ` · ${importResult.duplicates_removed} duplicates skipped`}
+              {importResult.identity_version != null && ` · identity now v${importResult.identity_version}`}
+              {importResult.truncated && ' · truncated at the per-import limit — upload again to continue'}
+            </div>
+            <button
+              onClick={() => navigate('/report')}
+              className="btn-3d"
+              style={{
+                marginTop: 12, padding: '8px 16px', borderRadius: 9,
+                background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)',
+                color: '#a5b4fc', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              See what changed →
+            </button>
+          </div>
+        )}
+      </GlassCard>
 
       {/* The real pipeline stages */}
       <GlassCard gradient>

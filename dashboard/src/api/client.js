@@ -242,6 +242,25 @@ export const api = {
     return data;
   },
 
+  // === Data export import (Instagram DYI / Google Takeout) ===
+  importArchive: async (fileObj, userId = activeUser(), onProgress) => {
+    const form = new FormData();
+    form.append('file', fileObj);
+    form.append('user_id', userId);
+    // Content-Type is deliberately NOT set: the browser has to add the
+    // multipart boundary itself, and supplying the header without one makes
+    // the request unparseable server-side.
+    const { data } = await client.post('/import/archive', form, {
+      // A full export runs to tens of thousands of events and every one goes
+      // through the real pipeline, so this legitimately outlives the default.
+      timeout: 15 * 60 * 1000,
+      onUploadProgress: onProgress
+        ? (e) => onProgress(e.total ? e.loaded / e.total : 0)
+        : undefined,
+    });
+    return data;
+  },
+
   // === Search ===
   search: async (q, limit = 20) => {
     const { data } = await client.get('/search', { params: { q, limit } });

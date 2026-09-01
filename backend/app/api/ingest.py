@@ -13,7 +13,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from app.api.deps import enforce_write_match
@@ -31,6 +31,7 @@ from app.services import (
     rl_layer,
 )
 from app.services.persona_adapter import identity_to_persona
+from app.services import archive_import
 from app.db.postgres import fetchrow, execute
 from backend.providers import get_provider_manager
 
@@ -538,3 +539,81 @@ def _empty_persona() -> Dict[str, Any]:
         "recommendations": [],
         "confidence": 0,
     }
+
+
+class ArchiveImportResponse(BaseModel):
+    success: bool
+    events_found: int
+    events_stored: int
+    sources: Dict[str, int] = Field(default_factory=dict)
+    duplicates_removed: int = 0
+    skipped_files: int = 0
+    truncated: bool = False
+    identity_version: Optional[int] = None
+    confidence: Optional[float] = None
+    message: str
+
+
+@router.post("/import/archive", response_model=ArchiveImportResponse)
+async def import_archive(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    user_id: str = Form("default"),
+    authorization: Optional[str] = Header(default=None),
+):
+    """Import an official platform data export (Instagram DYI / Google Takeout).
+
+    Deliberately delegates to ingest_events rather than driving the pipeline
+    itself: a second ingestion path would be a second place for enrichment,
+    embedding, identity evolution and RL to drift out of step. Everything this
+    endpoint does is parse bytes into the same EventItem list the extension
+    posts.
+    """
+    enforce_write_match(authorization, user_id)
+
+    raw = await file.read()
+    try:
+        parsed = archive_import.parse_archive(raw, file.filename or "export.zip")
+    except archive_import.ArchiveImportError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Archive import failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=400, detail=f"Could not read this export: {e}")
+
+    events = parsed["events"]
+    if not events:
+        # A specific, actionable message. "No events found" alone leaves the
+        # user with no idea whether they uploaded the wrong file or the right
+        # file from an unsupported vintage.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No supported activity found in this file "
+                f"({parsed['skipped_files']} JSON files inspected). Expected an "
+                f"Instagram 'Download your information' export in JSON format, "
+                f"or a Google Takeout YouTube watch-history.json."
+            ),
+        )
+
+    result = await ingest_events(
+        IngestRequest(user_id=user_id, events=[EventItem(**e) for e in events]),
+        background_tasks,
+        authorization=authorization,
+    )
+
+    return ArchiveImportResponse(
+        success=result.success,
+        events_found=len(events),
+        events_stored=result.events_stored,
+        sources=parsed["sources"],
+        duplicates_removed=parsed["duplicates_removed"],
+        skipped_files=parsed["skipped_files"],
+        truncated=parsed["truncated"],
+        identity_version=result.identity_version,
+        confidence=result.confidence,
+        message=(
+            f"Imported {result.events_stored} events from "
+            f"{', '.join(parsed['sources']) or 'export'}"
+            + (" (truncated at the per-import limit)" if parsed["truncated"] else "")
+        ),
+    )
