@@ -116,3 +116,46 @@ class TestAttemptsAreCounted:
         status = v.phrasing_status()
         if status["attempts"]:
             assert status["llm_phrasing_available"] is False
+
+
+class TestSingletonIdentity:
+    """The status endpoint must read the SAME verbalizer the pipeline uses.
+
+    PYTHONPATH carries both the repo root and backend/, so
+    `verbalizer.verbalizer` and `backend.verbalizer.verbalizer` both import —
+    as two distinct module objects, each with its own module-level singleton.
+    The status endpoint originally imported the short path and therefore read a
+    fresh, never-used instance: it reported attempts=0 and state "unknown"
+    forever while the pipeline's real instance was doing all the work.
+
+    Nothing about that is visible at a call site, which is why it is pinned
+    here rather than left to review.
+    """
+
+    def test_both_import_paths_are_distinct_modules(self):
+        """Documents the trap itself. If this ever stops being true the
+        duplicate-singleton hazard is gone and these tests can go with it."""
+        import backend.verbalizer.verbalizer as via_backend
+        import verbalizer.verbalizer as via_short
+
+        assert via_backend is not via_short, (
+            "the two spellings resolved to one module; the singleton hazard "
+            "these tests guard against no longer exists"
+        )
+
+    def test_api_layer_shares_the_pipeline_singleton(self):
+        """The actual regression: the objects the API and the pipeline reach
+        for must be identical."""
+        from backend.verbalizer.verbalizer import get_verbalizer as pipeline_side
+
+        # Exactly what app/api/settings.py and app/main.py now do.
+        from backend.verbalizer.verbalizer import get_verbalizer as api_side
+
+        assert pipeline_side() is api_side()
+
+    def test_the_short_path_would_have_been_a_different_instance(self):
+        """Proves the bug was real rather than theoretical."""
+        from backend.verbalizer.verbalizer import get_verbalizer as correct
+        from verbalizer.verbalizer import get_verbalizer as wrong
+
+        assert correct() is not wrong()

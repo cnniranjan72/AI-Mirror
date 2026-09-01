@@ -132,7 +132,10 @@ async def health_check():
     # NOT affect overall status — answers remain correct without it, they are
     # just phrased deterministically.
     try:
-        from verbalizer.verbalizer import get_verbalizer
+        # MUST be the `backend.` path — see the note in app/api/settings.py.
+        # Both spellings import successfully but are distinct module objects
+        # with distinct singletons, and the pipeline uses the `backend.` one.
+        from backend.verbalizer.verbalizer import get_verbalizer
         llm = get_verbalizer().phrasing_status()
     except Exception as e:
         llm = {"llm_phrasing_available": False, "disabled_reason": f"status unavailable: {e}"}

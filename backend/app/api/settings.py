@@ -57,7 +57,13 @@ async def llm_status():
     and the Chat page needs it to caption its own answers honestly for
     signed-out demo visitors too.
     """
-    from verbalizer.verbalizer import get_verbalizer
+    # MUST be the `backend.` path. Both `verbalizer.verbalizer` and
+    # `backend.verbalizer.verbalizer` import successfully here (PYTHONPATH
+    # carries the repo root AND backend/), but they are two distinct module
+    # objects with two distinct module-level singletons. Importing the short
+    # path gave this endpoint a fresh, never-used verbalizer, so it reported
+    # attempts=0 forever while the pipeline's real instance did the work.
+    from backend.verbalizer.verbalizer import get_verbalizer
 
     return get_verbalizer().phrasing_status()
 
