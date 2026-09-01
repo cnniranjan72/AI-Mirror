@@ -7,37 +7,83 @@ import {
   UploadIcon, BookIcon, CompassIcon, ClockIcon, NetworkIcon, DiaryIcon, TargetIcon, BuildingIcon
 } from '../../icons/icons'
 import { api, isAuthed, displayName } from '../../api/client'
+import { useMediaQuery } from '../../hooks/useMotion'
 import AuthModal from '../auth/AuthModal'
 
-const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
-  { path: '/import', label: 'Import', icon: UploadIcon },
-  { path: '/timeline', label: 'Timeline', icon: ClockIcon },
-  { path: '/graph', label: 'Knowledge Graph', icon: NetworkIcon },
-  { path: '/diary', label: 'Diary', icon: DiaryIcon },
-  { path: '/goals', label: 'Goals', icon: TargetIcon },
-  { path: '/org', label: 'Organization', icon: BuildingIcon },
-  { path: '/identity', label: 'Identity', icon: IdentityIcon },
-  { path: '/character', label: 'Character', icon: CpuIcon },
-  { path: '/memory', label: 'Memory', icon: MemoryIcon },
-  { path: '/evidence', label: 'Evidence', icon: EvidenceIcon },
-  { path: '/behavior', label: 'Behavior', icon: BehaviorIcon },
-  { path: '/planning', label: 'Planning', icon: PlanningIcon },
-  { path: '/decision', label: 'Decision', icon: DecisionIcon },
-  { path: '/learning', label: 'Learning', icon: ZapIcon },
-  { path: '/guardian', label: 'Guardian', icon: AlertIcon },
-  { path: '/report', label: 'Report', icon: BookIcon },
-  { path: '/insights', label: 'Insights Export', icon: DownloadIcon },
-  { path: '/pipeline', label: 'Pipeline', icon: PipelineIcon },
-  { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
-  { path: '/chat', label: 'Chat', icon: ChatIcon },
-  { path: '/guide', label: 'Guide', icon: CompassIcon },
-  { path: '/documentation', label: 'Documentation', icon: BookIcon },
-  { path: '/settings', label: 'Settings', icon: SettingsIcon },
+/**
+ * Navigation grouped by what the user is trying to DO, not by which service
+ * happens to serve it. Twenty-four destinations in one flat list is a wall:
+ * everything looks equally important, so nothing is findable without reading
+ * all of it. The groups below are the product's actual mental model —
+ * get data in, understand the twin, see how it reasons, look after yourself,
+ * take something away, then the machinery underneath.
+ */
+const navSections = [
+  {
+    label: 'Overview',
+    items: [
+      { path: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
+      { path: '/import', label: 'Import', icon: UploadIcon },
+      { path: '/timeline', label: 'Timeline', icon: ClockIcon },
+    ],
+  },
+  {
+    label: 'Your twin',
+    items: [
+      { path: '/identity', label: 'Identity', icon: IdentityIcon },
+      { path: '/character', label: 'Character', icon: CpuIcon },
+      { path: '/behavior', label: 'Behavior', icon: BehaviorIcon },
+      { path: '/memory', label: 'Memory', icon: MemoryIcon },
+      { path: '/graph', label: 'Knowledge Graph', icon: NetworkIcon },
+      { path: '/diary', label: 'Diary', icon: DiaryIcon },
+    ],
+  },
+  {
+    label: 'Reasoning',
+    items: [
+      { path: '/evidence', label: 'Evidence', icon: EvidenceIcon },
+      { path: '/planning', label: 'Planning', icon: PlanningIcon },
+      { path: '/decision', label: 'Decision', icon: DecisionIcon },
+      { path: '/learning', label: 'Learning', icon: ZapIcon },
+      { path: '/pipeline', label: 'Pipeline', icon: PipelineIcon },
+    ],
+  },
+  {
+    label: 'Act on it',
+    items: [
+      { path: '/chat', label: 'Chat', icon: ChatIcon },
+      { path: '/goals', label: 'Goals', icon: TargetIcon },
+      { path: '/guardian', label: 'Guardian', icon: AlertIcon },
+    ],
+  },
+  {
+    label: 'Share & export',
+    items: [
+      { path: '/report', label: 'Report', icon: BookIcon },
+      { path: '/insights', label: 'Insights Export', icon: DownloadIcon },
+      { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
+      { path: '/org', label: 'Organization', icon: BuildingIcon },
+    ],
+  },
+  {
+    label: 'Help & system',
+    items: [
+      { path: '/guide', label: 'Guide', icon: CompassIcon },
+      { path: '/documentation', label: 'Documentation', icon: BookIcon },
+      { path: '/settings', label: 'Settings', icon: SettingsIcon },
+    ],
+  },
 ]
 
-export default function Sidebar({ collapsed, onToggle }) {
+// Flat view, still needed by the command palette's filter.
+const navItems = navSections.flatMap(s => s.items)
+
+export default function Sidebar({ collapsed, onToggle, mobileOpen = false, onCloseMobile }) {
   const navigate = useNavigate()
+  // Below this width the rail becomes an overlay drawer. That is a behaviour
+  // change (it traps focus-adjacent interaction and closes on navigate), not a
+  // styling one, so it branches in JS rather than in a media query.
+  const isMobile = useMediaQuery('(max-width: 900px)')
   const [authOpen, setAuthOpen] = useState(false)
   const authed = isAuthed()
   const name = displayName()
@@ -105,6 +151,74 @@ export default function Sidebar({ collapsed, onToggle }) {
     setCmdQuery('')
   }
 
+  // One nav row. Extracted when the flat list became sections so the row's
+  // active rail, icon and Guardian alert badge are defined once rather than
+  // duplicated per group.
+  const renderNavItem = (item) => {
+    const Icon = item.icon
+    const alerts = item.path === '/guardian' ? guardianAlertCount : 0
+    return (
+      <NavLink
+        key={item.path}
+        to={item.path}
+        end={item.path === '/dashboard'}
+        // On mobile the rail is an overlay covering the page; leaving it open
+        // after a tap would hide the page the tap just navigated to.
+        onClick={() => { if (isMobile && onCloseMobile) onCloseMobile() }}
+        className={({ isActive }) => `aim-nav-item${isActive ? ' active' : ''}`}
+        style={({ isActive }) => ({
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: collapsed ? '10px 0' : '10px 12px',
+          marginBottom: 2,
+          borderRadius: 8,
+          textDecoration: 'none',
+          fontSize: 14, fontWeight: isActive ? 600 : 500,
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          position: 'relative',
+        })}
+      >
+        {({ isActive }) => (
+          <>
+            {isActive && !collapsed && (
+              <div style={{
+                position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+                width: 3, height: 20, borderRadius: '0 3px 3px 0',
+                background: 'var(--accent-gradient-aurora)', backgroundSize: '200% auto',
+                boxShadow: '0 0 8px rgba(99,102,241,0.6)',
+              }} />
+            )}
+            <div style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
+              <Icon />
+              {alerts > 0 && (
+                <div className="animate-pulse" style={{
+                  position: 'absolute', top: -4, right: collapsed ? -4 : -6,
+                  minWidth: 14, height: 14, borderRadius: 7, padding: '0 3px',
+                  background: '#f43f5e', color: 'white', fontSize: 9, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '1.5px solid rgba(15,23,42,0.85)',
+                  boxShadow: '0 0 8px rgba(244,63,94,0.5)',
+                }}>
+                  {alerts > 9 ? '9+' : alerts}
+                </div>
+              )}
+            </div>
+            {!collapsed && <span>{item.label}</span>}
+            {!collapsed && alerts > 0 && (
+              <div className="animate-pulse" style={{
+                marginLeft: 'auto', minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
+                background: '#f43f5e', color: 'white', fontSize: 10, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 8px rgba(244,63,94,0.5)',
+              }}>
+                {alerts > 9 ? '9+' : alerts}
+              </div>
+            )}
+          </>
+        )}
+      </NavLink>
+    )
+  }
+
   const handleSearchNav = (result) => {
     navigate(result.url || `/${result.type}?id=${result.id}`)
     setCmdOpen(false)
@@ -113,8 +227,28 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <>
+      {/* Backdrop for the mobile drawer. Also the dismiss target — a drawer
+          with no way out but the toggle is a trap on a phone. */}
+      {isMobile && mobileOpen && (
+        <div
+          onClick={onCloseMobile}
+          aria-hidden="true"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 99,
+            background: 'rgba(2,6,23,0.6)', backdropFilter: 'blur(4px)',
+            WebkitBackdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.2s ease-out both',
+          }}
+        />
+      )}
+
       <aside style={{
-        width: collapsed ? 'var(--sidebar-collapsed)' : 'var(--sidebar-width)',
+        // Mobile gets a fixed-width overlay drawer instead of a rail that
+        // reserves layout space. Previously the mobile breakpoint set
+        // --sidebar-width to 0, which hid the sidebar with nothing to open it —
+        // the app simply had no navigation below 768px.
+        width: isMobile ? 280 : (collapsed ? 'var(--sidebar-collapsed)' : 'var(--sidebar-width)'),
+        transform: isMobile && !mobileOpen ? 'translateX(-100%)' : 'translateX(0)',
         height: '100vh', position: 'fixed', top: 0, left: 0,
         // Slightly translucent over a vertical wash, so the ambient WebGL
         // field reads faintly through the rail instead of the sidebar being a
@@ -127,7 +261,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         // suggest the surface has thickness.
         boxShadow: 'inset -1px 0 0 rgba(148,163,184,0.06), 8px 0 40px -20px rgba(2,6,23,0.9)',
         display: 'flex', flexDirection: 'column',
-        transition: 'width 0.3s cubic-bezier(0.16,1,0.3,1)',
+        transition: 'width 0.3s cubic-bezier(0.16,1,0.3,1), transform 0.3s cubic-bezier(0.16,1,0.3,1)',
         zIndex: 100, overflow: 'hidden',
       }}>
         {/* Accent seam running down the rail's outer edge. */}
@@ -181,66 +315,28 @@ export default function Sidebar({ collapsed, onToggle }) {
 
         {/* Navigation */}
         <nav style={{ flex: 1, overflow: 'hidden auto', padding: collapsed ? '8px 0' : '8px 12px' }}>
-          {navItems.map((item, i) => {
-            const Icon = item.icon
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                end={item.path === '/dashboard'}
-                className={({ isActive }) => `aim-nav-item${isActive ? ' active' : ''}`}
-                style={({ isActive }) => ({
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: collapsed ? '10px 0' : '10px 12px',
-                  marginBottom: 2,
-                  borderRadius: 8,
-                  textDecoration: 'none',
-                  fontSize: 14, fontWeight: isActive ? 600 : 500,
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  position: 'relative',
-                })}
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && !collapsed && (
-                      <div style={{
-                        position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                        width: 3, height: 20, borderRadius: '0 3px 3px 0',
-                        background: 'var(--accent-gradient-aurora)', backgroundSize: '200% auto',
-                        boxShadow: '0 0 8px rgba(99,102,241,0.6)',
-                      }} />
-                    )}
-                    <div style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-                      <Icon />
-                      {item.path === '/guardian' && guardianAlertCount > 0 && (
-                        <div className="animate-pulse" style={{
-                          position: 'absolute', top: -4, right: collapsed ? -4 : -6,
-                          minWidth: 14, height: 14, borderRadius: 7, padding: '0 3px',
-                          background: '#f43f5e', color: 'white', fontSize: 9, fontWeight: 700,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          border: '1.5px solid rgba(15,23,42,0.85)',
-                          boxShadow: '0 0 8px rgba(244,63,94,0.5)',
-                        }}>
-                          {guardianAlertCount > 9 ? '9+' : guardianAlertCount}
-                        </div>
-                      )}
-                    </div>
-                    {!collapsed && <span>{item.label}</span>}
-                    {!collapsed && item.path === '/guardian' && guardianAlertCount > 0 && (
-                      <div className="animate-pulse" style={{
-                        marginLeft: 'auto', minWidth: 18, height: 18, borderRadius: 9, padding: '0 5px',
-                        background: '#f43f5e', color: 'white', fontSize: 10, fontWeight: 700,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        boxShadow: '0 0 8px rgba(244,63,94,0.5)',
-                      }}>
-                        {guardianAlertCount > 9 ? '9+' : guardianAlertCount}
-                      </div>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            )
-          })}
+          {navSections.map((section, si) => (
+            <div key={section.label} style={{ marginBottom: collapsed ? 6 : 14 }}>
+              {/* Section labels are the whole point of the grouping, but they
+                  are pure text — in the collapsed icon-only rail they would be
+                  noise, so a hairline stands in for the break instead. */}
+              {!collapsed ? (
+                <div style={{
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+                  textTransform: 'uppercase', color: 'var(--text-muted)',
+                  padding: '6px 12px 6px', opacity: 0.75,
+                }}>
+                  {section.label}
+                </div>
+              ) : si > 0 ? (
+                <div aria-hidden="true" style={{
+                  height: 1, margin: '8px 16px',
+                  background: 'linear-gradient(90deg, transparent, rgba(148,163,184,0.18), transparent)',
+                }} />
+              ) : null}
+              {section.items.map(item => renderNavItem(item))}
+            </div>
+          ))}
         </nav>
 
         {/* User / auth */}
@@ -278,7 +374,10 @@ export default function Sidebar({ collapsed, onToggle }) {
           )}
         </div>
 
-        {/* Collapse toggle */}
+        {/* Collapse toggle — desktop only. Collapsing an overlay drawer to an
+            icon rail makes no sense on a phone; there, closing it is the
+            equivalent gesture and the backdrop already provides it. */}
+        {!isMobile && (
         <div style={{ padding: collapsed ? '8px 0' : '8px 12px', borderTop: '1px solid var(--border-subtle)' }}>
           <button
             onClick={onToggle}
@@ -296,6 +395,7 @@ export default function Sidebar({ collapsed, onToggle }) {
             {!collapsed && <span>Collapse</span>}
           </button>
         </div>
+        )}
       </aside>
 
       {/* Auth */}

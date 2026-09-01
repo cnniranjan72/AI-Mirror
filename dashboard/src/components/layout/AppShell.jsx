@@ -7,6 +7,7 @@ import ErrorBoundary from '../ErrorBoundary'
 import LoadingSkeleton from '../ui/LoadingSkeleton'
 import SetupToast from '../ui/SetupToast'
 import { isAuthed } from '../../api/client'
+import { useMediaQuery } from '../../hooks/useMotion'
 
 // Lazy-loaded so each route's code (and the vendor chunks it pulls in —
 // three.js/drei/react-force-graph-3d/recharts) ships only when that route is
@@ -56,7 +57,11 @@ const PageLoading = () => (
 
 export default function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
-  const sidebarWidth = collapsed ? 'var(--sidebar-collapsed)' : 'var(--sidebar-width)'
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const isMobile = useMediaQuery('(max-width: 900px)')
+  // On mobile the sidebar floats over the page, so the content must not
+  // reserve a gutter for it.
+  const sidebarWidth = isMobile ? 0 : (collapsed ? 'var(--sidebar-collapsed)' : 'var(--sidebar-width)')
   const location = useLocation()
 
   // "/" is the public entry point — a first-time visitor with no account has
@@ -111,7 +116,12 @@ export default function AppShell() {
         <View.Port />
       </Canvas>
 
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
+      <Sidebar
+        collapsed={collapsed}
+        onToggle={() => setCollapsed(c => !c)}
+        mobileOpen={mobileNavOpen}
+        onCloseMobile={() => setMobileNavOpen(false)}
+      />
 
       <main style={{
         marginLeft: sidebarWidth,
@@ -120,9 +130,49 @@ export default function AppShell() {
         transition: 'margin-left 0.3s cubic-bezier(0.16,1,0.3,1)',
         display: 'flex', flexDirection: 'column',
       }}>
+        {/* Mobile top bar. Without it there is no way to reach navigation at
+            all below 900px — the drawer has no trigger. */}
+        {isMobile && (
+          <div style={{
+            position: 'sticky', top: 0, zIndex: 90,
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 16px',
+            background: 'rgba(15,23,42,0.86)',
+            backdropFilter: 'blur(20px) saturate(1.5)',
+            WebkitBackdropFilter: 'blur(20px) saturate(1.5)',
+            borderBottom: '1px solid var(--border-subtle)',
+          }}>
+            <button
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation"
+              aria-expanded={mobileNavOpen}
+              className="btn-3d"
+              style={{
+                width: 40, height: 40, borderRadius: 11, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--bg-surface)', border: '1px solid var(--border-strong)',
+                color: 'var(--text-secondary)', cursor: 'pointer',
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </button>
+            <div className="aim-brand-mark" style={{
+              width: 30, height: 30, borderRadius: 9,
+              background: 'var(--accent-gradient-aurora)', backgroundSize: '200% auto',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 14, fontWeight: 800, color: 'white', flexShrink: 0,
+            }}>A</div>
+            <span className="gradient-text" style={{ fontSize: 16, fontWeight: 800 }}>AIMirror</span>
+          </div>
+        )}
+
         <div style={{
           flex: 1,
-          padding: '32px',
+          padding: isMobile ? '20px 16px' : '32px',
           maxWidth: 1440,
           width: '100%',
           margin: '0 auto',

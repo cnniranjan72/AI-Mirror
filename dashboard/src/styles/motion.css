@@ -38,10 +38,13 @@
    reached rather than all at once during the first paint. */
 .reveal {
   opacity: 0;
-  transform: translate3d(0, 22px, 0);
+  transform: translate3d(0, 18px, 0);
+  /* 620ms was long enough that a fast scroll could arrive mid-fade and read
+     as blank space. Content entrances buy their character from the easing,
+     not from duration. */
   transition:
-    opacity var(--dur-slow) var(--ease-swift),
-    transform var(--dur-slow) var(--ease-swift);
+    opacity var(--dur-base) var(--ease-swift),
+    transform 420ms var(--ease-swift);
   transition-delay: var(--reveal-delay, 0ms);
   will-change: opacity, transform;
 }
@@ -52,7 +55,7 @@
 .reveal-right { transform: translate3d(28px, 0, 0); }
 .reveal-scale { transform: scale(0.94); }
 /* A reveal that arrives out of depth — the page's signature entrance. */
-.reveal-depth { transform: perspective(1000px) translate3d(0, 30px, -120px) rotateX(9deg); }
+.reveal-depth { transform: perspective(1000px) translate3d(0, 22px, -70px) rotateX(6deg); }
 .reveal-blur  { filter: blur(10px); transition-property: opacity, transform, filter; }
 .reveal-blur.is-in { filter: blur(0); }
 

@@ -56,7 +56,12 @@ export function useDeviceTier() {
  * these drive entrance animations — re-triggering on every scroll-by makes a
  * long page feel like it's flickering rather than arriving.
  */
-export function useInView({ threshold = 0.15, rootMargin = '0px 0px -60px 0px', once = true } = {}) {
+// Positive bottom margin, so the observer fires while the element is still
+// BELOW the fold and it has finished animating by the time it's scrolled to.
+// A negative margin (wait until it's 60px inside the viewport) meant a fast
+// scroll landed on content that was still at opacity 0 — the section read as
+// missing rather than as arriving.
+export function useInView({ threshold = 0, rootMargin = '0px 0px 20% 0px', once = true } = {}) {
   const ref = useRef(null)
   const [inView, setInView] = useState(false)
 
@@ -262,6 +267,33 @@ export function useTilt({ max = 9, scale = 1.015, glare = true, disabled = false
   }, [apply, max, reduced, disabled])
 
   return ref
+}
+
+/**
+ * Live media-query match. Layout that has to branch in JS (the sidebar is a
+ * fixed rail on desktop and an overlay drawer on mobile — a difference in
+ * behaviour, not just in styling) reads from here rather than duplicating
+ * breakpoints in CSS and hoping the two stay in sync.
+ */
+export function useMediaQuery(query) {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia(query).matches
+      : false
+  )
+
+  useEffect(() => {
+    if (!window.matchMedia) return
+    const mq = window.matchMedia(query)
+    const onChange = (e) => setMatches(e.matches)
+    setMatches(mq.matches)
+    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange)
+    return () => {
+      mq.removeEventListener ? mq.removeEventListener('change', onChange) : mq.removeListener(onChange)
+    }
+  }, [query])
+
+  return matches
 }
 
 /**
