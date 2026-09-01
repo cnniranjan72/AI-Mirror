@@ -172,7 +172,15 @@ QUERY_LIMITER = TokenBucketLimiter(capacity=30, per_seconds=60, name="query")
 # Seeding fabricates a whole dataset and runs it through the pipeline.
 SEED_LIMITER = TokenBucketLimiter(capacity=5, per_seconds=3600, name="seed")
 
+# RL feedback is cheap to serve but writes to the ONE policy table shared by
+# every user, so the cost of abuse is not compute — it is the model everyone
+# gets. Authentication already keeps anonymous callers from applying anything;
+# this bounds how fast a signed-in account can push the shared Q-values, and
+# how fast anyone can spend database round-trips finding that out.
+FEEDBACK_LIMITER = TokenBucketLimiter(capacity=60, per_seconds=3600, name="feedback")
+
 import_rate_limit = RateLimit(IMPORT_LIMITER)
 ingest_rate_limit = RateLimit(INGEST_LIMITER)
 query_rate_limit = RateLimit(QUERY_LIMITER)
 seed_rate_limit = RateLimit(SEED_LIMITER)
+feedback_rate_limit = RateLimit(FEEDBACK_LIMITER)

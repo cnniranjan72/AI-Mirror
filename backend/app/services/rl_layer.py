@@ -104,6 +104,18 @@ def context_key(alignment: Dict[str, Any]) -> str:
     return f"weak_{weakest}"
 
 
+# The complete set of contexts this function can ever produce. Derived from
+# ALIGNMENT_DIMENSIONS rather than written out, so adding a dimension cannot
+# leave the two definitions disagreeing.
+#
+# It exists because rl_policy is keyed on (context_key, action_id) with no
+# user_id — one shared table for the whole service — and /rl/feedback took
+# context_key as a free-form string straight from the request body. Any value
+# inserted a new row, so a loop over random strings grew a shared table
+# without limit.
+VALID_CONTEXT_KEYS = frozenset({"unknown"} | {f"weak_{d}" for d in ALIGNMENT_DIMENSIONS})
+
+
 # ── Policy store (Q-values) ───────────────────────────────────────────────────
 
 async def _q_for_context(context: str) -> Dict[str, float]:

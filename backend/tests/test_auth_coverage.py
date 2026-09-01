@@ -17,6 +17,13 @@ be broken:
 The second is the nastier one: the enforcement call is right there in the
 source, so it reads as correct and passes any grep-based audit.
 
+What this CANNOT see: an endpoint that takes no user_id at all because the
+data it touches belongs to everyone. POST /rl/feedback was exactly that — it
+wrote to rl_policy, a table keyed on (context_key, action_id) and shared by
+every user, so nothing here flagged it and it went unauthenticated. That was
+found by probing the live service, not by this file. Shared-state writes need
+their own gate; see tests/test_rl_feedback_integrity.py.
+
 No database, no network — the route table and the AST are enough.
 """
 import ast

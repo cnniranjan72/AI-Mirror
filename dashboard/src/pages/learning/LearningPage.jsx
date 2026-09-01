@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApi } from '../../hooks/useApi'
-import { api } from '../../api/client'
+import { api, isAuthed } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import StatCard from '../../components/ui/StatCard'
 import Badge from '../../components/ui/Badge'
@@ -33,6 +33,11 @@ export default function LearningPage() {
   const { data: policy, loading, error, refetch } = useApi(() => api.getRlPolicy(), [])
   const { data: history } = useApi(() => api.getRlHistory(), [])
   const [busy, setBusy] = useState(null)
+  // The policy is shared by every user, so the server only applies ratings
+  // from a signed-in caller. It reports that back; surface it rather than
+  // letting the click look like it worked.
+  const [notice, setNotice] = useState(null)
+  const canTrain = isAuthed()
 
   const rows = Array.isArray(policy) ? policy : []
   const hist = Array.isArray(history) ? history : []
@@ -47,8 +52,21 @@ export default function LearningPage() {
 
   const sendFeedback = async (ctx, action, reward) => {
     setBusy(`${ctx}:${action}:${reward}`)
-    try { await api.sendRlFeedback(ctx, action, reward); await refetch() }
-    finally { setBusy(null) }
+    try {
+      const res = await api.sendRlFeedback(ctx, action, reward)
+      if (res && res.applied === false) {
+        setNotice(res.reason || 'Sign in to train the shared model.')
+      } else {
+        setNotice(null)
+        await refetch()
+      }
+    } catch (e) {
+      setNotice(
+        e?.response?.status === 429
+          ? 'Too many ratings for now — the shared policy is rate limited. Try again later.'
+          : 'Could not record that rating.'
+      )
+    } finally { setBusy(null) }
   }
 
   return (
@@ -64,6 +82,39 @@ export default function LearningPage() {
           </p>
         </div>
       </div>
+
+      {(notice || !canTrain) && (
+        <div
+          role="status"
+          style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            padding: '10px 14px', marginBottom: 20, borderRadius: 10,
+            border: '1px solid rgba(148,163,184,0.25)',
+            background: 'rgba(148,163,184,0.08)',
+            color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.5,
+          }}
+        >
+          <span aria-hidden="true" style={{ flexShrink: 0 }}>&#9432;</span>
+          <span>
+            {notice || (
+              <>
+                This policy is <strong>shared by every user</strong>, so ratings are only
+                applied when you&rsquo;re signed in. You can still browse it.
+              </>
+            )}
+          </span>
+          {notice && (
+            <button
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss"
+              style={{
+                marginLeft: 'auto', background: 'none', border: 'none',
+                color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: 15, lineHeight: 1,
+              }}
+            >&times;</button>
+          )}
+        </div>
+      )}
 
       <AsyncState loading={loading} error={error} onRetry={refetch}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
