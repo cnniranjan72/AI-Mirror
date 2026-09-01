@@ -7,6 +7,7 @@ Architecture V3 — FROZEN
 No redesign. No new abstractions. Integration only.
 """
 import json
+import os
 import uuid
 import logging
 from typing import List, Optional, Dict, Any
@@ -371,12 +372,27 @@ class V3Pipeline:
         """Step 4: Construct or evolve identity"""
         try:
             if existing_identity:
+                # Drift is measured against the last snapshot that actually
+                # made it to storage, and a snapshot is forced when the newest
+                # one is older than the max age — so the history gets periodic
+                # anchors even for an identity that never moves much.
+                baseline_snapshot, snapshot_age_hours = await self._load_baseline_snapshot(
+                    existing_identity.identity_id
+                )
+                max_age = float(os.getenv("SNAPSHOT_MAX_AGE_HOURS", "24"))
+                force_snapshot = (
+                    baseline_snapshot is None
+                    or (snapshot_age_hours is not None and snapshot_age_hours >= max_age)
+                )
+
                 identity, snapshot, evolution = self.evolution_engine.evolve_identity(
                     identity=existing_identity,
                     new_behaviors=behavior_objects,
                     new_inferences=inferences,
                     new_evidence=evidence,
-                    evolution=existing_evolution
+                    evolution=existing_evolution,
+                    baseline_snapshot=baseline_snapshot,
+                    force_snapshot=force_snapshot,
                 )
             else:
                 identity = self.identity_engine.construct_identity(
@@ -666,8 +682,9 @@ class V3Pipeline:
                         source_behavior_objects = $17::jsonb,
                         source_inferences = $18::jsonb,
                         source_evidence = $19::jsonb,
+                        metadata = $20::jsonb,
                         updated_at = NOW()
-                    WHERE identity_id = $20
+                    WHERE identity_id = $21
                     """,
                     json.dumps(identity.behavior_profile.dict(), default=str),
                     json.dumps(identity.interest_graph.dict(), default=str),
@@ -688,6 +705,12 @@ class V3Pipeline:
                     json.dumps(identity.source_behavior_objects),
                     json.dumps(identity.source_inferences),
                     json.dumps(identity.source_evidence, default=str),
+                    # Persisted so identity_shift / snapshot_threshold_exceeded
+                    # are inspectable in the database. They were computed and
+                    # used at runtime but never stored, which is precisely why
+                    # the snapshot gate's behaviour was invisible until someone
+                    # noticed the snapshot count had stopped moving.
+                    json.dumps(identity.metadata, default=str),
                     identity.identity_id
                 )
             else:
@@ -702,12 +725,12 @@ class V3Pipeline:
                         dominant_topics, emerging_topics, declining_topics,
                         overall_confidence, identity_completeness,
                         identity_version, source_behavior_objects,
-                        source_inferences, source_evidence
+                        source_inferences, source_evidence, metadata
                     ) VALUES ($1,$2,$3::jsonb,$4::jsonb,$5::jsonb,
                         $6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,
                         $10::jsonb,$11::jsonb,$12::jsonb,
                         $13::jsonb,$14::jsonb,$15::jsonb,
-                        $16,$17,$18,$19::jsonb,$20::jsonb,$21::jsonb)
+                        $16,$17,$18,$19::jsonb,$20::jsonb,$21::jsonb,$22::jsonb)
                     """,
                     identity.identity_id, identity.user_id,
                     json.dumps(identity.behavior_profile.dict(), default=str),
@@ -728,7 +751,8 @@ class V3Pipeline:
                     identity.identity_version,
                     json.dumps(identity.source_behavior_objects),
                     json.dumps(identity.source_inferences),
-                    json.dumps(identity.source_evidence)
+                    json.dumps(identity.source_evidence),
+                    json.dumps(identity.metadata, default=str)
                 )
         except Exception as e:
             logger.error(f"Error upserting identity: {str(e)}", exc_info=True)
@@ -761,6 +785,38 @@ class V3Pipeline:
             )
         except Exception as e:
             logger.error(f"Error inserting reflection: {str(e)}", exc_info=True)
+
+    async def _load_baseline_snapshot(self, identity_id: str):
+        """Latest persisted snapshot for an identity, plus its age in hours.
+
+        Returns (snapshot_or_None, age_hours_or_None). Failures degrade to
+        (None, None), which makes the caller force a snapshot — the safe
+        direction, since writing one extra row is far cheaper than silently
+        losing the identity's history.
+        """
+        try:
+            row = await fetchrow(
+                "SELECT snapshot_data, snapshot_timestamp FROM identity_snapshots "
+                "WHERE identity_id = $1 ORDER BY snapshot_timestamp DESC LIMIT 1",
+                identity_id,
+            )
+            if not row:
+                return None, None
+
+            raw = row["snapshot_data"]
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            snapshot = IdentitySnapshot(**data) if data else None
+
+            age_hours = None
+            ts = row["snapshot_timestamp"]
+            if ts is not None:
+                now = datetime.now(ts.tzinfo) if ts.tzinfo else datetime.utcnow()
+                age_hours = (now - ts).total_seconds() / 3600.0
+
+            return snapshot, age_hours
+        except Exception as e:
+            logger.warning("Could not load baseline snapshot for %s: %s", identity_id, e)
+            return None, None
 
     async def _insert_snapshot(self, snapshot: IdentitySnapshot):
         """Insert snapshot into database"""

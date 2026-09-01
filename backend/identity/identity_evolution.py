@@ -172,7 +172,9 @@ class IdentityEvolutionEngine:
         new_evidence: List[Evidence],
         reflections: Optional[List[ReflectionReference]] = None,
         goals: Optional[List[GoalReference]] = None,
-        evolution: Optional[IdentityEvolution] = None
+        evolution: Optional[IdentityEvolution] = None,
+        baseline_snapshot: Optional[IdentitySnapshot] = None,
+        force_snapshot: bool = False
     ) -> tuple[Identity, IdentitySnapshot, IdentityEvolution]:
         """
         Evolve identity with new data
@@ -185,7 +187,13 @@ class IdentityEvolutionEngine:
             reflections: Optional reflections
             goals: Optional goals
             evolution: Existing evolution record
-            
+            baseline_snapshot: The most recent PERSISTED snapshot, when one
+                exists. The Eq.2 shift is measured against this rather than
+                against the previous in-memory identity — see the note at the
+                threshold check below.
+            force_snapshot: Bypass the threshold entirely (used for the
+                time-based floor, so history keeps periodic anchors).
+
         Returns:
             Tuple of (updated_identity, new_snapshot, evolution_record)
         """
@@ -222,15 +230,42 @@ class IdentityEvolutionEngine:
             # Detect shifts
             shifts = self._detect_shifts(changes)
             
-            # Compute identity shift (Paper Eq. 2) — must diff against the
-            # pre-mutation snapshot, not `identity` (now the same object as
-            # updated_identity; see note above _detect_changes).
-            identity_shift = self._compute_identity_shift(old_identity_snapshot_for_diff, updated_identity)
+            # Compute identity shift (Paper Eq. 2).
+            #
+            # The baseline is the last PERSISTED snapshot, not the previous
+            # in-memory identity. Diffing consecutive states makes the gate
+            # measure "how much did this one ingest change things", which is
+            # the wrong question: an identity drifting 0.05 per ingest never
+            # trips a 0.15 threshold, so it can drift arbitrarily far while
+            # the stored history still shows only its very first snapshot.
+            # That is not hypothetical — it is what the production data looked
+            # like (identity at v4/confidence 0.48, sole snapshot v1/0.462,
+            # the gap widening with every ingest and no second snapshot ever
+            # written). Measuring against the last snapshot makes slow drift
+            # ACCUMULATE until it genuinely warrants a new one.
+            #
+            # Falling back to the pre-mutation identity keeps the first
+            # evolution after a fresh construct working before any snapshot
+            # has been stored. It must be the pre-mutation copy, not
+            # `identity`: construct_identity's evolve path mutates in place
+            # and returns the same object, so diffing against it is always 0.
+            shift_baseline = baseline_snapshot if baseline_snapshot is not None else old_identity_snapshot_for_diff
+            identity_shift = self._compute_identity_shift(shift_baseline, updated_identity)
             threshold_exceeded = identity_shift > self.config.get("snapshot_threshold", 0.15)
+
             updated_identity.metadata["identity_shift"] = identity_shift
-            updated_identity.metadata["snapshot_threshold_exceeded"] = threshold_exceeded
+            updated_identity.metadata["snapshot_threshold_exceeded"] = bool(threshold_exceeded or force_snapshot)
+            updated_identity.metadata["shift_baseline"] = (
+                "last_snapshot" if baseline_snapshot is not None else "previous_identity"
+            )
+            updated_identity.metadata["snapshot_forced_by_age"] = bool(force_snapshot and not threshold_exceeded)
+
             snapshot = self.snapshot_manager.create_snapshot(updated_identity)
-            logger.info(f"Snapshot created: identity_shift={identity_shift:.3f} (threshold_exceeded={threshold_exceeded})")
+            logger.info(
+                "Snapshot created: identity_shift=%.3f vs %s (threshold_exceeded=%s, forced_by_age=%s)",
+                identity_shift, updated_identity.metadata["shift_baseline"],
+                threshold_exceeded, updated_identity.metadata["snapshot_forced_by_age"],
+            )
             
             # Update or create evolution record
             if evolution is None:
@@ -435,53 +470,44 @@ class IdentityEvolutionEngine:
             logger.error(f"Error detecting shifts: {str(e)}", exc_info=True)
             return []
     
-    def _compute_identity_shift(self, old: Identity, new_id: Identity) -> float:
-        """Paper Eq. 2: compute ‖I_{t+1} - I_t‖₂"""
+    @staticmethod
+    def _identity_vector(obj) -> "list[float]":
+        """The 17 dimensions Eq. 2 measures, pulled off either an Identity or an
+        IdentitySnapshot. Both carry the same sub-profile objects (see
+        IdentitySnapshot.from_identity), so the shift can be measured against a
+        stored snapshot as well as against a live identity — which is what lets
+        drift be accumulated rather than only compared step to step."""
+        return [
+            obj.overall_confidence,
+            obj.identity_completeness,
+            obj.behavior_profile.avg_engagement_rate,
+            obj.behavior_profile.behavior_diversity,
+            obj.behavior_profile.behavior_stability,
+            obj.interest_graph.diversity_score,
+            obj.creator_graph.creator_diversity_score,
+            obj.creator_graph.dependence_score,
+            obj.learning_style.confidence,
+            obj.attention_profile.avg_attention_span,
+            obj.exploration_profile.novelty_seeking_score,
+            obj.exploration_profile.exploration_rate,
+            obj.consistency_profile.overall_consistency,
+            obj.habit_profile.routine_strength,
+            obj.motivation_signals.learning_motivation,
+            obj.motivation_signals.entertainment_seeking,
+            obj.motivation_signals.skill_building_intent,
+        ]
+
+    def _compute_identity_shift(self, old, new_id) -> float:
+        """Paper Eq. 2: compute ‖I_{t+1} - I_t‖₂.
+
+        `old` may be an Identity or an IdentitySnapshot — see _identity_vector.
+        """
         try:
             import numpy as np
 
-            old_vec = np.array([
-                old.overall_confidence,
-                old.identity_completeness,
-                old.behavior_profile.avg_engagement_rate,
-                old.behavior_profile.behavior_diversity,
-                old.behavior_profile.behavior_stability,
-                old.interest_graph.diversity_score,
-                old.creator_graph.creator_diversity_score,
-                old.creator_graph.dependence_score,
-                old.learning_style.confidence,
-                old.attention_profile.avg_attention_span,
-                old.exploration_profile.novelty_seeking_score,
-                old.exploration_profile.exploration_rate,
-                old.consistency_profile.overall_consistency,
-                old.habit_profile.routine_strength,
-                old.motivation_signals.learning_motivation,
-                old.motivation_signals.entertainment_seeking,
-                old.motivation_signals.skill_building_intent,
-            ])
-
-            new_vec = np.array([
-                new_id.overall_confidence,
-                new_id.identity_completeness,
-                new_id.behavior_profile.avg_engagement_rate,
-                new_id.behavior_profile.behavior_diversity,
-                new_id.behavior_profile.behavior_stability,
-                new_id.interest_graph.diversity_score,
-                new_id.creator_graph.creator_diversity_score,
-                new_id.creator_graph.dependence_score,
-                new_id.learning_style.confidence,
-                new_id.attention_profile.avg_attention_span,
-                new_id.exploration_profile.novelty_seeking_score,
-                new_id.exploration_profile.exploration_rate,
-                new_id.consistency_profile.overall_consistency,
-                new_id.habit_profile.routine_strength,
-                new_id.motivation_signals.learning_motivation,
-                new_id.motivation_signals.entertainment_seeking,
-                new_id.motivation_signals.skill_building_intent,
-            ])
-
-            shift = float(np.linalg.norm(new_vec - old_vec))
-            return min(1.0, shift)
+            return min(1.0, float(np.linalg.norm(
+                np.array(self._identity_vector(new_id)) - np.array(self._identity_vector(old))
+            )))
         except Exception as e:
             logger.warning(f"Error computing identity shift: {e}")
             return 0.0
