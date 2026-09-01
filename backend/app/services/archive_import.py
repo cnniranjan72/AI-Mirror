@@ -195,13 +195,74 @@ def _parse_instagram_engagement(payload: Dict[str, Any], flag: str) -> List[Dict
 # YouTube (Google Takeout)
 # --------------------------------------------------------------------------
 
+# "Searched for <term>" in Takeout's activity files. Localised exports use a
+# different verb, so the prefix is matched loosely and the term is whatever
+# follows it.
+_SEARCH_PREFIXES = ("searched for ", "searched ")
+
+
+def _search_platform(records: List[Any], source_file: str) -> str:
+    """Which product the searches belong to.
+
+    Takeout stamps each record with a "header" ("YouTube", "Search", ...), which
+    is far more reliable than the filename: YouTube's own history file is called
+    watch-history.json with no "youtube" anywhere in the path, so filename
+    matching alone labelled YouTube searches as generic Google ones.
+    """
+    for record in records[:20]:
+        if not isinstance(record, dict):
+            continue
+        header = (record.get("header") or "").strip().lower()
+        if "youtube" in header:
+            return "youtube"
+        if header in ("search", "google search", "google"):
+            return "google"
+
+    lowered = source_file.lower()
+    return "youtube" if "youtube" in lowered or "watch-history" in lowered else "google"
+
+
+def _parse_search_activity(records: List[Any], platform: str, source_file: str) -> List[Dict[str, Any]]:
+    """Search queries — the only strong evidence that the user went LOOKING
+    for something rather than being shown it.
+
+    This data was previously discarded: the watch-history parser skipped every
+    "Searched for …" record as not-behaviour, which is true — it is intent,
+    which is more valuable, and there was nowhere to put it.
+    """
+    signals: List[Dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        title = (record.get("title") or "").strip()
+        lowered = title.lower()
+        prefix = next((p for p in _SEARCH_PREFIXES if lowered.startswith(p)), None)
+        if not prefix:
+            continue
+
+        term = title[len(prefix):].strip()
+        if not term or len(term) > 200:
+            continue
+
+        when = _from_iso(record.get("time"))
+        signals.append({
+            "platform": platform,
+            "query": " ".join(term.lower().split()),
+            "raw_query": term,
+            "searched_at": when.isoformat() if when else None,
+            "source_file": source_file,
+        })
+    return signals
+
+
 def _parse_youtube_watch_history(records: List[Any]) -> List[Dict[str, Any]]:
     events: List[Dict[str, Any]] = []
     for record in records:
         if not isinstance(record, dict):
             continue
         # Takeout mixes YouTube and YouTube Music, and includes search activity
-        # in the same file shape. Only watch events are behaviour.
+        # in the same file shape. Only watch events are behaviour; searches are
+        # picked up separately by _parse_search_activity as intent signals.
         title = record.get("title") or ""
         if not title.lower().startswith("watched"):
             continue
@@ -420,6 +481,7 @@ def parse_archive(data: bytes, filename: str = "export.zip") -> Dict[str, Any]:
 
     events: List[Dict[str, Any]] = []
     claims: List[Dict[str, Any]] = []
+    searches: List[Dict[str, Any]] = []
     sources: Dict[str, int] = {}
     skipped = 0
     truncated = False
@@ -436,9 +498,19 @@ def parse_archive(data: bytes, filename: str = "export.zip") -> Dict[str, Any]:
                 sources[f"{platform}_ad_interests"] = sources.get(f"{platform}_ad_interests", 0) + len(found)
                 continue
 
+        # Activity files carry BOTH watch records and search records. The
+        # searches are extracted here rather than in the watch parser because
+        # they are a different kind of thing: intent, not behaviour.
+        if isinstance(payload, list):
+            platform = _search_platform(payload, member_name)
+            found_searches = _parse_search_activity(payload, platform, member_name)
+            if found_searches:
+                searches.extend(found_searches)
+                sources[f"{platform}_searches"] = sources.get(f"{platform}_searches", 0) + len(found_searches)
+
         kind, parsed = _classify_and_parse(member_name, payload)
         if not parsed:
-            if kind == "unknown":
+            if kind == "unknown" and not searches:
                 skipped += 1
             continue
 
@@ -480,9 +552,21 @@ def parse_archive(data: bytes, filename: str = "export.zip") -> Dict[str, Any]:
         seen_claims.add(key)
         deduped_claims.append(claim)
 
+    # The same query at the same instant is one signal; searching a term twice
+    # on different days is two, and both matter.
+    seen_searches = set()
+    deduped_searches = []
+    for signal in searches:
+        key = (signal["platform"], signal["query"], signal["searched_at"])
+        if key in seen_searches:
+            continue
+        seen_searches.add(key)
+        deduped_searches.append(signal)
+
     return {
         "events": deduped,
         "profile_claims": deduped_claims,
+        "search_signals": deduped_searches,
         "sources": sources,
         "skipped_files": skipped,
         "truncated": truncated,

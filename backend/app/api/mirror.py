@@ -11,7 +11,7 @@ from fastapi import APIRouter, Header, Query
 
 from app.api.deps import resolve_user_id
 from app.db.postgres import fetch, fetchrow
-from app.services import algorithmic_mirror
+from app.services import algorithmic_mirror, interest_provenance
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -66,3 +66,10 @@ async def mirror_claims(user_id: str = Query(default="default"), authorization: 
         resolved,
     )
     return {"user_id": resolved, "count": len(rows), "claims": [dict(r) for r in rows]}
+
+
+@router.get("/provenance/report")
+async def provenance_report(user_id: str = Query(default="default"), authorization: Optional[str] = Header(default=None)):
+    """Interest Provenance: for each topic, evidence of seeking vs exposure."""
+    resolved = await resolve_user_id(user_id=user_id, authorization=authorization)
+    return await interest_provenance.build_provenance_report(resolved)

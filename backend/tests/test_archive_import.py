@@ -98,16 +98,21 @@ class TestInstagram:
 class TestYouTube:
     def test_parses_watch_history(self):
         result = parse_archive(_zip({"watch-history.json": YT_WATCH_HISTORY}))
-        assert result["sources"] == {"youtube_watch_history": 1}
+        # The fixture also contains one search, which is now captured as an
+        # intent signal rather than discarded (see interest_provenance).
+        assert result["sources"]["youtube_watch_history"] == 1
+        assert result["sources"]["youtube_searches"] == 1
         event = result["events"][0]
         assert event["platform"] == "youtube"
         assert event["username"] == "Sentdex"
 
-    def test_ignores_search_activity(self):
-        """Takeout mixes searches into the same file; only watches are behaviour."""
+    def test_searches_never_become_behaviour_events(self):
+        """Takeout mixes searches into the same file. They must not be counted
+        as watching — they are intent, and are stored separately."""
         result = parse_archive(_zip({"watch-history.json": YT_WATCH_HISTORY}))
         assert len(result["events"]) == 1
         assert "Searched" not in result["events"][0]["caption"]
+        assert len(result["search_signals"]) == 1
 
     def test_video_title_survives_as_caption(self):
         # It is the only free text an export gives, and topic extraction has

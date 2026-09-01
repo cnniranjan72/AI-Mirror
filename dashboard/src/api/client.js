@@ -271,6 +271,11 @@ export const api = {
     return data;
   },
 
+  getProvenanceReport: async (userId = activeUser()) => {
+    const { data } = await client.get('/provenance/report', { params: { user_id: userId } });
+    return data;
+  },
+
   // === Search ===
   search: async (q, limit = 20) => {
     const { data } = await client.get('/search', { params: { q, limit } });

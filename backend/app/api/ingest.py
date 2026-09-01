@@ -550,6 +550,7 @@ class ArchiveImportResponse(BaseModel):
     skipped_files: int = 0
     truncated: bool = False
     profile_claims_imported: int = 0
+    search_signals_imported: int = 0
     identity_version: Optional[int] = None
     confidence: Optional[float] = None
     message: str
@@ -614,9 +615,37 @@ async def import_archive(
             # user's behavioural history.
             logger.error("Could not store profile claims: %s", e, exc_info=True)
 
+    # Search history: evidence the user went looking for something, which is
+    # the only strong intent signal available (see interest_provenance).
+    # Stored outside events on purpose — a query is not a content view.
+    searches = parsed.get("search_signals") or []
+    searches_stored = 0
+    for signal in searches:
+        try:
+            # The parser emits ISO strings so its output stays JSON-serialisable,
+            # but asyncpg type-checks the Python value against the column and
+            # rejects a str for timestamptz regardless of the ::timestamptz
+            # cast. Convert at the binding site.
+            raw_when = signal.get("searched_at")
+            when = datetime.fromisoformat(raw_when) if isinstance(raw_when, str) else raw_when
+
+            await db_execute(
+                """
+                INSERT INTO search_signals
+                    (user_id, platform, query, raw_query, searched_at, source_file)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                ON CONFLICT (user_id, platform, query, searched_at) DO NOTHING
+                """,
+                user_id, signal["platform"], signal["query"], signal["raw_query"],
+                when, signal.get("source_file"),
+            )
+            searches_stored += 1
+        except Exception as e:
+            logger.warning("Could not store search signal: %s", e)
+
     events = parsed["events"]
     if not events:
-        if claims_stored:
+        if claims_stored or searches_stored:
             # An ad-interests-only export is a legitimate upload: it is exactly
             # what someone auditing their profile would send.
             return ArchiveImportResponse(
@@ -624,7 +653,9 @@ async def import_archive(
                 sources=parsed["sources"], duplicates_removed=0,
                 skipped_files=parsed["skipped_files"], truncated=False,
                 profile_claims_imported=claims_stored,
-                message=f"Imported {claims_stored} platform ad-interest claims. "
+                search_signals_imported=searches_stored,
+                message=f"Imported {claims_stored} platform ad-interest claims "
+                        f"and {searches_stored} search signals. "
                         f"Open the Algorithmic Mirror to compare them against your behaviour.",
             )
         # A specific, actionable message. "No events found" alone leaves the
@@ -655,6 +686,7 @@ async def import_archive(
         skipped_files=parsed["skipped_files"],
         truncated=parsed["truncated"],
         profile_claims_imported=claims_stored,
+        search_signals_imported=searches_stored,
         identity_version=result.identity_version,
         confidence=result.confidence,
         message=(
