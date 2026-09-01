@@ -43,6 +43,16 @@ class CharacterContext(BaseModel):
     uncertainty_domains: List[str] = Field(default_factory=list)
     risk_flags: List[str] = Field(default_factory=list)
 
+    # Findings from the two audits, pre-computed by their own deterministic
+    # scorers and carried here as FACTS. The verbalizer may phrase them; it may
+    # never derive them. "You were fed this interest" is a conclusion with a
+    # measurement behind it, and letting a language model reach it on vibes
+    # would break the one guarantee this product makes.
+    # Each dict also carries its own reliability flag, so a thin account cannot
+    # have a verdict spoken about it in chat that the Report would withhold.
+    platform_audit: Dict[str, Any] = Field(default_factory=dict)
+    interest_provenance: Dict[str, Any] = Field(default_factory=dict)
+
     build_time_ms: float = 0.0
     citation_count: int = 0
 
@@ -82,6 +92,8 @@ class ContextBuilder:
         fused_evidence: Optional[FusedEvidence] = None,
         identity_snapshot: Optional[Dict[str, Any]] = None,
         self_model: Optional[Dict[str, Any]] = None,
+        platform_audit: Optional[Dict[str, Any]] = None,
+        interest_provenance: Optional[Dict[str, Any]] = None,
     ) -> CharacterContext:
         start = time.perf_counter()
 
@@ -160,6 +172,8 @@ class ContextBuilder:
             overall_confidence=float(overall_confidence) if overall_confidence else 0.0,
             uncertainty_domains=uncertainty_domains,
             risk_flags=character_plan.risk_flags,
+            platform_audit=platform_audit or {},
+            interest_provenance=interest_provenance or {},
         )
 
         elapsed = (time.perf_counter() - start) * 1000

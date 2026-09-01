@@ -17,42 +17,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _estimate_coverage(user_id: str) -> Optional[float]:
-    """Coverage on the same five signals the Report page discloses.
-
-    Recomputed here rather than read from the client so the verdict gate cannot
-    be lifted by a caller passing a flattering number.
-    """
-    try:
-        row = await fetchrow(
-            """
-            SELECT
-              (SELECT COUNT(*) FROM events            WHERE user_id = $1) AS events,
-              (SELECT COUNT(*) FROM behavior_objects  WHERE user_id = $1) AS topics,
-              (SELECT COUNT(*) FROM evidence          WHERE user_id = $1) AS evidence,
-              (SELECT COUNT(*) FROM inferences        WHERE user_id = $1) AS inferences,
-              (SELECT COUNT(*) FROM identity_snapshots WHERE user_id = $1) AS snapshots
-            """,
-            user_id,
-        )
-        if not row:
-            return None
-        targets = {"events": 200, "topics": 12, "evidence": 40, "inferences": 8, "snapshots": 5}
-        ratios = [min(1.0, (row[key] or 0) / target) for key, target in targets.items()]
-        return sum(ratios) / len(ratios)
-    except Exception as e:
-        # Coverage is a gate on how confidently the report speaks, so failing
-        # to compute it must make the report MORE cautious, not less: None
-        # marks the verdict unreliable downstream.
-        logger.warning("Could not estimate coverage for %s: %s", user_id, e)
-        return None
-
-
 @router.get("/mirror/report")
 async def mirror_report(user_id: str = Query(default="default"), authorization: Optional[str] = Header(default=None)):
     resolved = await resolve_user_id(user_id=user_id, authorization=authorization)
-    coverage = await _estimate_coverage(resolved)
-    return await algorithmic_mirror.build_mirror_report(resolved, coverage=coverage)
+    # coverage is computed inside the service, so every caller (chat included)
+    # is gated identically.
+    return await algorithmic_mirror.build_mirror_report(resolved)
 
 
 @router.get("/mirror/claims")

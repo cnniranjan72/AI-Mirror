@@ -184,6 +184,38 @@ def _match_claim(claim_label: str, behaviours: List[Dict[str, Any]]) -> Optional
     return best
 
 
+async def estimate_coverage(user_id: str) -> Optional[float]:
+    """Data coverage on the same five signals the Report page discloses.
+
+    Lives here rather than in the API layer because it gates whether this
+    module is entitled to render a verdict at all, and every caller needs the
+    same gate. Returns None if it cannot be computed, which callers must treat
+    as "not reliable" rather than "fine".
+    """
+    try:
+        from app.db.postgres import fetchrow
+
+        row = await fetchrow(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM events             WHERE user_id = $1) AS events,
+              (SELECT COUNT(*) FROM behavior_objects   WHERE user_id = $1) AS topics,
+              (SELECT COUNT(*) FROM evidence           WHERE user_id = $1) AS evidence,
+              (SELECT COUNT(*) FROM inferences         WHERE user_id = $1) AS inferences,
+              (SELECT COUNT(*) FROM identity_snapshots WHERE user_id = $1) AS snapshots
+            """,
+            user_id,
+        )
+        if not row:
+            return None
+        targets = {"events": 200, "topics": 12, "evidence": 40, "inferences": 8, "snapshots": 5}
+        ratios = [min(1.0, (row[k] or 0) / t) for k, t in targets.items()]
+        return sum(ratios) / len(ratios)
+    except Exception as e:
+        logger.warning("Could not estimate coverage for %s: %s", user_id, e)
+        return None
+
+
 async def build_mirror_report(user_id: str, coverage: Optional[float] = None) -> Dict[str, Any]:
     """Compare the platform's claims against the twin's evidence.
 
@@ -193,6 +225,13 @@ async def build_mirror_report(user_id: str, coverage: Optional[float] = None) ->
       not_comparable— the claim is not testable from content behaviour at all
       missed        — a well-evidenced interest the platform does not claim
     """
+    # `coverage=None` previously meant "assume this is fine", so any caller that
+    # forgot to pass it got verdict_reliable=True for free — chat would then
+    # state findings the Report deliberately withholds. None now means
+    # "measure it", and a coverage that cannot be measured is not sufficient.
+    if coverage is None:
+        coverage = await estimate_coverage(user_id)
+
     claims = await _load_claims(user_id)
     behaviours = await _load_behaviour(user_id)
 
@@ -295,7 +334,7 @@ async def build_mirror_report(user_id: str, coverage: Optional[float] = None) ->
     testable = len(corroborated) + len(unsupported)
     accuracy = (len(corroborated) / testable) if testable else None
 
-    sufficient = coverage is None or coverage >= MIN_COVERAGE_FOR_VERDICT
+    sufficient = coverage is not None and coverage >= MIN_COVERAGE_FOR_VERDICT
 
     return {
         "user_id": user_id,

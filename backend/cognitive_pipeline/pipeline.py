@@ -365,6 +365,12 @@ class CognitivePipeline:
             # not starved by the decision engine's fact-level filtering. The
             # decision-selected facts still drive the response claims via
             # filtered_fused below.
+            # The two audits, computed by their own deterministic scorers so the
+            # twin can discuss its own findings. Failures are swallowed: chat
+            # answering without the audit is a lesser harm than chat not
+            # answering at all, and both scorers already degrade internally.
+            platform_audit, interest_provenance = await self._load_audit_findings(user_id)
+
             ctx = self.context_builder.build(
                 user_id=user_id,
                 retrieval_result=retrieval_result,
@@ -372,6 +378,8 @@ class CognitivePipeline:
                 fused_evidence=filtered_fused,
                 identity_snapshot=final_ctx.identity_snapshot or None,
                 self_model=final_ctx.self_model or None,
+                platform_audit=platform_audit,
+                interest_provenance=interest_provenance,
             )
             trace.context_build_ms = (time.perf_counter() - t0) * 1000
             trace.context_id = ctx.context_id
@@ -627,6 +635,42 @@ class CognitivePipeline:
             if v is not None and not isinstance(v, str):
                 row_dict[col] = str(v)
         return row_dict
+
+    async def _load_audit_findings(self, user_id: str):
+        """Platform-profile audit and interest provenance, for chat context.
+
+        Both are skipped silently when they have nothing to say (no imported
+        claims, no deliberate signal), so an account that has never imported an
+        export pays nothing for this. Their own reliability flags travel with
+        them; the verbalizer refuses to state a verdict the scorer withheld.
+        """
+        platform_audit: Dict[str, Any] = {}
+        provenance: Dict[str, Any] = {}
+
+        try:
+            from app.db.postgres import fetchrow
+            from app.services import algorithmic_mirror, interest_provenance as prov
+
+            # Cheap existence check first: computing an audit for a user with no
+            # imported claims would embed topics and hit the network for nothing
+            # on every single chat message.
+            claim_row = await fetchrow(
+                "SELECT COUNT(*) AS c FROM platform_profile_claims WHERE user_id = $1",
+                user_id,
+            )
+            if claim_row and claim_row["c"]:
+                platform_audit = await algorithmic_mirror.build_mirror_report(user_id)
+
+            signal_row = await fetchrow(
+                "SELECT COUNT(*) AS c FROM search_signals WHERE user_id = $1",
+                user_id,
+            )
+            if signal_row and signal_row["c"]:
+                provenance = await prov.build_provenance_report(user_id)
+        except Exception as e:
+            logger.warning("Audit findings unavailable for chat context: %s", e)
+
+        return platform_audit, provenance
 
     async def _load_retrieval_context(self, user_id: str) -> Dict[str, Any]:
         """Load retrieval context data via async DB queries."""

@@ -378,6 +378,64 @@ class LLMVerbalizer:
                 lines.append(f"  Primary motivation belief: {sm['primary_motivation_belief']}")
             lines.append("")
 
+        # Audit findings. Stated as measured facts with their numbers attached,
+        # and only when their own scorer said the verdict was reliable — the
+        # model is being handed a conclusion to phrase, not evidence to reason
+        # over. Where a scorer declined to judge, that refusal is passed through
+        # verbatim so chat cannot be more confident than the Report.
+        audit = context.platform_audit or {}
+        if audit.get("claims_total"):
+            lines.append("## Platform profile audit (measured, not inferred)")
+            if not audit.get("verdict_reliable"):
+                lines.append(
+                    f"  {audit['claims_total']} ad-interest claims were imported, but there is "
+                    f"NOT enough behavioural data to judge them. Say so; do not evaluate them."
+                )
+            else:
+                summ = audit.get("summary", {})
+                share = summ.get("supported_share")
+                lines.append(
+                    f"  {audit['claims_total']} claims imported; "
+                    f"{summ.get('corroborated', 0)} corroborated, "
+                    f"{summ.get('unsupported', 0)} unsupported by this user's behaviour, "
+                    f"{summ.get('not_comparable', 0)} not testable."
+                )
+                if share is not None:
+                    lines.append(f"  {round(share * 100)}% of testable claims are supported.")
+                unsupported = [c.get("label") for c in (audit.get("unsupported") or [])[:6]]
+                if unsupported:
+                    lines.append(f"  Targeted on, with no support found: {', '.join(unsupported)}")
+                missed = [m.get("topic") for m in (audit.get("missed") or [])[:6]]
+                if missed:
+                    lines.append(f"  Well-evidenced interests they never target: {', '.join(missed)}")
+            lines.append("")
+
+        prov = context.interest_provenance or {}
+        if prov.get("topics"):
+            lines.append("## Interest provenance (measured, not inferred)")
+            if not prov.get("measurable"):
+                lines.append(
+                    "  There is NOT enough deliberate-signal data (searches, likes, saves) to "
+                    "tell whether interests were chosen or fed. Say that plainly if asked; "
+                    "never guess that something was fed."
+                )
+            else:
+                summ = prov.get("summary", {})
+                fed_share = summ.get("fed_share_of_attention")
+                if fed_share is not None:
+                    lines.append(
+                        f"  {round(fed_share * 100)}% of judged watching went to topics with no "
+                        f"evidence the user ever sought them out."
+                    )
+                for t in (prov.get("topics") or [])[:6]:
+                    if t.get("verdict") == "unknown":
+                        continue
+                    lines.append(
+                        f"  - {t.get('topic')}: {t.get('verdict')} "
+                        f"({t.get('exposure')} views, {t.get('searches')} searches)"
+                    )
+            lines.append("")
+
         if context.behavior_objects:
             lines.append(f"## Behavior Objects ({len(context.behavior_objects)})")
             for i, bo in enumerate(context.behavior_objects[:5]):
