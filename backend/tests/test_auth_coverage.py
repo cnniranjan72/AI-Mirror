@@ -17,12 +17,19 @@ be broken:
 The second is the nastier one: the enforcement call is right there in the
 source, so it reads as correct and passes any grep-based audit.
 
-What this CANNOT see: an endpoint that takes no user_id at all because the
-data it touches belongs to everyone. POST /rl/feedback was exactly that — it
-wrote to rl_policy, a table keyed on (context_key, action_id) and shared by
-every user, so nothing here flagged it and it went unauthenticated. That was
-found by probing the live service, not by this file. Shared-state writes need
-their own gate; see tests/test_rl_feedback_integrity.py.
+A route with no user_id parameter used to be invisible here, and two real
+bugs lived in that gap:
+
+  * POST /rl/feedback wrote to rl_policy, a table keyed on
+    (context_key, action_id) and shared by every user — unauthenticated.
+  * Four /explain and /query/traces endpoints took an opaque resource id,
+    read the OWNING user_id off the row, and returned that user's whole
+    cognitive profile — with no check that the caller was that user.
+
+Both were found by probing the running service, not by this file. The second
+shape is now covered below, since it generalises: any route addressed by a
+resource id is answering "who owns this?" and has to enforce the answer.
+Shared-state writes are covered in tests/test_rl_feedback_integrity.py.
 
 No database, no network — the route table and the AST are enough.
 """
@@ -188,3 +195,64 @@ def test_it_notices_a_handler_that_validates_then_uses_the_raw_value():
 def test_it_does_not_flag_correct_code():
     """A guard that cries wolf gets an exemption added instead of a fix."""
     assert not _raw_user_id_lines(_CORRECT)
+
+
+# --- Routes addressed by an opaque resource id ------------------------------
+#
+# The shape the user_id sweep above structurally cannot see. A handler that
+# looks a row up by id and returns data derived from it is deciding what one
+# user may read about another, so it needs an ownership check even though no
+# user_id ever appears in its signature. Four endpoints shipped without one;
+# see tests/test_explain_idor.py.
+
+# Path-param routes that legitimately need no ownership check. Each entry is a
+# claim that the endpoint exposes nothing user-scoped — worth re-checking if
+# the handler grows.
+RESOURCE_ROUTE_EXEMPT = set()
+
+
+def _opaque_id_routes():
+    from app.main import app
+
+    out = []
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        endpoint = getattr(route, "endpoint", None)
+        methods = getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}
+        if not path or not endpoint or not methods:
+            continue
+        try:
+            signature = inspect.signature(endpoint)
+        except (TypeError, ValueError):
+            continue
+        if "user_id" in signature.parameters:
+            continue  # covered by the sweep above
+        if not [p for p in signature.parameters if "{" + p + "}" in path]:
+            continue  # not addressed by a resource id
+        out.append((sorted(methods)[0], path, endpoint))
+    return out
+
+
+def test_the_resource_route_audit_finds_routes():
+    assert _opaque_id_routes(), "discovery is broken; the checks below would pass vacuously"
+
+
+@pytest.mark.parametrize("method,path,endpoint", [
+    pytest.param(m, p, e, id=f"{m} {p}") for m, p, e in _opaque_id_routes()
+])
+def test_resource_routes_check_ownership(method, path, endpoint):
+    if path in RESOURCE_ROUTE_EXEMPT:
+        pytest.skip("reviewed: exposes nothing user-scoped")
+
+    try:
+        source = inspect.getsource(endpoint)
+    except (OSError, TypeError):
+        pytest.fail(f"{method} {path}: source unreadable, enforcement unverifiable")
+
+    assert any(e in source for e in ENFORCERS), (
+        f"{method} {path} is addressed by a resource id and does not check who "
+        f"owns it. Load the row, then call enforce_user_match(authorization, "
+        f"row['user_id']) — the owner is only known after the lookup, so this "
+        f"cannot be a dependency. If the endpoint truly exposes nothing "
+        f"user-scoped, add it to RESOURCE_ROUTE_EXEMPT with a reason."
+    )

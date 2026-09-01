@@ -1,14 +1,36 @@
 """
 Explainability APIs — expose internal cognitive state for dashboard visualization
 and provide the full reasoning chain for any trace/response.
+
+Four endpoints here are addressed by an opaque resource id rather than by
+user_id: /query/traces/{trace_id}, /explain/{trace_id},
+/explain/evidence/{evidence_id} and /explain/identity/{identity_id}. They read
+the owning user_id off the row they just fetched and then assemble that user's
+identity snapshot, personality traits, interest graph, beliefs, evidence,
+inferences and reflections — the most sensitive data in the product.
+
+They originally did that with no ownership check at all, so anyone holding an
+id could read another account's complete profile. The ids are not hard to come
+by either: evidence ids are built as evidence_{type}_{topic}_{timestamp} and
+identity ids embed the username with 8 hex characters of randomness.
+
+Because the owner is only known after the row is read, the check cannot be a
+dependency; each handler calls enforce_user_match once it has the row. That
+keeps the usual contract — demo/public ids stay browsable signed out, a real
+user needs a matching token.
+
+One accepted limitation: enforcing after the lookup means a caller can tell an
+id that exists but is not theirs (401/403) from one that does not exist (the
+not-found body). That leaks existence, not content, and is the trade for
+giving a signed-out user a clear "sign in" error instead of a false 404.
 """
 import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 
-from app.api.deps import resolve_user_id
+from app.api.deps import enforce_user_match, resolve_user_id
 from pydantic import BaseModel
 
 from app.db.postgres import fetch, fetchrow, fetchval
@@ -179,12 +201,13 @@ async def get_query_traces(
 
 
 @router.get("/query/traces/{trace_id}", response_model=Optional[dict])
-async def get_trace_detail(trace_id: str):
+async def get_trace_detail(trace_id: str, authorization: Optional[str] = Header(default=None)):
     row = await fetchrow(
         "SELECT * FROM pipeline_traces WHERE trace_id = $1", trace_id
     )
     if not row:
         return None
+    enforce_user_match(authorization, row["user_id"])
     return _parse_json_fields(dict(row), ["errors", "trace_data"])
 
 
@@ -247,13 +270,14 @@ async def get_cognitive_summary(user_id: str = Depends(resolve_user_id)):
 # ═══════════════════════════════════════════════════════════
 
 @router.get("/explain/{trace_id}")
-async def explain_trace(trace_id: str):
+async def explain_trace(trace_id: str, authorization: Optional[str] = Header(default=None)):
     """Assemble the full reasoning chain for a given trace."""
     trace = await fetchrow("SELECT * FROM pipeline_traces WHERE trace_id = $1", trace_id)
     if not trace:
         return {"error": "Trace not found"}
     trace = _parse_json_fields(dict(trace), ["errors", "trace_data"])
     user_id = trace["user_id"]
+    enforce_user_match(authorization, user_id)
 
     # Identity snapshot
     identity = None
@@ -384,13 +408,14 @@ async def explain_trace(trace_id: str):
 
 
 @router.get("/explain/evidence/{evidence_id}")
-async def explain_evidence_detail(evidence_id: str):
+async def explain_evidence_detail(evidence_id: str, authorization: Optional[str] = Header(default=None)):
     """Full evidence detail with linked objects."""
     ev = await fetchrow("SELECT * FROM evidence WHERE evidence_id = $1", evidence_id)
     if not ev:
         return {"error": "Evidence not found"}
     ev = _parse_json_fields(dict(ev), ["supporting_behavior_objects", "supporting_evidence_ids", "metadata"])
     user_id = ev["user_id"]
+    enforce_user_match(authorization, user_id)
 
     bo_ids = ev.get("supporting_behavior_objects", [])
     behavior_objects = []
@@ -433,13 +458,14 @@ async def explain_evidence_detail(evidence_id: str):
 
 
 @router.get("/explain/identity/{identity_id}")
-async def explain_identity_detail(identity_id: str):
+async def explain_identity_detail(identity_id: str, authorization: Optional[str] = Header(default=None)):
     """Full identity breakdown with contribution analysis."""
     identity = await fetchrow("SELECT * FROM identities WHERE identity_id = $1", identity_id)
     if not identity:
         return {"error": "Identity not found"}
     identity = dict(identity)
     user_id = identity["user_id"]
+    enforce_user_match(authorization, user_id)
 
     snapshots = [
         _parse_json_fields(dict(r), ["dominant_topics", "emerging_topics", "personality_traits", "interest_graph"])
