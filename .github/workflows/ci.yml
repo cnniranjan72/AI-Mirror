@@ -43,6 +43,14 @@ jobs:
         working-directory: backend
         env:
           PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/backend
+          # A placeholder DSN, not a database. app/db/postgres.py raises at
+          # IMPORT time when DATABASE_URL is unset, and collection happens
+          # before `-m "not db"` can deselect anything — so two modules that
+          # merely import it (one of them 6 pure password/token tests that
+          # touch no database at all) took the whole run down with them.
+          # Nothing connects: the pool is only opened by init_pool(), which
+          # the non-db tests never call.
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/unused
 
   frontend:
     name: dashboard (vitest + build)
