@@ -422,8 +422,13 @@ export const api = {
   // confirmUserId must be what the user actually typed to confirm — the
   // backend rejects the call if it doesn't match user_id, as a guard
   // against an accidental click triggering an irreversible deletion.
-  deleteAllData: async (confirmUserId, userId = activeUser()) => {
-    const { data } = await client.post('/privacy/delete-all-data', { user_id: userId, confirm_user_id: confirmUserId });
+  // deleteAccount is opt-in and separate: erasing what the system learned and
+  // deleting the login are different requests. The response always reports what
+  // survived (the users row holds the password hash and the stored LLM key).
+  deleteAllData: async (confirmUserId, userId = activeUser(), deleteAccount = false) => {
+    const { data } = await client.post('/privacy/delete-all-data', {
+      user_id: userId, confirm_user_id: confirmUserId, delete_account: deleteAccount,
+    });
     return data;
   },
 };

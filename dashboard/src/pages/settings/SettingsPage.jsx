@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useV3Health } from '../../hooks/useApi'
-import { api, DEFAULT_USER, activeUser, isAuthed } from '../../api/client'
+import { api, DEFAULT_USER, activeUser, isAuthed, clearAuth } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon, DownloadIcon, AlertIcon, CompassIcon } from '../../icons/icons'
@@ -66,6 +66,9 @@ export default function SettingsPage() {
 
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deleteStep, setDeleteStep] = useState('idle') // idle | confirming | deleting | done
+  // Opt-in, and reset whenever the flow is dismissed - a destructive choice
+  // must never be silently carried over into the next attempt.
+  const [deleteAccountToo, setDeleteAccountToo] = useState(false)
   const [deleteResult, setDeleteResult] = useState(null)
   const currentUser = activeUser()
   const authed = isAuthed()
@@ -133,9 +136,11 @@ export default function SettingsPage() {
   const runDelete = async () => {
     setDeleteStep('deleting')
     try {
-      const res = await api.deleteAllData(deleteConfirmText)
+      const res = await api.deleteAllData(deleteConfirmText, undefined, deleteAccountToo)
       setDeleteResult(res)
       setDeleteStep('done')
+      // The account is gone; the token in localStorage now points at nothing.
+      if (res?.account?.deleted) clearAuth()
     } catch (err) {
       setDeleteResult({ error: err?.response?.data?.detail || err.message })
       setDeleteStep('done')
@@ -298,7 +303,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600 }}>Data & Privacy</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Every row this platform holds for {currentUser}, across every table — export it or permanently delete it.</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Every behavioural row this platform holds for {currentUser} — export it or permanently delete it. Your account is separate, and you choose whether it goes too.</p>
           </div>
         </div>
 
@@ -324,9 +329,25 @@ export default function SettingsPage() {
         {deleteStep === 'confirming' && (
           <div style={{ padding: 16, borderRadius: 10, background: 'rgba(244,63,94,0.06)', border: '1px solid rgba(244,63,94,0.25)' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#fb7185', marginBottom: 6 }}>
-              This permanently deletes every row for "{currentUser}" — behavior objects, evidence, inferences,
-              reflections, identity, snapshots, chat history, everything. This cannot be undone.
+              This permanently deletes every behavioural row for "{currentUser}" — behavior objects, evidence,
+              inferences, reflections, identity, snapshots, chat history. This cannot be undone.
             </div>
+            <label style={{
+              display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10,
+              fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer',
+            }}>
+              <input
+                type="checkbox"
+                checked={deleteAccountToo}
+                onChange={e => setDeleteAccountToo(e.target.checked)}
+                style={{ marginTop: 2, cursor: 'pointer' }}
+              />
+              <span>
+                Also delete my account — the login itself, plus the email, display name,
+                password hash and any stored LLM API key. Without this they stay, and you
+                remain signed in.
+              </span>
+            </label>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
               Type <strong style={{ color: 'var(--text-secondary)' }}>{currentUser}</strong> to confirm.
             </div>
@@ -353,7 +374,7 @@ export default function SettingsPage() {
               >
                 Permanently delete
               </button>
-              <button onClick={() => { setDeleteStep('idle'); setDeleteConfirmText('') }} style={{
+              <button onClick={() => { setDeleteStep('idle'); setDeleteConfirmText(''); setDeleteAccountToo(false) }} style={{
                 padding: '8px 16px', borderRadius: 6, border: '1px solid var(--border-subtle)',
                 background: 'transparent', color: 'var(--text-tertiary)', fontSize: 13, cursor: 'pointer',
               }}>
@@ -379,9 +400,24 @@ export default function SettingsPage() {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                   {Object.entries(deleteResult.deleted_rows_by_table).filter(([, v]) => v > 0).map(([t, v]) => `${t}: ${v}`).join(' · ')}
                 </div>
+                {deleteResult.account?.deleted && (
+                  <div style={{ fontSize: 12, color: '#34d399', marginTop: 8 }}>
+                    Account deleted. You have been signed out.
+                  </div>
+                )}
+                {deleteResult.account?.reason === 'owns_organization' && (
+                  <div style={{ fontSize: 12, color: '#fbbf24', marginTop: 8 }}>
+                    {deleteResult.account.note}
+                  </div>
+                )}
+                {deleteResult.retained?.account_exists && (
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>
+                    {deleteResult.retained.note}
+                  </div>
+                )}
               </>
             )}
-            <button onClick={() => { setDeleteStep('idle'); setDeleteConfirmText(''); setDeleteResult(null) }} style={{
+            <button onClick={() => { setDeleteStep('idle'); setDeleteConfirmText(''); setDeleteResult(null); setDeleteAccountToo(false) }} style={{
               marginTop: 10, padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border-subtle)',
               background: 'transparent', color: 'var(--text-tertiary)', fontSize: 12, cursor: 'pointer',
             }}>

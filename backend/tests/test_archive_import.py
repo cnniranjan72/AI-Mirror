@@ -247,6 +247,9 @@ class TestImportEndpoint:
             finally:
                 try:
                     await data_privacy.delete_all_user_data(username)
+                    # The account too: delete_all_user_data leaves the `users`
+                    # row, so registering in a test leaks one per run.
+                    await data_privacy.delete_account(username)
                 except Exception:
                     pass
 
@@ -281,5 +284,8 @@ class TestImportEndpoint:
             finally:
                 try:
                     await data_privacy.delete_all_user_data(username)
+                    # The account too: delete_all_user_data leaves the `users`
+                    # row, so registering in a test leaks one per run.
+                    await data_privacy.delete_account(username)
                 except Exception:
                     pass

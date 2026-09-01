@@ -29,6 +29,21 @@ async def _register(client, username):
     return resp.json()["token"]
 
 
+async def _cleanup(*usernames):
+    """Remove the throwaway accounts a test registered.
+
+    delete_all_user_data deliberately does not touch the `users` row (see
+    services/data_privacy.py), so tests that only called it were leaking an
+    account per run into the shared database — 124 of them had accumulated
+    since August before anyone looked.
+    """
+    from app.services import data_privacy
+
+    for username in usernames:
+        await data_privacy.delete_all_user_data(username)
+        await data_privacy.delete_account(username)
+
+
 @pytest.mark.asyncio
 async def test_public_user_id_no_token_allowed(db, client):
     resp = await client.get("/timeline", params={"user_id": "test_user_001", "limit": 1})
@@ -50,8 +65,7 @@ async def test_own_token_allows_own_data(db, client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200
-    from app.services import data_privacy
-    await data_privacy.delete_all_user_data(username)
+    await _cleanup(username)
 
 
 @pytest.mark.asyncio
@@ -65,9 +79,8 @@ async def test_token_cannot_access_other_users_data(db, client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 403
-    from app.services import data_privacy
-    await data_privacy.delete_all_user_data(alice)
-    await data_privacy.delete_all_user_data(bob)
+    await _cleanup(alice)
+    await _cleanup(bob)
 
 
 @pytest.mark.asyncio
@@ -88,8 +101,7 @@ async def test_signed_in_user_can_still_browse_demo_data(db, client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200
-    from app.services import data_privacy
-    await data_privacy.delete_all_user_data(username)
+    await _cleanup(username)
 
 
 @pytest.mark.asyncio
@@ -128,9 +140,8 @@ async def test_goal_update_requires_ownership(db, client):
     )
     assert owner_resp.status_code == 200
 
-    from app.services import data_privacy
-    await data_privacy.delete_all_user_data(owner)
-    await data_privacy.delete_all_user_data(attacker)
+    await _cleanup(owner)
+    await _cleanup(attacker)
 
 
 @pytest.mark.asyncio
@@ -148,8 +159,7 @@ async def test_delete_all_data_rejects_unrelated_token_against_public_id(db, cli
         )
         assert resp.status_code == 403
     finally:
-        from app.services import data_privacy
-        await data_privacy.delete_all_user_data(unrelated)
+        await _cleanup(unrelated)
 
 
 @pytest.mark.asyncio
@@ -168,5 +178,4 @@ async def test_ingest_rejects_unrelated_token_against_public_id(db, client):
         )
         assert resp.status_code == 403
     finally:
-        from app.services import data_privacy
-        await data_privacy.delete_all_user_data(unrelated)
+        await _cleanup(unrelated)
