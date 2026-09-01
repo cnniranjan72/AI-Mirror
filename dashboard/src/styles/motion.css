@@ -602,4 +602,43 @@
   .tilt { perspective: none; }
   .tilt-inner { transform: none !important; }
   .tilt-inner::after { display: none; }
+
+  /* Collapse fixed multi-column grids to a single column.
+     The 28 grids across these pages set grid-template-columns via React's
+     inline style prop, and an inline declaration beats any class rule — so
+     overriding them genuinely requires !important here rather than editing
+     28 call sites to each carry their own breakpoint. Matching on the
+     explicit templates (not on the attribute generally) deliberately leaves
+     `repeat(auto-fill, minmax(...))` grids alone: those already collapse
+     correctly on their own, and forcing them to one column would waste the
+     width they handle well. */
+  main [style*="grid-template-columns: 1fr 1fr"],
+  main [style*="grid-template-columns: 2fr 1fr"],
+  main [style*="grid-template-columns: 1fr 2fr"],
+  main [style*="grid-template-columns: repeat(3, 1fr)"],
+  main [style*="grid-template-columns: repeat(4, 1fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Wide content must scroll inside its own box rather than pushing the page
+     sideways. Tables are the usual culprit; `display: block` is what makes
+     overflow-x apply to a table at all. */
+  .card table,
+  .empty-state table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  /* Nothing may exceed the viewport width. */
+  img, svg, video, pre, canvas { max-width: 100%; }
+
+  /* Long identifiers (trace ids, snapshot ids, hashes) have no break
+     opportunities and are a common source of horizontal overflow. */
+  .card { overflow-wrap: anywhere; }
+
+  /* Headline sizes tuned for a 1440px canvas are oversized on a phone. */
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.3rem; }
 }

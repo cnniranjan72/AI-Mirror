@@ -3,6 +3,14 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.js'],
+    // Only src/. Without this, vitest walks node_modules and tries to run the
+    // test files shipped inside dependencies.
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
+  },
   server: {
     port: 5173,
     host: true

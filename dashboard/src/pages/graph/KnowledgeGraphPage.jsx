@@ -1,10 +1,14 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import ForceGraph3D from 'react-force-graph-3d'
+import { useState, useEffect, useRef, useMemo, useCallback, lazy, Suspense } from 'react'
 import { api } from '../../api/client'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import LoadingSkeleton from '../../components/ui/LoadingSkeleton'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
+
+// Lazy: react-force-graph-3d is ~710KB minified, and it is one element on a
+// page that has other content worth showing first. Statically importing it
+// made the whole route wait on that download before rendering anything.
+const ForceGraph3D = lazy(() => import('react-force-graph-3d'))
 
 const PLATFORM_COLOR = {
   instagram: '#ec4899',
@@ -218,7 +222,14 @@ export default function KnowledgeGraphPage() {
             </GlassCard>
           </div>
         )}
+        {/* Suspense fallback fills the graph's own box, so the surrounding
+            layout does not reflow when the lazy chunk lands. */}
         {!loading && !error && data && data.nodes.length > 0 && (
+          <Suspense fallback={
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              Loading graph…
+            </div>
+          }>
           <ForceGraph3D
             ref={fgRef}
             graphData={graphData}
@@ -240,6 +251,7 @@ export default function KnowledgeGraphPage() {
             enableNodeDrag={true}
             showNavInfo={false}
           />
+          </Suspense>
         )}
         <NodeDetail node={selected} onClose={() => setSelected(null)} />
       </div>

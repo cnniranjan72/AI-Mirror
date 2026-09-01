@@ -1,6 +1,10 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
-import ForceGraph3D from 'react-force-graph-3d'
+import { useMemo, useRef, useState, useEffect, lazy, Suspense } from 'react'
 import Badge from '../ui/Badge'
+
+// Lazy: react-force-graph-3d is ~710KB minified, and it is one element on a
+// page that has other content worth showing first. Statically importing it
+// made the whole route wait on that download before rendering anything.
+const ForceGraph3D = lazy(() => import('react-force-graph-3d'))
 
 const CATEGORY_COLOR = {
   reflections: '#818cf8',
@@ -79,6 +83,13 @@ export default function MemoryTree({ reflections, inferences, patterns, height =
 
   return (
     <div ref={containerRef} style={{ position: 'relative', height, borderRadius: 12, overflow: 'hidden', background: 'radial-gradient(circle at 50% 40%, rgba(30,27,75,0.4), rgba(2,6,23,0.5))' }}>
+      {/* Fallback fills the graph's own box, so the surrounding layout does
+          not reflow when the lazy chunk lands. */}
+      <Suspense fallback={
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+          Loading graph…
+        </div>
+      }>
       <ForceGraph3D
         ref={fgRef}
         graphData={graphData}
@@ -98,6 +109,7 @@ export default function MemoryTree({ reflections, inferences, patterns, height =
         enableNodeDrag={false}
         showNavInfo={false}
       />
+      </Suspense>
       {selected && (
         <div style={{
           position: 'absolute', bottom: 12, left: 12, right: 12, padding: 12, borderRadius: 10,
