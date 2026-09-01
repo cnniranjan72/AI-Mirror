@@ -5,9 +5,57 @@ import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import { RefreshIcon, CpuIcon, NetworkIcon, CheckIcon, XIcon, DownloadIcon, AlertIcon, CompassIcon } from '../../icons/icons'
 import CharacterCreature3D from '../../components/character/CharacterCreature3D'
+import AuthModal from '../../components/auth/AuthModal'
+
+/**
+ * Stands in for a section that needs a real account. Both the AI Provider and
+ * Research Participation cards were gated on `authed` and rendered NOTHING when
+ * signed out — so a visitor had no way to learn the feature existed, let alone
+ * that signing in unlocks it. An empty space reads as "this app doesn't do
+ * that"; this reads as "not yet".
+ */
+function SignInRequired({ icon: Icon, title, description, accent, onSignIn }) {
+  return (
+    <GlassCard style={{ marginTop: 24, opacity: 0.85 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+          background: `${accent}1a`, border: `1px solid ${accent}33`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: accent,
+        }}>
+          <Icon />
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>{title}</h3>
+            <Badge variant="neutral">Requires an account</Badge>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-tertiary)', lineHeight: 1.65, marginBottom: 14 }}>
+            {description}
+          </p>
+          <button
+            onClick={onSignIn}
+            className="btn-3d"
+            style={{
+              padding: '9px 18px', borderRadius: 10,
+              background: 'rgba(99,102,241,0.14)', border: '1px solid rgba(99,102,241,0.3)',
+              color: '#a5b4fc', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            Sign in to enable
+          </button>
+        </div>
+      </div>
+    </GlassCard>
+  )
+}
 
 export default function SettingsPage() {
   const { data: v3Health, error: v3Error, refetch: refetchV3 } = useV3Health()
+
+  // Opened by the sign-in placeholders below, so the account-gated sections
+  // can be enabled without navigating away from Settings.
+  const [authOpen, setAuthOpen] = useState(false)
 
   const [testForm, setTestForm] = useState({ userId: DEFAULT_USER })
   const [testResult, setTestResult] = useState(null)
@@ -438,6 +486,16 @@ export default function SettingsPage() {
         </GlassCard>
       )}
 
+      {!authed && (
+        <SignInRequired
+          icon={NetworkIcon}
+          accent="#818cf8"
+          title="AI Provider"
+          description="Bring your own OpenAI, Anthropic or Gemini key — or point at your own Ollama endpoint — instead of sharing the server's. Keys are encrypted at rest and never shown again in full."
+          onSignIn={() => setAuthOpen(true)}
+        />
+      )}
+
       {authed && (
         <GlassCard gradient style={{ marginTop: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
@@ -471,6 +529,18 @@ export default function SettingsPage() {
           </button>
         </GlassCard>
       )}
+
+      {!authed && (
+        <SignInRequired
+          icon={CompassIcon}
+          accent="#22d3ee"
+          title="Research Participation"
+          description="Optionally contribute a de-identified copy of your cognitive data to research. Participant IDs are salted hashes — never your username or email — and you can opt out at any time."
+          onSignIn={() => setAuthOpen(true)}
+        />
+      )}
+
+      {authOpen && <AuthModal onClose={() => setAuthOpen(false)} />}
     </div>
   )
 }
