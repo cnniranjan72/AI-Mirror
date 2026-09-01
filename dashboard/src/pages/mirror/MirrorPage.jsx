@@ -214,7 +214,17 @@ export default function MirrorPage() {
                         </span>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                        matched your topic “{c.evidence.topic}” on: {c.evidence.matched_on.join(', ')}
+                        {c.evidence.match_method === 'semantic' ? (
+                          // Flagged distinctly: a shared word can be checked at
+                          // a glance, a vector distance cannot.
+                          <>
+                            matched your topic “{c.evidence.topic}” by meaning
+                            {c.evidence.similarity != null && ` (similarity ${c.evidence.similarity})`}
+                            {' — no shared word'}
+                          </>
+                        ) : (
+                          <>matched your topic “{c.evidence.topic}” on: {c.evidence.matched_on.join(', ')}</>
+                        )}
                       </div>
                     </Row>
                   ))}

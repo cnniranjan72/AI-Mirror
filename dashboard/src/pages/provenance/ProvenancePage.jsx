@@ -153,7 +153,9 @@ export default function ProvenancePage() {
                         <Badge variant={VERDICT[t.verdict].variant}>{VERDICT[t.verdict].label}</Badge>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                        {t.exposure} views · {t.searches} searches · {t.engagements} engagements
+                        {t.exposure} views · {t.searches} searches
+                        {t.semantic_searches > 0 && ` (${t.semantic_searches} matched by meaning)`}
+                        {' · '}{t.engagements} engagements
                         {t.example_searches?.length > 0 && (
                           <span style={{ color: 'var(--text-tertiary)' }}>
                             {'  ·  '}e.g. “{t.example_searches.join('”, “')}”

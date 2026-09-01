@@ -32,6 +32,7 @@ import re
 from typing import Any, Dict, List, Optional, Set
 
 from app.db.postgres import fetch
+from app.services import semantic_match
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,13 @@ async def build_provenance_report(user_id: str) -> Dict[str, Any]:
     total_deliberate = len(searches) + len(engagements)
     measurable = total_deliberate >= MIN_DELIBERATE_SIGNALS
 
+    # Embed topic names and search queries once. Empty on failure, in which
+    # case matching stays purely lexical.
+    topic_names = [t.get("topic") or "" for t in topics]
+    vectors = await semantic_match.embed_texts(
+        topic_names + [s["query"] for s in searches]
+    )
+
     # Pre-tokenise once; this is O(topics x signals) and both grow with import size.
     search_tokens = [(s, _tokens(s["query"])) for s in searches]
     engagement_tokens = [
@@ -172,6 +180,27 @@ async def build_provenance_report(user_id: str) -> Dict[str, Any]:
         exposure = int(topic.get("exposure") or 0)
 
         matched_searches = [s["raw_query"] for s, toks in search_tokens if vocab & toks]
+
+        # A search phrased differently from the topic's own vocabulary is still
+        # someone going looking. Missing it reports the topic as FED — telling
+        # a user an interest was installed in them when they sought it out,
+        # which is the most harmful error this feature can make. Seven searches
+        # for "astrophotography setup" against the topic `astronomy` did
+        # exactly that before this fallback existed.
+        semantic_searches = []
+        if vectors:
+            topic_name = topic.get("topic") or ""
+            already = {q.lower() for q in matched_searches}
+            for signal, toks in search_tokens:
+                if vocab & toks or signal["raw_query"].lower() in already:
+                    continue
+                hit = semantic_match.best_semantic_match(
+                    signal["query"], [topic_name], vectors
+                )
+                if hit:
+                    semantic_searches.append(signal["raw_query"])
+
+        matched_searches = matched_searches + semantic_searches
         engaged_count = sum(1 for _e, toks in engagement_tokens if vocab & toks)
         deliberate = len(matched_searches) + engaged_count
 
@@ -189,6 +218,9 @@ async def build_provenance_report(user_id: str) -> Dict[str, Any]:
             "exposure": exposure,
             "searches": len(matched_searches),
             "example_searches": matched_searches[:3],
+            # How many were found by meaning rather than a shared word — a
+            # weaker form of evidence, so it is reported separately.
+            "semantic_searches": len(semantic_searches),
             "engagements": engaged_count,
             "deliberate_signals": deliberate,
             "agency": agency,
@@ -233,9 +265,9 @@ async def build_provenance_report(user_id: str) -> Dict[str, Any]:
             "like it was fed to you.",
             "`following` is deliberately ignored: the field defaults to true on "
             "ingest, so it records a default rather than a choice.",
-            "Matching is lexical. A search phrased differently from the topic's "
-            "own vocabulary will not be credited to it; every topic lists the "
-            "searches it did match.",
+            "Matching is lexical first, then compares meaning when no words are "
+            "shared, so a search phrased differently from the topic still "
+            "counts. Every topic lists the searches it matched.",
         ] + ([] if measurable else [
             f"Fewer than {MIN_DELIBERATE_SIGNALS} deliberate signals were found "
             "for this account, so agency cannot be measured at all. Import a "

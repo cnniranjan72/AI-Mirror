@@ -32,6 +32,7 @@ import re
 from typing import Any, Dict, List, Optional, Set
 
 from app.db.postgres import fetch
+from app.services import semantic_match
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +196,14 @@ async def build_mirror_report(user_id: str, coverage: Optional[float] = None) ->
     claims = await _load_claims(user_id)
     behaviours = await _load_behaviour(user_id)
 
+    # Embed claims and topics once, so the fallback below costs a single round
+    # trip rather than one per pair. Empty on failure -> lexical only.
+    topic_names = [b.get("topic") or "" for b in behaviours]
+    vectors = await semantic_match.embed_texts(
+        [c["label"] for c in claims] + topic_names
+    )
+    by_topic = {b.get("topic"): b for b in behaviours}
+
     corroborated: List[Dict[str, Any]] = []
     unsupported: List[Dict[str, Any]] = []
     not_comparable: List[Dict[str, Any]] = []
@@ -217,6 +226,23 @@ async def build_mirror_report(user_id: str, coverage: Optional[float] = None) ->
             continue
 
         match = _match_claim(label, behaviours)
+        match_method = "lexical"
+
+        if not match and vectors:
+            # No shared word. Before reporting a claim unsupported — which
+            # accuses the platform of profiling this person wrongly — check
+            # whether the two are simply phrased differently.
+            semantic = semantic_match.best_semantic_match(label, topic_names, vectors)
+            if semantic:
+                behaviour = by_topic.get(semantic["candidate"])
+                if behaviour:
+                    match = {
+                        "behaviour": behaviour,
+                        "matched_on": [f"~{semantic['candidate']}"],
+                        "similarity": semantic["similarity"],
+                    }
+                    match_method = "semantic"
+
         if not match:
             unsupported.append(entry)
             continue
@@ -243,6 +269,10 @@ async def build_mirror_report(user_id: str, coverage: Optional[float] = None) ->
                 "importance": behaviour.get("importance_score"),
                 "confidence": behaviour.get("confidence_score"),
                 "matched_on": match["matched_on"],
+                # A shared word can be verified at a glance; a vector distance
+                # cannot. Saying which was used keeps the audit honest.
+                "match_method": match_method,
+                "similarity": match.get("similarity"),
             }
         })
         corroborated.append(entry)
@@ -296,9 +326,10 @@ async def build_mirror_report(user_id: str, coverage: Optional[float] = None) ->
             "including lookalike modelling and off-platform data. An "
             "unsupported claim is one you cannot verify, not necessarily one "
             "that is false.",
-            "Matching is lexical, so a claim phrased in a vocabulary unlike "
-            "your own may be reported unsupported despite being about the same "
-            "subject. Every match shows the tokens it matched on.",
+            "Matching is lexical first, then falls back to comparing meaning "
+            "when no words are shared. Matches found by meaning are labelled "
+            "and carry their similarity score, because a shared word can be "
+            "checked at a glance and a vector distance cannot.",
         ] + ([] if sufficient else [
             f"Your data coverage is below {int(MIN_COVERAGE_FOR_VERDICT * 100)}%. "
             "There is not yet enough behaviour here to judge a platform's "
