@@ -89,6 +89,11 @@ export default function ReportPage() {
   const { data: inferences } = useApi(() => api.getInferences(undefined, 20))
   const { data: reflections } = useApi(() => api.getReflections(undefined, 3))
   const { data: guardian } = useApi(() => api.getGuardianReport())
+  // The two audits. Each carries its OWN reliability gate (verdict_reliable,
+  // measurable) independent of this page's coverage score, and each is
+  // rendered only when its own gate allows — see the sections below.
+  const { data: mirror } = useApi(() => api.getMirrorReport())
+  const { data: provenance } = useApi(() => api.getProvenanceReport())
 
   const identity = identityRaw?.identity || identityRaw || null
   const sessions = guardian?.session_patterns || {}
@@ -177,6 +182,24 @@ export default function ReportPage() {
       ``,
       `Wellbeing: risk ${guardian?.risk_level ?? 'unknown'}, late-night share ${pct(sessions.late_night_share) ?? 0}%`,
       ``,
+      ...(mirror?.claims_total
+        ? [
+            `Platform profile audit (${mirror.claims_total} claims imported):`,
+            mirror.verdict_reliable
+              ? `  ${pct(mirror.summary?.supported_share) ?? '--'}% of ${mirror.summary?.testable_claims ?? 0} testable claims supported by behaviour`
+              : `  Not enough data to judge this profile yet`,
+            `  ${mirror.summary?.corroborated ?? 0} corroborated · ${mirror.summary?.unsupported ?? 0} unsupported · ${mirror.summary?.not_comparable ?? 0} not testable`,
+            ``,
+          ]
+        : []),
+      ...(provenance?.measurable
+        ? [
+            `Interest provenance:`,
+            `  ${pct(provenance.summary?.fed_share_of_attention) ?? '--'}% of judged watching went to topics never sought out`,
+            `  ${provenance.summary?.fed ?? 0} fed · ${provenance.summary?.mixed ?? 0} mixed · ${provenance.summary?.chosen ?? 0} chosen`,
+            ``,
+          ]
+        : []),
       `All figures are computed deterministically from the account's own data. No language model was used to produce them.`,
     ]
     return lines.join('\n')
@@ -235,6 +258,29 @@ export default function ReportPage() {
         recommendations: guardian?.recommendations ?? [],
       },
       latest_reflection: latestReflection || null,
+      // Both audits carry their own gate flags into the export, so a consumer
+      // of this file cannot read a verdict without also reading whether the
+      // verdict was considered reliable.
+      platform_profile_audit: mirror?.claims_total
+        ? {
+            claims_total: mirror.claims_total,
+            verdict_reliable: mirror.verdict_reliable,
+            summary: mirror.summary,
+            corroborated: mirror.corroborated,
+            unsupported: mirror.unsupported,
+            not_comparable: mirror.not_comparable,
+            missed: mirror.missed,
+            caveats: mirror.caveats,
+          }
+        : null,
+      interest_provenance: provenance
+        ? {
+            measurable: provenance.measurable,
+            summary: provenance.summary,
+            topics: provenance.topics,
+            caveats: provenance.caveats,
+          }
+        : null,
     }
 
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
@@ -553,6 +599,125 @@ export default function ReportPage() {
         </Reveal>
       )}
 
+      {/* ------------------------------------------------ platform audit */}
+      {mirror?.claims_total > 0 && (
+        <Reveal variant="depth">
+          <GlassCard gradient style={{ marginBottom: 26 }}>
+            <SectionHeading
+              title="What the platform claims about you"
+              source="/mirror/report - claims imported verbatim from your own export"
+              right={
+                <Badge variant={mirror.verdict_reliable ? 'indigo' : 'amber'} dot>
+                  {mirror.verdict_reliable ? `${mirror.claims_total} claims` : 'provisional'}
+                </Badge>
+              }
+            />
+
+            {/* This section has its own reliability gate, independent of the
+                coverage score above. A report can have enough data to describe
+                someone and still not have enough to call a platform wrong. */}
+            {!mirror.verdict_reliable ? (
+              <Empty>
+                {mirror.claims_total} claims were imported, but there is not yet enough
+                behavioural data to test them. Judging a platform profile on this much
+                history would produce confident-looking findings out of ignorance.
+              </Empty>
+            ) : (
+              <>
+                <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 14, color: (mirror.summary?.supported_share ?? 0) >= 0.6 ? 'var(--emerald-400)' : 'var(--amber-400)' }}>
+                  {pct(mirror.summary?.supported_share)}% of {mirror.summary?.testable_claims} testable
+                  claims are supported by your behaviour
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <Badge variant="emerald">{mirror.summary?.corroborated} corroborated</Badge>
+                  <Badge variant="amber">{mirror.summary?.unsupported} unsupported</Badge>
+                  <Badge variant="neutral">{mirror.summary?.not_comparable} not testable</Badge>
+                  <Badge variant="indigo">{mirror.summary?.missed} they miss</Badge>
+                </div>
+
+                {(mirror.unsupported || []).length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Targeted on, with no support in your history
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                      {mirror.unsupported.slice(0, 14).map((c, i) => (
+                        <Badge key={i} variant="amber">{c.label}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(mirror.missed || []).length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Well-evidenced interests they never target
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                      {mirror.missed.slice(0, 12).map((m, i) => (
+                        <Badge key={i} variant="indigo">{m.topic} ({m.observations})</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </GlassCard>
+        </Reveal>
+      )}
+
+      {/* --------------------------------------------------- provenance */}
+      {provenance?.topics?.length > 0 && (
+        <Reveal variant="depth">
+          <GlassCard gradient style={{ marginBottom: 26 }}>
+            <SectionHeading
+              title="Chosen or fed"
+              source="/provenance/report - seeking weighed against exposure"
+              right={
+                <Badge variant={provenance.measurable ? 'indigo' : 'neutral'} dot>
+                  {provenance.measurable ? 'measurable' : 'not measurable'}
+                </Badge>
+              }
+            />
+
+            {!provenance.measurable ? (
+              <Empty>
+                Agency cannot be measured for this account. Deciding whether an interest was
+                chosen requires evidence of seeking - searches, likes, saves - and there is
+                too little of it here. Reporting every topic as fed on that basis would be
+                the wrong answer, not a cautious one.
+              </Empty>
+            ) : (
+              <>
+                <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 14, color: (provenance.summary?.fed_share_of_attention ?? 0) > 0.4 ? 'var(--rose-400)' : 'var(--emerald-400)' }}>
+                  {pct(provenance.summary?.fed_share_of_attention)}% of judged watching went to
+                  topics you never sought out
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                  <Badge variant="danger">{provenance.summary?.fed} fed</Badge>
+                  <Badge variant="amber">{provenance.summary?.mixed} mixed</Badge>
+                  <Badge variant="emerald">{provenance.summary?.chosen} chosen</Badge>
+                  <Badge variant="neutral">{provenance.summary?.search_signals} search signals</Badge>
+                </div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {provenance.topics.filter(t => t.verdict !== 'unknown').slice(0, 10).map((t, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, flexWrap: 'wrap' }}>
+                      <span style={{ fontWeight: 600, minWidth: 120 }}>{t.topic}</span>
+                      <span className="tabular" style={{ color: 'var(--text-muted)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+                        {t.exposure} views - {t.searches} searches - {pct(t.agency)}% sought
+                      </span>
+                      <Badge variant={t.verdict === 'fed' ? 'danger' : t.verdict === 'chosen' ? 'emerald' : 'amber'}>
+                        {t.verdict}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </GlassCard>
+        </Reveal>
+      )}
+
       {/* ------------------------------------------------------------ method */}
       <Reveal variant="depth">
         <GlassCard style={{ marginBottom: 12 }}>
@@ -572,6 +737,13 @@ export default function ReportPage() {
               Coverage is reported before conclusions on purpose. Behavioural profiles built from small samples
               look just as confident as ones built from large samples, so the report states how much data stands
               behind it and frames itself accordingly.
+            </p>
+            <p>
+              The two audit sections carry their <strong>own</strong> reliability gates, which
+              are stricter than this page's coverage score and independent of it. There is
+              enough data to describe someone long before there is enough to call a platform
+              wrong about them, and a section that cannot meet its own bar says so instead of
+              reporting a number.
             </p>
             {summary?.platform_breakdown && Object.keys(summary.platform_breakdown).length > 0 && (
               <p style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>

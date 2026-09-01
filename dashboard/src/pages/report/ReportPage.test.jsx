@@ -28,6 +28,8 @@ const mockApi = {
   getInferences: vi.fn(),
   getReflections: vi.fn(),
   getGuardianReport: vi.fn(),
+  getMirrorReport: vi.fn(),
+  getProvenanceReport: vi.fn(),
 }
 
 vi.mock('../../api/client', () => ({
@@ -37,7 +39,7 @@ vi.mock('../../api/client', () => ({
 const ReportPage = (await import('./ReportPage')).default
 
 /** Counts matching what production actually held when this page was built. */
-function setup({ summary = {}, guardian = {}, identity = {}, behaviors = [], inferences = [], reflections = [] } = {}) {
+function setup({ summary = {}, guardian = {}, identity = {}, behaviors = [], inferences = [], reflections = [], mirror = null, provenance = null } = {}) {
   mockApi.getCognitiveSummary.mockResolvedValue({
     behavior_object_count: 7,
     evidence_count: 16,
@@ -60,6 +62,10 @@ function setup({ summary = {}, guardian = {}, identity = {}, behaviors = [], inf
   mockApi.getBehaviorObjects.mockResolvedValue(behaviors)
   mockApi.getInferences.mockResolvedValue(inferences)
   mockApi.getReflections.mockResolvedValue(reflections)
+  // Default: no audit data at all, which is the state of a fresh account and
+  // must leave the rest of the report intact.
+  mockApi.getMirrorReport.mockResolvedValue(mirror ?? { claims_total: 0, summary: {}, caveats: [] })
+  mockApi.getProvenanceReport.mockResolvedValue(provenance ?? { topics: [], measurable: false, summary: {}, caveats: [] })
   mockApi.getGuardianReport.mockResolvedValue({
     risk_level: 'low',
     risk_factors: [],
@@ -176,5 +182,78 @@ describe('ReportPage — empty states', () => {
     render(<ReportPage />)
     expect(await screen.findByText('Cognitive Report')).toBeInTheDocument()
     expect(await screen.findByText('0%')).toBeInTheDocument()
+  })
+})
+
+describe('ReportPage - the audits are part of the document', () => {
+  const RELIABLE_MIRROR = {
+    claims_total: 10,
+    verdict_reliable: true,
+    summary: { testable_claims: 8, corroborated: 4, unsupported: 4, not_comparable: 2, missed: 3, supported_share: 0.5 },
+    corroborated: [], not_comparable: [], caveats: [],
+    unsupported: [{ label: 'Cryptocurrency', platform: 'meta' }],
+    missed: [{ topic: 'pottery', observations: 12 }],
+  }
+
+  const MEASURABLE_PROVENANCE = {
+    measurable: true,
+    summary: { fed: 2, mixed: 0, chosen: 1, unknown: 0, search_signals: 21, fed_share_of_attention: 0.77 },
+    topics: [
+      { topic: 'outrage', exposure: 46, searches: 0, agency: 0, verdict: 'fed' },
+      { topic: 'robotics', exposure: 14, searches: 7, agency: 0.5, verdict: 'chosen' },
+    ],
+    caveats: [],
+  }
+
+  it('reports the platform audit finding', async () => {
+    setup({ mirror: RELIABLE_MIRROR })
+    render(<ReportPage />)
+    expect(await screen.findByText(/50% of 8 testable/)).toBeInTheDocument()
+    expect(screen.getByText('Cryptocurrency')).toBeInTheDocument()
+  })
+
+  it('reports the provenance finding', async () => {
+    setup({ provenance: MEASURABLE_PROVENANCE })
+    render(<ReportPage />)
+    expect(await screen.findByText(/77% of judged watching/)).toBeInTheDocument()
+    expect(screen.getByText('outrage')).toBeInTheDocument()
+  })
+
+  // The point of composing three independent gates: a document can be
+  // confident enough to describe someone and still refuse to judge a platform.
+  it('withholds the audit verdict when the audit says it is unreliable', async () => {
+    setup({ mirror: { ...RELIABLE_MIRROR, verdict_reliable: false } })
+    render(<ReportPage />)
+    expect(await screen.findByText(/not yet enough\s+behavioural data to test them/i)).toBeInTheDocument()
+    expect(screen.queryByText(/50% of 8 testable/)).not.toBeInTheDocument()
+  })
+
+  it('says agency is unmeasurable rather than reporting everything as fed', async () => {
+    setup({
+      provenance: {
+        measurable: false,
+        summary: { fed: 0, mixed: 0, chosen: 0, unknown: 2 },
+        topics: [{ topic: 'robotics', exposure: 14, searches: 0, agency: null, verdict: 'unknown' }],
+        caveats: [],
+      },
+    })
+    render(<ReportPage />)
+    expect(await screen.findByText(/Agency cannot be measured/i)).toBeInTheDocument()
+  })
+
+  it('omits both sections entirely when there is nothing imported', async () => {
+    setup()
+    render(<ReportPage />)
+    await screen.findByText('Cognitive Report')
+    expect(screen.queryByText('What the platform claims about you')).not.toBeInTheDocument()
+    expect(screen.queryByText('Chosen or fed')).not.toBeInTheDocument()
+  })
+
+  it('explains that the audits are gated separately from page coverage', async () => {
+    setup({ mirror: RELIABLE_MIRROR })
+    render(<ReportPage />)
+    // Matched on a fragment inside a single text node: the sentence is split
+    // by a <strong>, and a regex spanning both elements finds nothing.
+    expect(await screen.findByText(/reliability gates/i)).toBeInTheDocument()
   })
 })
