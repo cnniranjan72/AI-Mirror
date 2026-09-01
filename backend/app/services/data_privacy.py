@@ -18,11 +18,20 @@ logger = logging.getLogger(__name__)
 # Every table keyed by user_id, in FK-safe delete order (children before
 # parents where a relationship exists — most of these are independent, but
 # self_models/identity_snapshots logically follow identities).
+#
+# ANY new table keyed by user_id must be added here. Export and erasure both
+# iterate this list, so a table omitted from it is silently exempt from both —
+# a right-to-erasure request would report success while leaving the rows in
+# place. platform_profile_claims was added late and did exactly that.
 USER_DATA_TABLES: List[str] = [
     "events", "embeddings", "actions_log", "personas",
     "behavior_objects", "evidence", "inferences", "reflections", "goals",
     "memories", "chat_messages", "pipeline_traces", "cognitive_metrics",
-    "runtime_metrics", "guardian_alerts",
+    "runtime_metrics", "guardian_alerts", "platform_profile_claims",
+    # Operational telemetry, but it carries user_id plus the request path and
+    # message that produced it, which makes it personal data. Losing some
+    # diagnostics is the correct trade when someone asks to be erased.
+    "error_events",
     "self_models", "identity_snapshots", "identities",
 ]
 
