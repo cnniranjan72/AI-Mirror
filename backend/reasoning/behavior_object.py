@@ -298,3 +298,27 @@ class BehaviorObject(BaseModel):
             f"{self.trend_information.trend_direction.value} trend, "
             f"confidence {self.confidence_score:.1%}"
         )
+
+
+def is_creator_behavior(behavior) -> bool:
+    """True when a behavior object represents a CREATOR rather than a subject.
+
+    Knowledge consolidation emits two kinds of behavior object. Creator ones
+    are labelled "Content by <creator>" and carry
+    metadata["cluster_type"] == "creator". They are affinities, not interests,
+    and mixing them into topic lists produces category errors like
+    dominant_topics == ["#ai", "Content by lex_fridman_clips", ...].
+
+    Lives here, beside BehaviorObject, because every consumer that derives
+    "topics" from behaviors needs the same rule — identity's interest graph,
+    reflections, and the inference rules had each been treating creator
+    objects as topics independently.
+
+    The structured marker is preferred; the label check is a fallback for rows
+    persisted before that marker was relied on, which are still in the database.
+    """
+    metadata = getattr(behavior, "metadata", None)
+    if isinstance(metadata, dict) and metadata.get("cluster_type") == "creator":
+        return True
+    topic = getattr(behavior, "topic", "") or ""
+    return topic.startswith("Content by ")

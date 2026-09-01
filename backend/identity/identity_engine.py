@@ -11,6 +11,7 @@ import logging
 import uuid
 
 from backend.reasoning import BehaviorObject, Inference, Evidence
+from backend.reasoning.behavior_object import is_creator_behavior
 from backend.reasoning.reasoning_context import ReasoningContext, ReflectionReference, GoalReference
 
 
@@ -411,8 +412,18 @@ class IdentityEngine:
             # Group behaviors by topic
             from collections import defaultdict
             topic_behaviors = defaultdict(list)
-            
+
             for behavior in behaviors:
+                # Creator clusters are NOT interests. Consolidation emits two
+                # kinds of behavior object and labels creator ones
+                # "Content by <creator>"; feeding those in here put creator
+                # names into the interest graph and straight through to
+                # dominant_topics, so an identity's stated interests read as
+                # ["#ai", "Content by lex_fridman_clips", ...] — a category
+                # error, not a ranking problem. Creator affinity has its own
+                # home in the creator graph, built from behavior.creators.
+                if is_creator_behavior(behavior):
+                    continue
                 topic_behaviors[behavior.topic].append(behavior)
             
             # Create interest nodes

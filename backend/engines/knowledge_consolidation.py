@@ -28,6 +28,63 @@ def _confidence_from_count(occurrence_count: float) -> float:
     return min(1.0, occurrence_count / CONFIDENCE_SATURATION_COUNT)
 
 
+# Words long enough to survive a naive length filter but carrying no topical
+# meaning. Without this, captions contributed "because"/"through"/"already" as
+# interests — the caption fallback took any word over five characters, so the
+# interest graph filled up with connectives.
+_STOPWORDS = frozenset("""
+about above after again against already always among another because before
+being below better betweencannot could during either enough every everyone
+everything follow following friends really should since some someone something
+sometimes still their theme themselves there therefore these things think this
+those threw through today together tomorrow toward under until using video
+watch watching what when where which while whole whose without would your
+yours yourself amazing awesome beautiful perfect perfection favorite favourite
+please thanks thank welcome subscribe comment share follow link click
+""".split())
+
+# A token has to look like a word to be a topic. Hashtags such as "#2024" or
+# "#f4f" are noise, and single characters are never a subject.
+_MIN_TOPIC_LENGTH = 4
+
+
+def _normalize_topic_token(raw: str) -> Optional[str]:
+    """Reduce a hashtag or caption word to a topic token, or None if it isn't
+    one. Returning None rather than a placeholder is the point: an event we
+    cannot classify must not be filed under a catch-all that then competes with
+    real interests for importance."""
+    if not raw:
+        return None
+    token = raw.strip().lower().lstrip("#").strip(".,!?:;\"'()[]{}")
+    if len(token) < _MIN_TOPIC_LENGTH:
+        return None
+    # Must contain letters — rejects "2024", "100k", pure punctuation.
+    if not any(ch.isalpha() for ch in token):
+        return None
+    if token in _STOPWORDS:
+        return None
+    return token
+
+
+def _candidate_topics(event: BehaviorEvent) -> List[str]:
+    """Topic candidates for one event, hashtags first, caption as fallback."""
+    candidates = []
+    for tag in (event.hashtags or []):
+        token = _normalize_topic_token(tag)
+        if token:
+            candidates.append(token)
+
+    # Only fall back to the caption when the creator supplied no hashtags —
+    # hashtags are an explicit topical signal, caption words are an inference.
+    if not candidates and event.caption:
+        for word in event.caption.split():
+            token = _normalize_topic_token(word)
+            if token:
+                candidates.append(token)
+
+    return candidates
+
+
 class KnowledgeConsolidationEngine:
     """
     Knowledge Consolidation Engine
@@ -94,6 +151,7 @@ class KnowledgeConsolidationEngine:
             creator_groups = self._group_by_creator(events)
             
             # Process topic clusters
+            clustered_event_ids = set()
             for topic, topic_events in topic_groups.items():
                 if len(topic_events) >= self.min_cluster_size:
                     cluster = self._create_or_update_topic_cluster(
@@ -102,8 +160,21 @@ class KnowledgeConsolidationEngine:
                         clusters
                     )
                     clusters[cluster.cluster_id] = cluster
+                    clustered_event_ids.update(e.event_id for e in topic_events)
                 else:
                     unclustered_events.extend(topic_events)
+
+            # Events that yielded no usable topic candidate are skipped by
+            # _group_by_topic entirely, so they never appear in topic_groups.
+            # They still have to be reported here — the return contract is
+            # "everything that did not become a topic cluster", and callers use
+            # it to know what the pipeline could not classify. (They remain
+            # eligible for creator clusters below.)
+            already_reported = {e.event_id for e in unclustered_events}
+            for event in events:
+                if event.event_id not in clustered_event_ids and event.event_id not in already_reported:
+                    unclustered_events.append(event)
+                    already_reported.add(event.event_id)
             
             # Process creator clusters
             for creator, creator_events in creator_groups.items():
@@ -133,25 +204,34 @@ class KnowledgeConsolidationEngine:
         Returns:
             Dictionary mapping topic to events
         """
-        topic_groups = defaultdict(list)
-        
+        # Two passes. The first counts how often each candidate topic appears
+        # across the whole batch; the second assigns each event to its most
+        # BATCH-FREQUENT candidate rather than whichever hashtag the creator
+        # happened to type first. Positional choice is why a one-off tag like
+        # "perfection" could outrank a genuine recurring interest.
+        frequency: Dict[str, int] = defaultdict(int)
+        per_event: List[Tuple[BehaviorEvent, List[str]]] = []
+
         for event in events:
-            # Extract topics from hashtags
-            topics = event.hashtags or []
-            
-            # If no hashtags, try to extract from caption
-            if not topics and event.caption:
-                # Simple topic extraction (in production, use NLP)
-                words = event.caption.lower().split()
-                topics = [w for w in words if len(w) > 5][:3]
-            
-            # Group by primary topic
-            if topics:
-                primary_topic = topics[0]
-                topic_groups[primary_topic].append(event)
-            else:
-                topic_groups["uncategorized"].append(event)
-        
+            candidates = _candidate_topics(event)
+            per_event.append((event, candidates))
+            for token in set(candidates):
+                frequency[token] += 1
+
+        topic_groups = defaultdict(list)
+
+        for event, candidates in per_event:
+            if not candidates:
+                # Deliberately NOT grouped under a catch-all. An unclassifiable
+                # event used to land in an "uncategorized" bucket which, being
+                # the union of every unlabelled event, reliably became the
+                # single largest cluster — and therefore the user's strongest
+                # "interest". A bucket that means "we don't know" must never
+                # outrank things we do know.
+                continue
+            primary_topic = max(candidates, key=lambda t: (frequency[t], -candidates.index(t)))
+            topic_groups[primary_topic].append(event)
+
         return dict(topic_groups)
     
     def _group_by_creator(self, events: List[BehaviorEvent]) -> Dict[str, List[BehaviorEvent]]:

@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta
 
 from backend.shared.contracts import BehaviorEvent
-from .behavior_object import BehaviorObject, TrendDirection
+from .behavior_object import BehaviorObject, TrendDirection, is_creator_behavior
 from .evidence_engine import Evidence
 
 
@@ -571,8 +571,14 @@ class PrimaryInterestRule(Rule):
     """
 
     def _ranked(self, behavior_objects):
+        # Creator objects are excluded: this rule reports the user's INTERESTS,
+        # and including them produced "Primary interests: uncategorized, #ai,
+        # Content by lex_fridman_clips". Creator affinity is CreatorDiversityRule's
+        # job. (The uncategorized bucket no longer exists — see
+        # knowledge_consolidation._group_by_topic.)
         return sorted(
-            [b for b in behavior_objects if b.temporal_statistics.occurrence_count > 0],
+            [b for b in behavior_objects
+             if b.temporal_statistics.occurrence_count > 0 and not is_creator_behavior(b)],
             key=lambda b: b.temporal_statistics.occurrence_count, reverse=True,
         )
 
@@ -680,8 +686,12 @@ class TemporalHabitRule(Rule):
     """
 
     def _habitual(self, behavior_objects):
+        # Same reasoning as _ranked: a habit is described by its subject, not
+        # by which account published it.
         out = []
         for b in behavior_objects:
+            if is_creator_behavior(b):
+                continue
             ts = b.temporal_statistics
             if getattr(ts, "days_active", 0) >= 2 or ts.occurrence_count >= 3:
                 out.append(b)

@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 
 from backend.reasoning.evidence_engine import Evidence
 from backend.reasoning.inference_engine import Inference
-from backend.reasoning.behavior_object import BehaviorObject
+from backend.reasoning.behavior_object import BehaviorObject, is_creator_behavior
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,11 @@ class ReflectionEngine:
                 for bo in behavior_objects
             )
 
-            topics = [bo.topic for bo in behavior_objects if bo.topic]
+            # Creator objects carry a "Content by <creator>" label, which is an
+            # affinity rather than a subject — including them made reflection
+            # summaries read "Key topics: travel, Content by ecaffauto, ...".
+            topics = [bo.topic for bo in behavior_objects
+                      if bo.topic and not is_creator_behavior(bo)]
             topic_counts = Counter(topics)
             dominant_topics = [t for t, _ in topic_counts.most_common(5)]
 
@@ -91,7 +95,8 @@ class ReflectionEngine:
             if len(high_confidence) > 3:
                 patterns.append(f"{len(high_confidence)} high-confidence evidence items identified")
 
-            stable_objects = [bo for bo in behavior_objects if bo.stability_score > 0.5]
+            stable_objects = [bo for bo in behavior_objects
+                              if bo.stability_score > 0.5 and not is_creator_behavior(bo)]
             if len(stable_objects) > 0:
                 topics_str = ", ".join(bo.topic for bo in stable_objects[:3])
                 patterns.append(f"Stable behavioral patterns in: {topics_str}")
