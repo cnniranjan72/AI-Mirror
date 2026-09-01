@@ -353,6 +353,76 @@ class LLMVerbalizer:
                 parts.append(template.format(level=level))
         return "".join(parts)
 
+    def _audit_answer_lines(self, context: CharacterContext, intent) -> List[str]:
+        """Answer an audit question from pre-computed findings, no LLM involved.
+
+        Returns [] when the question is not about an audit, or when the
+        relevant scorer declined to judge — in which case the caller falls
+        through to the ordinary evidence answer rather than this one asserting
+        anything.
+        """
+        kind = _audit_question_kind(getattr(intent, "primary_question", "") or "")
+        if not kind:
+            return []
+
+        lines: List[str] = []
+
+        if kind == "provenance":
+            prov = context.interest_provenance or {}
+            if not prov.get("topics"):
+                return []
+            if not prov.get("measurable"):
+                return [
+                    "- I can't tell yet. Deciding whether an interest was chosen or fed "
+                    "needs evidence of you seeking it out - searches, likes, saves - and "
+                    "there isn't enough of that in your imported history.",
+                    "- Importing a Google Takeout export that includes search history "
+                    "would make this measurable.",
+                ]
+            summary = prov.get("summary", {})
+            share = summary.get("fed_share_of_attention")
+            if share is not None:
+                lines.append(
+                    f"- {round(share * 100)}% of your judged watching went to topics with no "
+                    f"evidence you ever sought them out."
+                )
+            for t in (prov.get("topics") or []):
+                if t.get("verdict") == "fed":
+                    lines.append(
+                        f"- {t.get('topic')}: fed to you - {t.get('exposure')} views, "
+                        f"{t.get('searches')} searches."
+                    )
+            for t in (prov.get("topics") or []):
+                if t.get("verdict") == "chosen":
+                    lines.append(
+                        f"- {t.get('topic')}: chosen - {t.get('searches')} searches behind "
+                        f"{t.get('exposure')} views."
+                    )
+            return lines[:8]
+
+        audit = context.platform_audit or {}
+        if not audit.get("claims_total"):
+            return []
+        if not audit.get("verdict_reliable"):
+            return [
+                f"- {audit['claims_total']} ad-targeting claims were imported, but there "
+                f"isn't enough of your behaviour recorded yet to test whether they're true.",
+            ]
+        summary = audit.get("summary", {})
+        share = summary.get("supported_share")
+        if share is not None:
+            lines.append(
+                f"- {round(share * 100)}% of their testable claims about you are supported "
+                f"by your actual behaviour."
+            )
+        unsupported = [c.get("label") for c in (audit.get("unsupported") or [])[:5]]
+        if unsupported:
+            lines.append(f"- Targeted on, with no support in your history: {', '.join(unsupported)}.")
+        missed = [m.get("topic") for m in (audit.get("missed") or [])[:5]]
+        if missed:
+            lines.append(f"- Well-evidenced interests they never target: {', '.join(missed)}.")
+        return lines[:8]
+
     def _summarize_context(self, context: CharacterContext) -> str:
         lines: List[str] = []
 
@@ -535,6 +605,17 @@ class LLMVerbalizer:
                 lines.extend(self._fact_lines(context, 5) or ["- Not enough behavioral data yet."])
             return "\n".join(lines)
 
+        # Audit findings answer the question directly and are already fully
+        # computed, so they lead. This path runs with NO language model: for a
+        # product whose claim is that the deterministic pipeline decides, a
+        # finding that only surfaces when an LLM happens to be configured would
+        # have the dependency exactly backwards.
+        audit_lines = self._audit_answer_lines(context, intent)
+        if audit_lines:
+            lines.append(f"Here is what I found about '{intent.primary_question}':")
+            lines.extend(audit_lines)
+            return "\n".join(lines)
+
         lines.append(f"Here is what I found about '{intent.primary_question}':")
         facts = self._fact_lines(context, 4)
         if facts:
@@ -544,6 +625,29 @@ class LLMVerbalizer:
         if float(conf) < 0.5:
             lines.append("\nNote: Confidence in this information is limited by the amount of data collected so far.")
         return "\n".join(lines)
+
+
+def _audit_question_kind(question: str) -> Optional[str]:
+    """Which audit, if either, a question is actually asking about.
+
+    Keyword matching rather than an LLM classifier on purpose: this decides
+    whether to state a measured finding, and that decision has to be as
+    deterministic as the finding itself.
+    """
+    q = (question or "").lower()
+    provenance_words = (
+        "fed", "feed", "chose", "chosen", "choose", "sought", "seek", "searched",
+        "algorithm", "manipulat", "pushed", "my own", "genuine",
+    )
+    platform_words = (
+        "ad", "ads", "advertis", "target", "profile", "meta", "instagram", "google",
+        "think i", "thinks i", "know about me", "claim",
+    )
+    if any(w in q for w in provenance_words):
+        return "provenance"
+    if any(w in q for w in platform_words):
+        return "platform"
+    return None
 
 
 _verbalizer_instance: Optional[LLMVerbalizer] = None

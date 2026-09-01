@@ -16,7 +16,7 @@ No network, no LLM — only the prompt-context summariser is exercised.
 import pytest
 
 from backend.rag.context_builder import CharacterContext
-from backend.verbalizer.verbalizer import LLMVerbalizer
+from backend.verbalizer.verbalizer import LLMVerbalizer, _audit_question_kind
 
 
 def _summarize(**kwargs) -> str:
@@ -132,3 +132,88 @@ class TestCoverageGateDefault:
         report = await build_mirror_report(disposable_user_id)
         assert report["verdict_reliable"] is False
         assert report["coverage"] is not None
+
+class _Intent:
+    def __init__(self, question):
+        self.primary_question = question
+
+
+class TestQuestionRouting:
+    """Keyword matching, not a classifier: this decides whether to state a
+    measured finding, so it has to be as deterministic as the finding."""
+
+    @pytest.mark.parametrize("q", [
+        "Which of my interests was I fed rather than chose?",
+        "did I choose this or was it pushed on me",
+        "what did the algorithm feed me",
+        "which interests are genuinely my own",
+    ])
+    def test_provenance_questions(self, q):
+        assert _audit_question_kind(q) == "provenance"
+
+    @pytest.mark.parametrize("q", [
+        "what does Meta think I am interested in",
+        "what ads am I targeted with",
+        "is their profile of me accurate",
+        "what does instagram claim about me",
+    ])
+    def test_platform_questions(self, q):
+        assert _audit_question_kind(q) == "platform"
+
+    @pytest.mark.parametrize("q", ["what are my top topics", "how confident are you", ""])
+    def test_unrelated_questions_route_nowhere(self, q):
+        assert _audit_question_kind(q) is None
+
+
+class TestDeterministicAnswers:
+    """The audit answer must work with NO language model. For a product whose
+    claim is that the deterministic pipeline decides, a finding that only
+    appears when an LLM is configured would have the dependency backwards."""
+
+    def _lines(self, question, **ctx):
+        context = CharacterContext(user_id="test_user", **ctx)
+        return LLMVerbalizer()._audit_answer_lines(context, _Intent(question))
+
+    def test_names_the_fed_topics_with_their_counts(self):
+        lines = self._lines("what was I fed?", interest_provenance=MEASURABLE_PROVENANCE)
+        joined = " ".join(lines)
+        assert "77%" in joined
+        assert "outrage: fed to you" in joined
+        assert "46 views, 0 searches" in joined
+
+    def test_names_the_chosen_topics_too(self):
+        lines = self._lines("what did I choose?", interest_provenance=MEASURABLE_PROVENANCE)
+        assert any("robotics: chosen" in l for l in lines)
+
+    def test_platform_question_reports_the_audit(self):
+        lines = self._lines("what does Meta think I like?", platform_audit=RELIABLE_AUDIT)
+        joined = " ".join(lines)
+        assert "50%" in joined
+        assert "Cryptocurrency" in joined
+
+    def test_unmeasurable_says_so_instead_of_guessing(self):
+        lines = self._lines(
+            "was I fed this?",
+            interest_provenance={**MEASURABLE_PROVENANCE, "measurable": False},
+        )
+        joined = " ".join(lines)
+        assert "can't tell yet" in joined
+        assert "77%" not in joined
+        assert "outrage" not in joined
+
+    def test_unreliable_platform_audit_withholds_the_verdict(self):
+        lines = self._lines(
+            "is their profile accurate?",
+            platform_audit={**RELIABLE_AUDIT, "verdict_reliable": False},
+        )
+        joined = " ".join(lines)
+        assert "isn't enough of your behaviour recorded yet" in joined
+        assert "50%" not in joined
+
+    def test_returns_nothing_when_the_question_is_unrelated(self):
+        """Falls through to the ordinary evidence answer rather than
+        volunteering an audit nobody asked about."""
+        assert self._lines("what are my top topics?", interest_provenance=MEASURABLE_PROVENANCE) == []
+
+    def test_returns_nothing_when_there_is_no_audit_data(self):
+        assert self._lines("what was I fed?") == []
