@@ -166,6 +166,27 @@ async def save_persona(user_id: str, persona: Dict[str, Any]) -> int:
     return row["id"]
 
 
+def _decode(value: Any, fallback: Any) -> Any:
+    """JSONB columns come back as strings.
+
+    No JSON codec is registered on the pool (app/db/postgres.py), so asyncpg
+    hands back the raw text for every JSONB column — which is why explain.py
+    carries its own _parse_json_fields. get_latest_persona returned those
+    strings untouched, and compute_alignment then called .get() on what it
+    assumed was a dict.
+
+    Live, that made GET /profile return 500 for every user who HAD a persona
+    while returning 200 for everyone who did not, so the failure looked like
+    a data problem rather than a decoding one.
+    """
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (ValueError, TypeError):
+            return fallback
+    return value if value is not None else fallback
+
+
 async def get_latest_persona(user_id: str) -> Optional[Dict[str, Any]]:
     """Get most recent persona for a user."""
     row = await fetchrow(
@@ -184,12 +205,12 @@ async def get_latest_persona(user_id: str) -> Optional[Dict[str, Any]]:
 
     return {
         "persona_label": row["persona_label"],
-        "traits": row["traits"],
-        "interest_vector": row["interest_vector"],
-        "behavior_vector": row["behavior_vector"],
-        "strengths": row["strengths"],
-        "weaknesses": row["weaknesses"],
-        "recommendations": row["recommendations"],
+        "traits": _decode(row["traits"], {}),
+        "interest_vector": _decode(row["interest_vector"], {}),
+        "behavior_vector": _decode(row["behavior_vector"], {}),
+        "strengths": _decode(row["strengths"], []),
+        "weaknesses": _decode(row["weaknesses"], []),
+        "recommendations": _decode(row["recommendations"], []),
         "confidence": float(row["confidence"]),
         "created_at": row["created_at"].isoformat(),
     }
