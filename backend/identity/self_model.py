@@ -127,6 +127,35 @@ class Belief(BaseModel):
         return self.net_evidence_strength <= CONTESTED_NET_STRENGTH
 
 
+def _mentions(topic: str, description: str) -> bool:
+    """Does this description actually name the topic?
+
+    A plain substring test would match "art" inside "particle". The usual
+    remedy, a \\b word boundary, does not work here: most topics are hashtags
+    and '#' is itself a non-word character, so there is no boundary before it.
+    The neighbouring characters are checked directly instead.
+    """
+    needle = (topic or "").strip().lower()
+    hay = (description or "").lower()
+    if not needle or not hay:
+        return False
+    # Underscore counts as part of a token: "_".isalnum() is False, so a
+    # bare alphanumeric test lets #ai match inside #ai_research.
+    def joined(ch):
+        return ch.isalnum() or ch == "_"
+
+    start = 0
+    while True:
+        at = hay.find(needle, start)
+        if at < 0:
+            return False
+        before = hay[at - 1] if at else " "
+        after = hay[at + len(needle)] if at + len(needle) < len(hay) else " "
+        if not joined(before) and not joined(after):
+            return True
+        start = at + 1
+
+
 class UncertaintyMap(BaseModel):
     """
     Uncertainty Map
@@ -140,11 +169,22 @@ class UncertaintyMap(BaseModel):
         description="Uncertainty by domain (0=certain, 1=uncertain)"
     )
     
-    # Topic uncertainties
-    topic_uncertainties: Dict[str, float] = Field(
-        default_factory=dict,
-        description="Uncertainty by topic"
+    # Topics the identity holds that no belief addresses at all.
+    #
+    # These used to be given an uncertainty of 0.8 and filed alongside the
+    # measured ones, which made a guess indistinguishable from a measurement:
+    # 19 of 50 domain values across the deployed instance were that constant,
+    # and they flowed into high_uncertainty_domains and from there into the
+    # context the language model is given. The system was telling itself it
+    # was uncertain about topics it had simply never considered.
+    #
+    # "I looked and I am unsure" and "I have nothing to say" are different
+    # claims and are now kept apart.
+    unexamined_domains: List[str] = Field(
+        default_factory=list,
+        description="Identity topics no belief addresses; not a measurement"
     )
+
     
     # Overall uncertainty
     overall_uncertainty: float = Field(..., ge=0.0, le=1.0, description="Overall uncertainty")
@@ -168,7 +208,7 @@ class UncertaintyMap(BaseModel):
         self._update_categorization()
         self.last_updated = datetime.utcnow()
     
-    def get_domain_uncertainty(self, domain: str) -> float:
+    def get_domain_uncertainty(self, domain: str) -> Optional[float]:
         """
         Get uncertainty for domain
         
@@ -176,9 +216,11 @@ class UncertaintyMap(BaseModel):
             domain: Domain name
             
         Returns:
-            Uncertainty level (0-1)
+            Uncertainty level (0-1), or None where nothing was measured. A
+            caller that wants a number for an unmeasured domain has to choose
+            one itself rather than receive 0.5 without being told.
         """
-        return self.domain_uncertainties.get(domain, 0.5)
+        return self.domain_uncertainties.get(domain)
     
     def _update_categorization(self):
         """Update high/low uncertainty categorization"""
@@ -513,24 +555,34 @@ class SelfModelEngine:
                 last_updated=datetime.utcnow()
             )
             
-            # Add domain uncertainties from dominant topics
+            # A domain gets a number only when beliefs actually bear on it.
+            # Everything else is recorded as unexamined rather than assigned a
+            # placeholder, so nothing downstream can mistake the absence of an
+            # opinion for a confident one.
+            unexamined = []
             for topic in identity_snapshot.dominant_topics:
-                # Find beliefs related to this topic
                 topic_beliefs = [
                     b for b in beliefs
-                    if topic.lower() in b.description.lower()
+                    if _mentions(topic, b.description)
                 ]
-                
+
                 if topic_beliefs:
                     avg_uncertainty = sum(b.uncertainty for b in topic_beliefs) / len(topic_beliefs)
                     uncertainty_map.add_domain_uncertainty(topic, avg_uncertainty)
                 else:
-                    # No beliefs = high uncertainty
-                    uncertainty_map.add_domain_uncertainty(topic, 0.8)
-            
-            # Add uncertainties for emerging topics (higher uncertainty)
+                    unexamined.append(topic)
+
+            # Emerging topics are by definition too new to have been reasoned
+            # about; they were previously given a flat 0.7 for the same reason
+            # the 0.8 above was wrong.
             for topic in identity_snapshot.emerging_topics:
-                uncertainty_map.add_domain_uncertainty(topic, 0.7)
+                if topic not in uncertainty_map.domain_uncertainties:
+                    unexamined.append(topic)
+
+            seen = set()
+            uncertainty_map.unexamined_domains = [
+                t for t in unexamined if not (t in seen or seen.add(t))
+            ]
             
             logger.debug(f"Built uncertainty map with {len(uncertainty_map.domain_uncertainties)} domains")
             return uncertainty_map

@@ -42,6 +42,15 @@ if ($log -match 'Output written on[\s\S]*?\((\d+) pages') {
     Write-Output "  overfull hboxes: $overfull   undefined refs/cites: $undefined"
     if ([int]$pages -gt 8) { Write-Output "  OVER LIMIT by $([int]$pages - 8)" }
     else { Write-Output "  within limit" }
+
+    # Source-level checks cannot see a command that lost its backslash:
+    # "ef{sec:discussion}" is not a broken reference, it is prose, so pdflatex
+    # is silent and the undefined-reference count stays at zero. This reads the
+    # rendered page instead.
+    $py = Join-Path $PSScriptRoot "backend\venv\Scripts\python.exe"
+    if (Test-Path $py) {
+        & $py "check_paper_render.py" ".texbuild\aimirror_ieee_paper.pdf"
+    }
 } else {
     Write-Output "  NO PDF PRODUCED - see .texbuild\aimirror_ieee_paper.log"
 }

@@ -157,6 +157,22 @@ async def get_behaviour_space(
     return await build_space(user_id, limit)
 
 
+@router.get("/identity/blind-spots")
+async def get_blind_spots(user_id: str = Depends(resolve_user_id)):
+    """Where this model is thin, separated by what kind of thin.
+
+    The uncertainty map has been stored, indexed, read into the character
+    runtime and injected into the language model's context since the schema was
+    written, and never shown to the person it describes. It also conflated a
+    measured uncertainty with a placeholder given to topics nothing had been
+    concluded about, so "I have never considered this" reached the model as
+    "I am highly uncertain about this".
+    """
+    from app.services.blind_spots import build_blind_spots
+
+    return await build_blind_spots(user_id)
+
+
 @router.get("/reasoning/contested")
 async def get_contested_claims(
     user_id: str = Depends(resolve_user_id),

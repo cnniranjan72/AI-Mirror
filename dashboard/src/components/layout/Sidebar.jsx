@@ -44,6 +44,7 @@ const navSections = [
     items: [
       { path: '/evidence', label: 'Evidence', icon: EvidenceIcon },
       { path: '/contested', label: 'Contested Claims', icon: AlertIcon },
+      { path: '/blind-spots', label: 'Blind Spots', icon: SearchIcon },
       { path: '/planning', label: 'Planning', icon: PlanningIcon },
       { path: '/decision', label: 'Decision', icon: DecisionIcon },
       { path: '/learning', label: 'Learning', icon: ZapIcon },

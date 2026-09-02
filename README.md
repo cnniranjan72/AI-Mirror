@@ -502,7 +502,29 @@ Constructs a self-awareness model with explicit belief representation.
 | **Beliefs** | Interpretations drawn from inferences, each carrying its own supporting and contradicting observations |
 | **Strong Beliefs** | Strength ≥ 0.7 **and** not contested by their own evidence |
 | **Uncertain Beliefs** | Weak inference behind them, **or** at least one observation in three arguing the other way |
-| **Uncertainty Map** | Domains where the system knows it lacks data |
+| **Uncertainty Map** | Measured uncertainty per topic, kept separate from topics no belief addresses at all |
+
+#### Knowing what it doesn't know
+
+The uncertainty map distinguishes two claims that were previously identical in
+storage:
+
+| Category | Meaning |
+|---|---|
+| `domain_uncertainties` | Beliefs address this topic and are weak. A **measurement**, taken from their confidence |
+| `unexamined_domains` | **No belief addresses this topic at all.** The system has nothing to say, which is not the same as being unsure |
+
+Topics in the second category used to receive a flat `0.8` (or `0.7` when
+emerging) and were stored in the first dictionary, in the same scale. Nothing
+downstream could tell a placeholder from a measurement, and three consumers read
+that field — the character runtime, the Decision Engine, and the context builder
+that assembles what the LLM is shown. "I have never considered this" therefore
+reached the language model as "I am highly uncertain about this."
+
+Matching a topic to a belief uses token boundaries rather than a substring test,
+so `art` does not match inside `particle`. A `\b` word boundary is not usable
+here: most topics are hashtags and `#` is itself a non-word character, so
+`\b#ai\b` never matches anything.
 
 The two statuses are complementary — a belief is never reported as settled and
 open at once. The bar for STRONG is deliberately *not* "zero counter-evidence":
@@ -1069,6 +1091,7 @@ flowchart TB
 | **Memory** | `/memory` | Reflections, inferences, patterns with tab filters, Memory Tree (3D) |
 | **Evidence** | `/evidence` | Evidence list, type distribution bar chart, detail drawer |
 | **Contested Claims** | `/contested` | Claims the system's own evidence argues against, ranked by how contested rather than how confident, naming the specific content behind each disagreement |
+| **Blind Spots** | `/blind-spots` | What the system doesn't know about you, separating "no opinion at all" from measured uncertainty |
 | **Behavior** | `/behavior` | Behavior objects by topic/creator, lifecycle state distribution, Filter Bubble Score |
 | **Planning** | `/planning` | Pipeline planning breakdown, per-stage timing |
 | **Decision** | `/decision` | Decision traces, tree visualization, explainability panel |
@@ -1497,6 +1520,7 @@ flowchart TB
 | `GET` | `/reasoning/reflections` | System reflections |
 | `GET` | `/reasoning/behavior-objects` | Behavior objects |
 | `GET` | `/identity/drift` | Per-dimension movement between identity snapshots |
+| `GET` | `/identity/blind-spots` | Topics with no belief attached, separated from measured uncertainty |
 | `GET` | `/identity/space` | Stored embeddings projected into three dimensions (PCA) |
 | `POST` | `/identity/counterfactual` | Run hypothetical events through the pipeline without persisting |
 | `GET` | `/query/traces/{trace_id}/xray` | Per-stage timing and detail for one query |
