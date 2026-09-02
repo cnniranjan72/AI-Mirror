@@ -188,10 +188,9 @@ dashboard/
 ```
 docs/
 ├── Architecture.md          # Complete architecture guide
-├── MIGRATION_GUIDE.md      # Migration instructions
-├── SPRINT_1_SUMMARY.md     # Sprint 1 deliverables
+├── PRODUCTION_GUIDE.md      # Deployment and operations
 ├── FOLDER_STRUCTURE.md     # This document
-└── ...                     # Additional documentation
+└── adr/                    # Architecture decision records
 ```
 
 ## References

@@ -182,10 +182,8 @@ The chosen architecture:
 
 ## References
 
-- Sprint 1: Production Architecture
-- Sprint 2: Cognitive Intelligence Layer
-- Sprint 3: Identity Engine
-- FINAL_ARCHITECTURE_V3.md
+- docs/Architecture.md
+- docs/adr/README.md
 
 ---
 

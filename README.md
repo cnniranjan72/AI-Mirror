@@ -364,7 +364,37 @@ Collects evidence across 5 dimensions:
 
 | Input | Process | Output |
 |---|---|---|
-| `List[BehaviorObject]` | 5-dimension scoring → Confidence weighting → Conflict resolution | `List[Evidence]` with type, confidence, weight, net_confidence, explanation, linked behavior objects |
+| `List[BehaviorObject]` | 5-dimension scoring → Confidence weighting → Counter-evidence partition | `List[Evidence]` with type, confidence, weight, net_confidence, conflicting_observations, explanation, linked behavior objects |
+
+#### Counter-Evidence
+
+A feed serves content; the viewer only chooses how long to stay. A very short
+watch is therefore a decision about that content, and it argues **against**
+interest in the topic rather than for it. Each collector splits the events
+matching a topic or creator into two sets:
+
+| Field | Meaning |
+|---|---|
+| `supporting_events` | Watched at or above the viewer's usual attention |
+| `conflicting_observations` | Scrolled past well below it |
+| `net_confidence` | `confidence × max(0, (support − counter) / total)` |
+| `conflict_resolution` | Plain-language note of how the split was handled |
+
+The line is **0.40 of that viewer's own median watch time**, not a number of
+seconds, because a short watch on a long-form feed and on a six-second loop are
+not the same duration. Measured across the deployed corpus this marks 19–20% of
+events as skipped; at 0.25 it is 13–15% and at 0.50 it is 22–23%, so the reading
+does not balance on the exact value.
+
+Two properties are deliberate. A viewer who skips nothing produces **no**
+counter-evidence — taking each history's bottom quartile instead would
+manufacture it for everyone and could never report its absence. And
+`net_confidence` is withheld entirely below five observations, where a single
+skip swings the balance from +1 to −1.
+
+An explicit interaction outranks duration: someone who saves a reel two seconds
+in has not skipped it. Below 12 events there is no stable baseline, so nothing
+is called a skip at all.
 
 ### Stage 4: Inference Generation
 
@@ -469,10 +499,20 @@ Constructs a self-awareness model with explicit belief representation.
 
 | Component | Description |
 |---|---|
-| **Beliefs** | High-confidence identity traits the system is sure about |
-| **Strong Beliefs** | Very high-confidence beliefs (repeatedly confirmed) |
-| **Uncertain Beliefs** | Low-confidence traits needing more data |
+| **Beliefs** | Interpretations drawn from inferences, each carrying its own supporting and contradicting observations |
+| **Strong Beliefs** | Strength ≥ 0.7 **and** not contested by their own evidence |
+| **Uncertain Beliefs** | Weak inference behind them, **or** at least one observation in three arguing the other way |
 | **Uncertainty Map** | Domains where the system knows it lacks data |
+
+The two statuses are complementary — a belief is never reported as settled and
+open at once. The bar for STRONG is deliberately *not* "zero counter-evidence":
+measured on real histories nearly every claim accumulates some skipped
+observations, so that rule makes STRONG unreachable and collapses the
+distinction it exists to draw.
+
+Note the difference this layer encodes. **Identity** is what the behavioural
+data shows; the **Self-Model** is what the system believes about it, and
+`net_evidence_strength` is the gap between them made numeric.
 
 ### Query Pipeline
 
@@ -1028,6 +1068,7 @@ flowchart TB
 | **Identity** | `/identity` | 9 sub-profiles, evolution timeline, identity inspector, Identity Galaxy (3D) |
 | **Memory** | `/memory` | Reflections, inferences, patterns with tab filters, Memory Tree (3D) |
 | **Evidence** | `/evidence` | Evidence list, type distribution bar chart, detail drawer |
+| **Contested Claims** | `/contested` | Claims the system's own evidence argues against, ranked by how contested rather than how confident, naming the specific content behind each disagreement |
 | **Behavior** | `/behavior` | Behavior objects by topic/creator, lifecycle state distribution, Filter Bubble Score |
 | **Planning** | `/planning` | Pipeline planning breakdown, per-stage timing |
 | **Decision** | `/decision` | Decision traces, tree visualization, explainability panel |
@@ -1037,6 +1078,14 @@ flowchart TB
 | **Chat** | `/chat` | AI chat with streaming, explain button, follow-up chips |
 | **Character** | `/character` | 3D orb, runtime state, memory references, RL policy |
 | **Guardian** | `/guardian` | Wellbeing report, risk indicators, content alerts |
+| **Algorithmic Mirror** | `/mirror` | The platform's declared interests set against your own behavioural evidence |
+| **Interest Provenance** | `/provenance` | Interests you sought apart from interests delivered to you |
+| **Accuracy Ledger** | `/calibration` | The system's claims scored against your verdicts, reported as calibration rather than accuracy; corrections bind what it later asserts |
+| **Identity Drift** | `/drift` | How the model of you moved, dimension by dimension, between snapshots |
+| **Reasoning X-Ray** | `/xray` | Per-stage breakdown of a single query, on a log scale so sub-millisecond stages stay visible |
+| **What Would Change It** | `/counterfactual` | Hypothetical events run through the real pipeline without persisting anything |
+| **Behaviour Space** | `/space` | Every embedded item projected 384 → 3 by PCA, with the explained variance shown as prominently as the cloud |
+| **Report** | `/report` | Printable summary of the current twin |
 | **Insights** | `/insights` | Profile export, CSV download, campaign resonance |
 | **Learning** | `/learning` | RL policy table, reward history per action type |
 | **Settings** | `/settings` | Health check, data export, delete all data |
@@ -1443,9 +1492,20 @@ flowchart TB
 | `GET` | `/identity/snapshot` | Identity snapshot history |
 | `GET` | `/identity/self-model` | Self-awareness model |
 | `GET` | `/reasoning/evidence` | Evidence items (filterable by type) |
+| `GET` | `/reasoning/contested` | Claims whose own evidence contradicts them, most contested first |
 | `GET` | `/reasoning/inferences` | Rule-based inferences |
 | `GET` | `/reasoning/reflections` | System reflections |
 | `GET` | `/reasoning/behavior-objects` | Behavior objects |
+| `GET` | `/identity/drift` | Per-dimension movement between identity snapshots |
+| `GET` | `/identity/space` | Stored embeddings projected into three dimensions (PCA) |
+| `POST` | `/identity/counterfactual` | Run hypothetical events through the pipeline without persisting |
+| `GET` | `/query/traces/{trace_id}/xray` | Per-stage timing and detail for one query |
+| `GET` | `/calibration/report` | Calibration of the system's claims against user verdicts |
+| `GET` | `/calibration/open` | Claims awaiting a verdict |
+| `GET` | `/calibration/answered` | Claims already judged |
+| `POST` | `/calibration/verdict` | Record a verdict on a claim |
+| `GET` | `/collection/status` | Whether behavioural collection is currently paused |
+| `POST` | `/collection/pause` | Pause or resume collection |
 
 ### Explainability
 
