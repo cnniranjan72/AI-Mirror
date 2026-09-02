@@ -44,6 +44,9 @@ USER_DATA_TABLES: List[str] = [
     # answers, so they go when they ask to be erased — even though losing
     # them makes the calibration report worse.
     "claim_verdicts",
+    # Whether they had stopped collection. Erasing everything and leaving a
+    # row keyed to their user_id behind would be its own small dishonesty.
+    "collection_settings",
     # Operational telemetry, but it carries user_id plus the request path and
     # message that produced it, which makes it personal data. Losing some
     # diagnostics is the correct trade when someone asks to be erased.

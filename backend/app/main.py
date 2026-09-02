@@ -18,6 +18,7 @@ from app.db.postgres import init_pool, close_pool, run_schema, health as db_heal
 from app.api import ingest, query, profile, explain, seed, rl, auth_api, guardian, character, insights, privacy, timeline, graph, diary, goals, admin, orgs, research, settings as settings_api
 from app.api import mirror
 from app.api import calibration
+from app.api import collection
 
 load_dotenv()
 
@@ -106,6 +107,7 @@ app.include_router(character.router, tags=["Character"])
 app.include_router(insights.router, tags=["Insights"])
 app.include_router(mirror.router)
 app.include_router(calibration.router, tags=["Calibration"])
+app.include_router(collection.router, tags=["Collection"])
 app.include_router(privacy.router, tags=["Privacy"])
 app.include_router(timeline.router, tags=["Timeline"])
 app.include_router(graph.router, tags=["Graph"])

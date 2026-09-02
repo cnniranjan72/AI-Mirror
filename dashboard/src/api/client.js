@@ -271,6 +271,18 @@ export const api = {
     return data;
   },
 
+  // === Collection control ===
+  // Whether the system is allowed to collect. Enforced server-side at /ingest:
+  // a switch honoured only by the client would be a request, not a guarantee.
+  getCollectionStatus: async (userId = activeUser()) => {
+    const { data } = await client.get('/collection/status', { params: { user_id: userId } });
+    return data;
+  },
+  setCollectionPaused: async (paused, userId = activeUser()) => {
+    const { data } = await client.post('/collection/pause', { user_id: userId, paused });
+    return data;
+  },
+
   // === Accuracy ledger ===
   // The system's own scorecard: what it claimed about you, and whether you
   // said it was right. See backend/app/services/calibration.py.

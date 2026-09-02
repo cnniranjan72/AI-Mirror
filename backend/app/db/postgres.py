@@ -226,6 +226,13 @@ async def run_schema():
                 await conn.execute(f.read())
         logger.info("Migration V21 applied successfully")
 
+    migration_v22_path = os.path.join(os.path.dirname(__file__), "migration_v22.sql")
+    if os.path.exists(migration_v22_path):
+        async with get_conn() as conn:
+            with open(migration_v22_path, "r") as f:
+                await conn.execute(f.read())
+        logger.info("Migration V22 applied successfully")
+
 
 async def health() -> dict:
     try:

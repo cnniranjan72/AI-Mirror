@@ -35,6 +35,7 @@ from app.services import archive_import
 from app.db.postgres import fetchrow, execute, execute as db_execute
 from backend.providers import get_provider_manager
 from app.core.rate_limit import ingest_rate_limit, import_rate_limit
+from app.services import collection_control
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -182,6 +183,19 @@ async def ingest_events(
     Legacy: V2 services (embedding, vector_store, RL) still run alongside.
     """
     enforce_write_match(authorization, req.user_id)
+
+    # The switch is enforced here rather than in the extension or the
+    # dashboard. Anywhere else it would be a request, not a guarantee: anything
+    # holding the user_id could keep posting. Checked before any write, and
+    # reported rather than silently dropped, so the caller can tell the
+    # difference between "stored" and "refused".
+    if await collection_control.is_paused(req.user_id):
+        return IngestResponse(
+            success=True,
+            events_stored=0,
+            embeddings_created=0,
+            message="Collection is paused for this account. No events were stored.",
+        )
 
     if req.warnings:
         for w in req.warnings:

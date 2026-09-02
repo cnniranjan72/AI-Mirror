@@ -69,6 +69,8 @@ export default function SettingsPage() {
   // Opt-in, and reset whenever the flow is dismissed - a destructive choice
   // must never be silently carried over into the next attempt.
   const [deleteAccountToo, setDeleteAccountToo] = useState(false)
+  const [collection, setCollection] = useState(null)
+  const [collectionBusy, setCollectionBusy] = useState(false)
   const [deleteResult, setDeleteResult] = useState(null)
   const currentUser = activeUser()
   const authed = isAuthed()
@@ -131,6 +133,28 @@ export default function SettingsPage() {
       setLlmError(err?.response?.data?.detail || err.message)
     }
     setLlmBusy(false)
+  }
+
+  useEffect(() => {
+    let alive = true
+    api.getCollectionStatus()
+      .then(s => { if (alive) setCollection(s) })
+      .catch(() => { if (alive) setCollection(null) })
+    return () => { alive = false }
+  }, [])
+
+  const toggleCollection = async () => {
+    if (!collection) return
+    setCollectionBusy(true)
+    try {
+      // The server returns the authoritative state; render that rather than
+      // assuming the write did what was asked.
+      setCollection(await api.setCollectionPaused(!collection.paused))
+    } catch (e) {
+      setCollection(c => c && { ...c, error: e?.response?.data?.detail || 'Could not change this.' })
+    } finally {
+      setCollectionBusy(false)
+    }
   }
 
   const runDelete = async () => {
@@ -294,6 +318,73 @@ export default function SettingsPage() {
             <span style={{ color: 'var(--text-secondary)' }}>FastAPI + PostgreSQL (Neon)</span>
           </div>
         </div>
+      </GlassCard>
+
+      <GlassCard gradient style={{ marginTop: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: collection?.paused ? 'rgba(251,191,36,0.12)' : 'rgba(16,185,129,0.1)',
+            border: `1px solid ${collection?.paused ? 'rgba(251,191,36,0.3)' : 'rgba(16,185,129,0.2)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: collection?.paused ? '#fbbf24' : '#34d399',
+          }}>
+            <CompassIcon />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Collection</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Whether this system is allowed to record what you do. Enforced on the server,
+              so it applies to the extension too.
+            </p>
+          </div>
+        </div>
+
+        {collection === null ? (
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Checking…</div>
+        ) : (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+            padding: '12px 14px', borderRadius: 10,
+            background: collection.paused ? 'rgba(251,191,36,0.07)' : 'rgba(16,185,129,0.06)',
+            border: `1px solid ${collection.paused ? 'rgba(251,191,36,0.25)' : 'rgba(16,185,129,0.2)'}`,
+          }}>
+            <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+              <div style={{
+                fontSize: 14, fontWeight: 700,
+                color: collection.paused ? '#fbbf24' : '#34d399', marginBottom: 3,
+              }}>
+                {collection.paused ? 'Paused' : 'Collecting'}
+                {collection.paused && collection.paused_at && (
+                  <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 12 }}>
+                    {' '}since {new Date(collection.paused_at).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              {/* The scope sentence comes from the server, so every surface
+                  showing this state says the same thing about what it covers. */}
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                {collection.note}
+              </div>
+              {collection.error && (
+                <div style={{ fontSize: 12, color: '#f87171', marginTop: 6 }}>{collection.error}</div>
+              )}
+            </div>
+            <button
+              onClick={toggleCollection}
+              disabled={collectionBusy}
+              style={{
+                padding: '9px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                cursor: collectionBusy ? 'wait' : 'pointer',
+                border: `1px solid ${collection.paused ? 'rgba(16,185,129,0.35)' : 'rgba(251,191,36,0.35)'}`,
+                background: collection.paused ? 'rgba(16,185,129,0.12)' : 'rgba(251,191,36,0.12)',
+                color: collection.paused ? '#34d399' : '#fbbf24',
+              }}
+            >
+              {collectionBusy ? 'Saving…' : collection.paused ? 'Resume collecting' : 'Pause collecting'}
+            </button>
+          </div>
+        )}
       </GlassCard>
 
       <GlassCard gradient style={{ marginTop: 24 }}>

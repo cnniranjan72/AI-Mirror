@@ -1,4 +1,5 @@
 import { useState, Suspense, lazy } from 'react'
+import CollectionBanner from './CollectionBanner'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { View } from '@react-three/drei'
@@ -133,6 +134,11 @@ export default function AppShell() {
         transition: 'margin-left 0.3s cubic-bezier(0.16,1,0.3,1)',
         display: 'flex', flexDirection: 'column',
       }}>
+        {/* Paused collection follows the user across every page. Someone who
+            pauses and forgets is as wrong about what the system is doing as
+            someone who thinks it is off while it runs. */}
+        <CollectionBanner />
+
         {/* Mobile top bar. Without it there is no way to reach navigation at
             all below 900px — the drawer has no trigger. */}
         {isMobile && (

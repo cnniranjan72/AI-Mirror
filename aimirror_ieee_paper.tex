@@ -485,7 +485,7 @@ Verbalization & $0.3 \pm 0.1$ \\
 \end{table}
 
 \subsection{Confidence Product Validation}
-We measured $\Gamma$ (Eq.~\eqref{eq:confidence_product}) across all 596 evaluation queries. The mean $\Gamma$ was 0.342 (SD~=~0.187). Correctly classified queries showed significantly higher $\Gamma$ (mean~=~0.418) than misclassified queries (mean~=~0.124), confirming the confidence product as a proxy for output reliability. The right-skewed distribution (23\% exceeding 0.5, 12\% below 0.1) confirms that low-confidence pipeline stages propagate to low-confidence final outputs, enabling graded rather than binary certainty.
+We measured $\Gamma$ (Eq.~\eqref{eq:confidence_product}) across all 596 evaluation queries. The mean $\Gamma$ was 0.342 (SD~=~0.187). Correctly classified queries showed higher $\Gamma$ (mean~=~0.418) than misclassified queries (mean~=~0.124). We report the difference in means without a hypothesis test, so this indicates rather than establishes that the confidence product tracks output reliability. The right-skewed distribution (23\% exceeding 0.5, 12\% below 0.1) confirms that low-confidence pipeline stages propagate to low-confidence final outputs, enabling graded rather than binary certainty.
 
 \subsection{Architecture Invariant Validation}
 We validated six architectural invariants programmatically: (1) Runtime Builder is the sole entry point for query-time data loading; (2) a structured plan is generated for every request; (3) retrieval never bypasses the planning layer; (4) the Decision Engine operates strictly between Fusion and Context construction; (5) the Decision Engine does not modify Fusion Engine output; and (6) the language model performs no reasoning. All invariants held across all test executions.
