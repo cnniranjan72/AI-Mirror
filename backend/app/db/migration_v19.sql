@@ -24,11 +24,27 @@
 ALTER TABLE inferences      ADD COLUMN IF NOT EXISTS claim_key TEXT;
 ALTER TABLE claim_verdicts  ADD COLUMN IF NOT EXISTS claim_key TEXT;
 
--- Must match app/services/calibration.py:claim_key() exactly.
-UPDATE inferences
-   SET claim_key = md5(lower(btrim(coalesce(rule_name, ''))) || '|' ||
-                       lower(btrim(coalesce(label, ''))))
- WHERE claim_key IS NULL;
+-- Superseded by migration_v20, which makes inferences.claim_key a GENERATED
+-- column. run_schema() replays every migration on every startup, and this
+-- UPDATE then fails with "column can only be updated to DEFAULT" — aborting
+-- the whole schema run. Guarded so both orderings work: on a fresh database
+-- this backfills the plain column V19 just added, and once V20 has converted
+-- it Postgres maintains the value and this is correctly a no-op.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_name = 'inferences'
+           AND column_name = 'claim_key'
+           AND is_generated = 'ALWAYS'
+    ) THEN
+        -- Must match app/services/calibration.py:claim_key() exactly.
+        UPDATE inferences
+           SET claim_key = md5(lower(btrim(coalesce(rule_name, ''))) || '|' ||
+                               lower(btrim(coalesce(label, ''))))
+         WHERE claim_key IS NULL;
+    END IF;
+END $$;
 
 -- Backfill existing verdicts by joining back to the row they were recorded
 -- against, where it still exists. Verdicts whose inference has already been

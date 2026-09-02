@@ -31,21 +31,42 @@ os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 @pytest_asyncio.fixture(scope="session")
 async def db():
-    """Live DB pool for tests marked `db`. Skips (not errors) if the
-    configured DATABASE_URL is unreachable, so the suite stays runnable
-    without a live Postgres available."""
+    """Live DB pool for tests marked `db`.
+
+    Skips when there is no reachable database, so the suite stays runnable
+    without Postgres. It does NOT skip when the database is reachable but the
+    schema fails to apply — that is a broken migration, and a broken migration
+    must fail loudly.
+
+    Both used to be caught by one `except`, reported as "DATABASE_URL
+    unreachable". A migration that could no longer run then turned into 86
+    silently skipped tests and an exit code of 0 — the run looked green while
+    testing nothing, which is precisely how a migration that breaks startup
+    reaches production.
+    """
     from app.db import postgres
+
+    # 1. Connectivity: genuinely optional.
     try:
         pool = await postgres.init_pool()
         async with pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
-        # Tests hit the ASGI app directly via ASGITransport, which does not
-        # run FastAPI's lifespan (that's where the real app applies
-        # migrations on startup) — apply them here so schema-dependent
-        # tests see the same DB shape the real running app would.
-        await postgres.run_schema()
     except Exception as e:
         pytest.skip(f"DATABASE_URL unreachable: {e}")
+
+    # 2. Schema: not optional. Tests hit the ASGI app via ASGITransport, which
+    # does not run FastAPI's lifespan (where the real app applies migrations),
+    # so they are applied here — and the real app runs exactly this on every
+    # startup. If it raises, the deployed service cannot boot cleanly either.
+    try:
+        await postgres.run_schema()
+    except Exception as e:
+        pytest.fail(
+            f"run_schema() failed against a reachable database: {e} | "
+            f"This is a broken migration, not a missing database. The deployed "
+            f"app runs run_schema() on startup, so this would break it too."
+        )
+
     yield postgres
     await postgres.close_pool()
 
