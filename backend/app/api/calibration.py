@@ -69,3 +69,19 @@ async def open_claims(
 ):
     """Claims still awaiting a verdict, most confident first."""
     return await calibration.list_open_claims(user_id, limit)
+
+
+@router.get("/calibration/answered")
+async def answered_claims(
+    user_id: str = Depends(resolve_user_id),
+    limit: int = Query(default=50, le=200),
+):
+    """Claims already answered, so a verdict can be changed.
+
+    A correction the user cannot reverse is a trap rather than a control, and
+    the Report tells them they can take it back — this is what makes that
+    true. Each row carries live_claim_id, the id to POST against now; the
+    stored claim_id is usually stale because the pipeline regenerates
+    inferences on every ingest.
+    """
+    return await calibration.list_answered_claims(user_id, limit)

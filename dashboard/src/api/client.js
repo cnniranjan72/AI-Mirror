@@ -282,6 +282,13 @@ export const api = {
     const { data } = await client.get('/calibration/open', { params: { user_id: userId, limit } });
     return data;
   },
+  // Already-answered claims, so a verdict can be changed. Each row carries
+  // live_claim_id — the id to POST against now; the stored claim_id goes stale
+  // because the pipeline regenerates inferences on every ingest.
+  getAnsweredClaims: async (userId = activeUser(), limit = 50) => {
+    const { data } = await client.get('/calibration/answered', { params: { user_id: userId, limit } });
+    return data;
+  },
   sendClaimVerdict: async (claimId, verdict, claimType = 'inference', userId = activeUser()) => {
     const { data } = await client.post('/calibration/verdict', {
       user_id: userId, claim_type: claimType, claim_id: claimId, verdict,

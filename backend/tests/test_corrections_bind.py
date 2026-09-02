@@ -331,3 +331,126 @@ async def test_one_logical_claim_is_asked_once_despite_duplicate_rows(db, demo_u
     open_claims = (await client.get(f"/calibration/open?user_id={demo_user_id}")).json()
     labels = [c["label"] for c in open_claims]
     assert labels.count(label) == 1, f"asked twice: {labels}"
+
+
+# -- Taking a correction back -------------------------------------------------
+#
+# The Report tells the user a correction can be reversed. That was not true
+# when written: the Ledger only listed UNANSWERED claims, so a denied claim
+# vanished from the one screen that could restore it — and even a re-verdict
+# would have failed, because the stored claim_id is the inference_id from when
+# they answered and the pipeline regenerates those every ingest.
+
+
+@pytest.mark.db
+@pytest.mark.asyncio
+async def test_an_answered_claim_is_listed_so_it_can_be_changed(db, demo_user_id, client):
+    ids = await _regenerate(demo_user_id)
+    await _deny(client, demo_user_id, ids[DENIED])
+
+    answered = (await client.get(f"/calibration/answered?user_id={demo_user_id}")).json()
+    row = next(a for a in answered if a["label"] == DENIED)
+    assert row["verdict"] == "wrong"
+    assert row["still_claimed"] is True
+
+
+@pytest.mark.db
+@pytest.mark.asyncio
+async def test_the_id_offered_for_changing_survives_regeneration(db, demo_user_id, client):
+    """The stored claim_id goes stale on the next ingest, so the answered list
+    resolves the CURRENT inference_id through claim_key. Without this, the
+    reverse button posts an id that no longer exists and gets a 404."""
+    ids = await _regenerate(demo_user_id)
+    await _deny(client, demo_user_id, ids[DENIED])
+
+    new_ids = await _regenerate(demo_user_id)
+
+    answered = (await client.get(f"/calibration/answered?user_id={demo_user_id}")).json()
+    row = next(a for a in answered if a["label"] == DENIED)
+
+    assert row["claim_id"] == ids[DENIED], "the stored id should be what was answered"
+    assert row["live_claim_id"] == new_ids[DENIED], "must point at the live row"
+    assert row["live_claim_id"] != row["claim_id"], "regeneration should have moved it"
+
+
+@pytest.mark.db
+@pytest.mark.asyncio
+async def test_reversing_through_the_offered_id_restores_the_claim(db, demo_user_id, client):
+    """End to end: deny, let the pipeline run, then take it back."""
+    ids = await _regenerate(demo_user_id)
+    await _deny(client, demo_user_id, ids[DENIED])
+    await _regenerate(demo_user_id)
+    assert DENIED not in await _assertable(demo_user_id)
+
+    answered = (await client.get(f"/calibration/answered?user_id={demo_user_id}")).json()
+    row = next(a for a in answered if a["label"] == DENIED)
+    await _deny(client, demo_user_id, row["live_claim_id"], "right")
+
+    assert DENIED in await _assertable(demo_user_id), "the correction could not be reversed"
+
+
+@pytest.mark.db
+@pytest.mark.asyncio
+async def test_a_claim_the_system_stopped_making_offers_nothing_to_change(db, demo_user_id, client):
+    """The answer stays on the record and still scores, but there is no live
+    claim to restore, so the UI must not offer a button that would 404."""
+    from app.db.postgres import execute
+
+    ids = await _regenerate(demo_user_id)
+    await _deny(client, demo_user_id, ids[DENIED])
+    await execute("DELETE FROM inferences WHERE user_id = $1", demo_user_id)
+
+    answered = (await client.get(f"/calibration/answered?user_id={demo_user_id}")).json()
+    row = next(a for a in answered if a["label"] == DENIED)
+    assert row["still_claimed"] is False
+    assert row["live_claim_id"] is None
+
+    # It still counts toward the score.
+    report = (await client.get(f"/calibration/report?user_id={demo_user_id}")).json()
+    assert report["summary"]["scored"] == 1
+
+
+@pytest.mark.db
+@pytest.mark.asyncio
+async def test_changing_your_mind_never_stacks_a_second_verdict(db, demo_user_id, client):
+    """The uniqueness that matters is per LOGICAL claim.
+
+    claim_verdicts used to be unique on claim_id, an inference_id the pipeline
+    regenerates every ingest — so answering, re-running, and answering again
+    inserted a second row rather than updating the first. The stale row kept
+    suppressing the claim AND gave the same logical claim two scored answers,
+    quietly inflating the sample the calibration report is built on.
+    """
+    from app.db.postgres import fetchval
+
+    ids = await _regenerate(demo_user_id)
+    await _deny(client, demo_user_id, ids[DENIED], "wrong")
+
+    for _ in range(3):
+        new_ids = await _regenerate(demo_user_id)
+        await _deny(client, demo_user_id, new_ids[DENIED], "right")
+        await _deny(client, demo_user_id, new_ids[DENIED], "wrong")
+
+    rows = await fetchval(
+        """SELECT COUNT(*) FROM claim_verdicts
+            WHERE user_id = $1 AND claim_type = 'inference' AND claim_key = $2""",
+        demo_user_id, cal.claim_key("EngagementDepthRule", DENIED),
+    )
+    assert rows == 1, f"{rows} verdict rows for one logical claim"
+
+    report = (await client.get(f"/calibration/report?user_id={demo_user_id}")).json()
+    assert report["summary"]["verdicts_total"] == 1
+    assert report["summary"]["scored"] == 1
+
+
+@pytest.mark.db
+@pytest.mark.asyncio
+async def test_the_final_answer_is_the_one_that_counts(db, demo_user_id, client):
+    ids = await _regenerate(demo_user_id)
+    await _deny(client, demo_user_id, ids[DENIED], "wrong")
+    new_ids = await _regenerate(demo_user_id)
+    await _deny(client, demo_user_id, new_ids[DENIED], "right")
+
+    report = (await client.get(f"/calibration/report?user_id={demo_user_id}")).json()
+    assert report["summary"]["correct"] == 1, "the stale verdict won"
+    assert DENIED in await _assertable(demo_user_id)

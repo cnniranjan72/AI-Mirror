@@ -176,12 +176,20 @@ async def record_verdict(
             (user_id, claim_type, claim_id, verdict, confidence_at_verdict,
              claim_label, claim_key)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (user_id, claim_type, claim_id) DO UPDATE
+        -- Conflict on the LOGICAL claim, not on claim_id. claim_id is an
+        -- inference_id and the pipeline regenerates those every ingest, so
+        -- targeting it meant changing your mind after a re-run inserted a
+        -- SECOND verdict instead of updating the first — leaving a stale
+        -- "wrong" row that kept suppressing the claim, and double-counting
+        -- it in the score. See migration_v21.
+        ON CONFLICT (user_id, claim_type, claim_key) WHERE claim_key IS NOT NULL
+        DO UPDATE
             SET verdict = EXCLUDED.verdict,
                 -- confidence_at_verdict is deliberately NOT refreshed: the
                 -- user is changing their answer, not the claim being scored.
                 claim_label = EXCLUDED.claim_label,
-                claim_key = EXCLUDED.claim_key,
+                -- The row that was actually on screen this time.
+                claim_id = EXCLUDED.claim_id,
                 updated_at = NOW()
         """,
         user_id, claim_type, claim_id, verdict, confidence,
@@ -325,6 +333,51 @@ def _verdict_line(accuracy: float, judged: List[Dict], overconfident: List[Dict]
         f"{accuracy_text} Its stated confidence matches how often it was right, "
         f"within {CALIBRATION_TOLERANCE:.0%}."
     )
+
+
+async def list_answered_claims(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """Claims the user has already answered, so an answer can be changed.
+
+    Without this the Report tells a user their correction can be taken back
+    while the Ledger only ever lists UNANSWERED claims — the denied claim
+    disappears from the one screen that could reverse it.
+
+    live_claim_id is resolved through claim_key rather than reusing the
+    claim_id stored on the verdict. That stored id is the inference_id as it
+    was when they answered, and the pipeline regenerates the whole inference
+    set on every ingest, so it is usually stale and record_verdict would
+    404 on it.
+
+    When no live row matches, the system is no longer making that claim at
+    all: live_claim_id is None and there is nothing to restore. Still listed,
+    because the answer is part of the user's record and still scores.
+    """
+    rows = await fetch(
+        """
+        SELECT v.claim_type, v.claim_id, v.verdict, v.claim_label, v.claim_key,
+               v.confidence_at_verdict, v.updated_at,
+               (SELECT i.inference_id FROM inferences i
+                 WHERE i.user_id = v.user_id AND i.claim_key = v.claim_key
+                 ORDER BY i.inferred_at DESC LIMIT 1) AS live_claim_id
+        FROM claim_verdicts v
+        WHERE v.user_id = $1
+        ORDER BY v.updated_at DESC
+        LIMIT $2
+        """,
+        user_id, limit,
+    )
+    return [{
+        "claim_type": r["claim_type"],
+        "claim_id": r["claim_id"],
+        # What to POST to change this answer. None means the system has stopped
+        # making the claim, so there is nothing left to change.
+        "live_claim_id": r["live_claim_id"],
+        "still_claimed": r["live_claim_id"] is not None,
+        "verdict": r["verdict"],
+        "label": r["claim_label"],
+        "confidence_at_verdict": round(float(r["confidence_at_verdict"] or 0.0), 3),
+        "answered_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+    } for r in rows]
 
 
 async def list_open_claims(user_id: str, limit: int = 20) -> List[Dict[str, Any]]:

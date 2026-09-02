@@ -126,6 +126,7 @@ function Bar({ bucket }) {
 export default function CalibrationPage() {
   const { data: report, loading, error, refetch } = useApi(() => api.getCalibrationReport(), [])
   const { data: open, refetch: refetchOpen } = useApi(() => api.getOpenClaims(), [])
+  const { data: answered, refetch: refetchAnswered } = useApi(() => api.getAnsweredClaims(), [])
   const [busy, setBusy] = useState(null)
   const [notice, setNotice] = useState(null)
 
@@ -134,7 +135,7 @@ export default function CalibrationPage() {
     try {
       await api.sendClaimVerdict(claim.claim_id, verdict, claim.claim_type)
       setNotice(null)
-      await Promise.all([refetchOpen(), refetch()])
+      await Promise.all([refetchOpen(), refetchAnswered(), refetch()])
     } catch (e) {
       setNotice(
         e?.response?.status === 429
@@ -144,10 +145,11 @@ export default function CalibrationPage() {
     } finally {
       setBusy(null)
     }
-  }, [refetch, refetchOpen])
+  }, [refetch, refetchOpen, refetchAnswered])
 
   const buckets = report?.buckets || []
   const claims = Array.isArray(open) ? open : []
+  const answers = Array.isArray(answered) ? answered : []
 
   return (
     <div>
@@ -291,6 +293,64 @@ export default function CalibrationPage() {
             ))}
           </GlassCard>
         </Reveal>
+
+        {answers.length > 0 && (
+          <Reveal delay={0.15}>
+            <GlassCard style={{ marginTop: 24 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+                Your answers
+              </h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 18 }}>
+                Change any of these. A correction you cannot reverse is a trap rather
+                than a control — and marking a claim wrong stops the system asserting it,
+                so you should be able to take that back.
+              </p>
+
+              {answers.map(a => (
+                <div key={`${a.claim_type}:${a.claim_id}`} style={{
+                  padding: '12px 0', borderTop: '1px solid var(--border-subtle)',
+                  display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap',
+                }}>
+                  <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+                    <div style={{
+                      fontSize: 14, fontWeight: 600, marginBottom: 2,
+                      textDecoration: a.verdict === 'wrong' ? 'line-through' : 'none',
+                      opacity: a.still_claimed ? 1 : 0.6,
+                    }}>{a.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+                      you said <strong>{a.verdict}</strong> · it claimed{' '}
+                      {Math.round(a.confidence_at_verdict * 100)}%
+                      {!a.still_claimed && ' · the system no longer makes this claim'}
+                    </div>
+                  </div>
+
+                  {a.still_claimed ? (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {['right', 'wrong', 'unsure'].map(v => (
+                        <button
+                          key={v}
+                          onClick={() => answer({ claim_id: a.live_claim_id, claim_type: a.claim_type }, v)}
+                          disabled={a.verdict === v || busy === `${a.live_claim_id}:${v}`}
+                          style={{
+                            padding: '5px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                            border: '1px solid var(--border-subtle)',
+                            background: a.verdict === v ? 'rgba(99,102,241,0.18)' : 'transparent',
+                            color: a.verdict === v ? '#a5b4fc' : 'var(--text-tertiary)',
+                            cursor: a.verdict === v ? 'default' : 'pointer',
+                          }}
+                        >{v}</button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                      nothing to change
+                    </span>
+                  )}
+                </div>
+              ))}
+            </GlassCard>
+          </Reveal>
+        )}
       </AsyncState>
     </div>
   )
