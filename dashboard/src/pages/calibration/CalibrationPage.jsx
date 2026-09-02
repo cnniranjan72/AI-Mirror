@@ -179,6 +179,66 @@ function Basis({ basis }) {
           <Row label="topics" items={basis.topics} total={basis.topics_total} />
         </>
       )}
+      {basis.exit_condition && <ExitCondition condition={basis.exit_condition} />}
+    </div>
+  )
+}
+
+function ExitCondition({ condition }) {
+  /* The line the rule fires on.
+     
+     Every claim here is a threshold on a measurable quantity, and until now
+     the user was never told where that line sits — a verdict about them with
+     no visible basis, which is the thing this product objects to in
+     platforms.
+
+     Structural conditions are marked as such rather than phrased as advice:
+     "you have at least 2 recurring topics" is the amount of data the claim
+     needs to exist, not a lever, and presenting it as one would be nonsense.
+
+     Not framed as "how to change your profile". The honest claim is narrower:
+     this is the whole of what was measured. Moving the number changes what
+     the system says, not who you are. */
+  const structural = condition.kind === 'structural'
+  const pct = v => (condition.unit === 'share' ? `${Math.round(v * 100)}%` : `${v}`)
+
+  return (
+    <div style={{
+      marginTop: 8, padding: '8px 10px', borderRadius: 8,
+      background: structural ? 'rgba(148,163,184,0.06)' : 'rgba(99,102,241,0.07)',
+      border: `1px solid ${structural ? 'var(--border-subtle)' : 'rgba(99,102,241,0.18)'}`,
+    }}>
+      <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+        {condition.sentence}
+      </div>
+      {!structural && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, marginTop: 6,
+        }}>
+          <div style={{
+            position: 'relative', flex: 1, height: 6, borderRadius: 3,
+            background: 'rgba(148,163,184,0.15)', overflow: 'visible',
+          }}>
+            <div style={{
+              width: `${Math.min(100, Math.max(0, condition.current * 100))}%`,
+              height: '100%', borderRadius: 3,
+              background: 'linear-gradient(90deg, rgba(99,102,241,0.7), rgba(99,102,241,0.35))',
+            }} />
+            {/* Where the rule's line sits. The gap is the whole point. */}
+            <div
+              title={`threshold ${pct(condition.threshold)}`}
+              style={{
+                position: 'absolute', top: -3, bottom: -3,
+                left: `${Math.min(100, Math.max(0, condition.threshold * 100))}%`,
+                width: 2, background: 'var(--text-secondary)',
+              }}
+            />
+          </div>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            now {pct(condition.current)} · line {pct(condition.threshold)}
+          </span>
+        </div>
+      )}
     </div>
   )
 }

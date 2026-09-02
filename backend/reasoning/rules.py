@@ -67,6 +67,39 @@ class Rule(ABC):
         """
         return {}
 
+
+    def exit_condition(
+        self,
+        behavior_objects: List[BehaviorObject],
+        events: List[BehaviorEvent],
+        evidence: List[Evidence]
+    ) -> Optional[Dict[str, Any]]:
+        """The line this rule fires on, and where the user currently sits.
+
+        Every rule here is a threshold on a measurable quantity. The user is
+        never told what that line is, so a claim about them arrives as a
+        verdict with no visible basis — which is precisely the complaint this
+        product makes about platforms.
+
+        Returns:
+            measure    plain-language name of what is being counted
+            current    the user's value right now
+            threshold  the line the rule fires on
+            direction  "below" or "above" — which side makes the claim STOP
+            kind       "behavioural" or "structural" (see below)
+            unit       "share" or "count"
+
+        `kind` matters. A share-based rule ("your top 3 creators are 62% of
+        your watching, the line is 50%") describes something a person could
+        recognise and act on. A count-based one ("you have at least 2 recurring
+        topics") is not a lever at all — it is a data threshold, and dressing
+        it up as advice would be nonsense. Structural conditions are reported
+        as what they are.
+
+        None means the rule cannot express its condition this way.
+        """
+        return None
+
     @abstractmethod
     def condition(
         self,
@@ -265,6 +298,20 @@ class LearningMotivationRule(Rule):
         except Exception:
             return {}
 
+    def exit_condition(self, behavior_objects, events, evidence):
+        try:
+            educational = self._educational(behavior_objects)
+            share = self._edu_share(behavior_objects, educational)
+            if share is None:
+                return None
+            return {
+                "measure": "share of your watching that is educational",
+                "current": round(float(share), 3), "threshold": 0.10,
+                "direction": "below", "kind": "behavioural", "unit": "share",
+            }
+        except Exception:
+            return None
+
 class EntertainmentDominanceRule(Rule):
     """
     Detects entertainment content dominance
@@ -392,6 +439,23 @@ class EntertainmentDominanceRule(Rule):
             }
         except Exception:
             return {}
+
+    def exit_condition(self, behavior_objects, events, evidence):
+        try:
+            keywords = ["entertainment", "funny", "meme", "comedy", "music", "dance"]
+            matched = [b for b in behavior_objects
+                       if any(k in (b.topic or "").lower() for k in keywords)]
+            total = sum(b.temporal_statistics.occurrence_count for b in behavior_objects)
+            if not total:
+                return None
+            share = sum(b.temporal_statistics.occurrence_count for b in matched) / total
+            return {
+                "measure": "share of your watching that is entertainment",
+                "current": round(share, 3), "threshold": 0.6,
+                "direction": "below", "kind": "behavioural", "unit": "share",
+            }
+        except Exception:
+            return None
 
 class CreatorDependenceRule(Rule):
     """
@@ -536,6 +600,25 @@ class CreatorDependenceRule(Rule):
         except Exception:
             return {}
 
+    def exit_condition(self, behavior_objects, events, evidence):
+        try:
+            from collections import Counter
+            counts = Counter()
+            for behavior in behavior_objects:
+                for creator in behavior.creators:
+                    counts[creator] += behavior.temporal_statistics.occurrence_count
+            total = sum(counts.values())
+            if not total:
+                return None
+            share = sum(n for _, n in counts.most_common(3)) / total
+            return {
+                "measure": "share of your watching that comes from your top 3 creators",
+                "current": round(share, 3), "threshold": 0.5,
+                "direction": "below", "kind": "behavioural", "unit": "share",
+            }
+        except Exception:
+            return None
+
 class AttentionImprovementRule(Rule):
     """
     Detects improving attention span
@@ -649,6 +732,30 @@ class AttentionImprovementRule(Rule):
         honest answer — the description carries the before/after figures."""
         return {}
 
+    def exit_condition(self, behavior_objects, events, evidence):
+        """Compares the second half of the watch history against the first, so
+        the lever is real but relative to the user's own past — not a target
+        anyone should chase."""
+        try:
+            if len(events) < 10:
+                return None
+            ordered = sorted(events, key=lambda e: e.timestamp)
+            mid = len(ordered) // 2
+            early = ordered[:mid]
+            late = ordered[mid:]
+            early_avg = sum(e.watch_time for e in early) / len(early)
+            late_avg = sum(e.watch_time for e in late) / len(late)
+            if early_avg <= 0:
+                return None
+            return {
+                "measure": "change in average watch time, recent half against earlier half",
+                "current": round((late_avg - early_avg) / early_avg, 3),
+                "threshold": 0.1, "direction": "below",
+                "kind": "behavioural", "unit": "share",
+            }
+        except Exception:
+            return None
+
 class PrimaryInterestRule(Rule):
     """
     Identifies the user's dominant interest areas.
@@ -734,6 +841,20 @@ class PrimaryInterestRule(Rule):
         except Exception:
             return {}
 
+    def exit_condition(self, behavior_objects, events, evidence):
+        """Structural, not a lever. "Have fewer than two recurring topics" is
+        not something a person would do; it is the amount of data the claim
+        needs to exist at all."""
+        try:
+            return {
+                "measure": "distinct topics with enough activity to rank",
+                "current": len(self._ranked(behavior_objects)),
+                "threshold": 2, "direction": "below",
+                "kind": "structural", "unit": "count",
+            }
+        except Exception:
+            return None
+
 class CreatorDiversityRule(Rule):
     """
     Detects broad creator exploration (the healthy opposite of dependence).
@@ -802,6 +923,27 @@ class CreatorDiversityRule(Rule):
             }
         except Exception:
             return {}
+
+    def exit_condition(self, behavior_objects, events, evidence):
+        """The mirror image of CreatorDependence: this fires when the top 3
+        are BELOW half, so it stops when they rise above it."""
+        try:
+            from collections import Counter
+            counts = Counter()
+            for behavior in behavior_objects:
+                for creator in behavior.creators:
+                    counts[creator] += behavior.temporal_statistics.occurrence_count
+            total = sum(counts.values())
+            if not total:
+                return None
+            share = sum(n for _, n in counts.most_common(3)) / total
+            return {
+                "measure": "share of your watching that comes from your top 3 creators",
+                "current": round(share, 3), "threshold": 0.5,
+                "direction": "above", "kind": "behavioural", "unit": "share",
+            }
+        except Exception:
+            return None
 
 class TemporalHabitRule(Rule):
     """
@@ -879,6 +1021,17 @@ class TemporalHabitRule(Rule):
         except Exception:
             return {}
 
+    def exit_condition(self, behavior_objects, events, evidence):
+        try:
+            return {
+                "measure": "topics you return to more than once",
+                "current": len(self._habitual(behavior_objects)),
+                "threshold": 2, "direction": "below",
+                "kind": "structural", "unit": "count",
+            }
+        except Exception:
+            return None
+
 class EngagementDepthRule(Rule):
     """
     Characterises HOW the user engages — deep/attentive vs quick/passive —
@@ -946,6 +1099,18 @@ class EngagementDepthRule(Rule):
         except Exception:
             return {}
 
+    def exit_condition(self, behavior_objects, events, evidence):
+        try:
+            stats = self._stats(behavior_objects)
+            if not stats:
+                return None
+            return {
+                "measure": "topics with any recorded activity",
+                "current": stats["n"], "threshold": 2, "direction": "below",
+                "kind": "structural", "unit": "count",
+            }
+        except Exception:
+            return None
 
 class RuleEngine:
     """
@@ -1019,6 +1184,10 @@ class RuleEngine:
                             # What this rule reasoned over. Empty when the rule
                             # has not declared it — see Rule.subjects().
                             "subjects": rule.subjects(behavior_objects, events, evidence),
+                            # The line this rule fires on. None when the rule
+                            # cannot express its condition numerically.
+                            "exit_condition": rule.exit_condition(
+                                behavior_objects, events, evidence),
                         }
                         results.append(result)
                 except Exception as e:

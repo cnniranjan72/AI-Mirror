@@ -331,6 +331,10 @@ class InferenceEngine:
                     "subjects_declared": bool(
                         affected_topics or affected_creators or affected_behaviors
                     ),
+                    # The line this rule fired on, frozen with the claim so it
+                    # matches the numbers in the description rather than
+                    # drifting as new events arrive.
+                    "exit_condition": rule_result.get("exit_condition"),
                 }
             )
             

@@ -378,6 +378,55 @@ def _decode_list(value: Any) -> List[Any]:
     return list(value) if isinstance(value, (list, tuple)) else []
 
 
+def _exit_condition(metadata: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The line the rule fired on, phrased so a person can check it.
+
+    Every rule is a threshold on a measurable quantity, and the user is never
+    told what that line is — a claim about them arrives as a verdict with no
+    visible basis, which is the complaint this product makes about platforms.
+
+    Two kinds, kept apart deliberately:
+
+      behavioural — "your top 3 creators are 62% of your watching; below 50%
+                    this stops". Something a person can recognise.
+      structural  — "you have at least 2 recurring topics". Not a lever at
+                    all: it is the amount of data the claim needs to exist.
+                    Dressed up as advice it would be nonsense, so it is
+                    labelled for what it is.
+
+    Deliberately NOT framed as "how to change your profile". The honest claim
+    is narrower and more useful: this is the whole of what the system measured.
+    Moving the number changes what the system says, not who you are.
+    """
+    condition = metadata.get("exit_condition")
+    if not isinstance(condition, dict):
+        return None
+    for required in ("measure", "current", "threshold", "direction", "kind"):
+        if required not in condition:
+            return None
+
+    current, threshold = condition["current"], condition["threshold"]
+    is_share = condition.get("unit") == "share"
+
+    def fmt(value):
+        return f"{value:.0%}" if is_share else f"{value:g}"
+
+    if condition["kind"] == "structural":
+        sentence = (
+            f"This claim exists because {condition['measure']} is "
+            f"{fmt(current)} — it needs at least {fmt(threshold)}. "
+            f"That is a data threshold, not something to act on."
+        )
+    else:
+        sentence = (
+            f"Measured: {condition['measure']} is {fmt(current)}. "
+            f"The system stops saying this when that goes "
+            f"{condition['direction']} {fmt(threshold)}."
+        )
+
+    return {**condition, "sentence": sentence}
+
+
 def _basis(row: Dict[str, Any]) -> Dict[str, Any]:
     """What this claim rests on, restricted to what is actually about it.
 
@@ -415,6 +464,8 @@ def _basis(row: Dict[str, Any]) -> Dict[str, Any]:
         "rule": row.get("rule_name"),
         "detail": row.get("description"),
         "claim_specific_evidence": False,
+        # The threshold the claim turns on. None for older rows.
+        "exit_condition": _exit_condition(metadata),
     }
 
     if int(metadata.get("basis_version") or 0) < 2:

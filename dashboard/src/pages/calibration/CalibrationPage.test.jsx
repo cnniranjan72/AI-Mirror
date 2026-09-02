@@ -251,3 +251,77 @@ describe('the basis shown with each question', () => {
     expect(await screen.findByText(/cannot inspect/i)).toBeTruthy()
   })
 })
+
+/**
+ * Every claim turns on a threshold, and the user was never told where it sat —
+ * a verdict about them with no visible line, which is what this product
+ * objects to in platforms.
+ *
+ * The distinction that matters: a share-based condition describes something a
+ * person can recognise; a count-based one ("you have at least 2 recurring
+ * topics") is the amount of data the claim needs to exist. Rendering the
+ * second as advice would be nonsense.
+ */
+describe('the line a claim turns on', () => {
+  const withCondition = (condition) => ({
+    claim_id: 'inf_1', claim_type: 'inference', label: 'Creator dependence detected',
+    description: 'top 3 creators', confidence: 0.9,
+    basis: { rule: 'CreatorDependenceRule', detail: 'd',
+             claim_specific_evidence: false, exit_condition: condition },
+  })
+
+  const BEHAVIOURAL = {
+    measure: 'share of your watching that comes from your top 3 creators',
+    current: 0.62, threshold: 0.5, direction: 'below',
+    kind: 'behavioural', unit: 'share',
+    sentence: 'Measured: share of your watching that comes from your top 3 creators is 62%. The system stops saying this when that goes below 50%.',
+  }
+  const STRUCTURAL = {
+    measure: 'topics you return to more than once',
+    current: 7, threshold: 2, direction: 'below',
+    kind: 'structural', unit: 'count',
+    sentence: 'This claim exists because topics you return to more than once is 7 — it needs at least 2. That is a data threshold, not something to act on.',
+  }
+
+  it('states the measured value and the line', async () => {
+    setup({ open: [withCondition(BEHAVIOURAL)] })
+    render(<CalibrationPage />)
+    expect(await screen.findByText(/goes below 50%/)).toBeTruthy()
+    expect(screen.getByText(/now 62% · line 50%/)).toBeTruthy()
+  })
+
+  it('marks a data threshold as not actionable', async () => {
+    setup({ open: [withCondition(STRUCTURAL)] })
+    render(<CalibrationPage />)
+    expect(await screen.findByText(/not something to act on/)).toBeTruthy()
+  })
+
+  it('draws no progress bar for a structural condition', async () => {
+    /* A bar invites the reader to move the number, which is meaningless here. */
+    setup({ open: [withCondition(STRUCTURAL)] })
+    render(<CalibrationPage />)
+    await screen.findByText(/not something to act on/)
+    expect(screen.queryByText(/now 7 · line 2/)).toBeNull()
+  })
+
+  it('renders a claim with no exit condition rather than breaking', async () => {
+    setup({ open: [withCondition(null)] })
+    render(<CalibrationPage />)
+    expect(await screen.findByText('Creator dependence detected')).toBeTruthy()
+    expect(screen.getByTitle('Right')).toBeTruthy()
+  })
+
+  it('does not tell the user how to game the profile', async () => {
+    /* The honest framing is "this is what was measured", not instructions.
+       Scoped to the condition block: the page header legitimately contains
+       "profiles you should be accountable", and matching the whole body just
+       finds that. */
+    setup({ open: [withCondition(BEHAVIOURAL)] })
+    render(<CalibrationPage />)
+    const sentence = await screen.findByText(/goes below 50%/)
+    const block = sentence.closest('div').parentElement.textContent
+
+    expect(block).toMatch(/Measured:/)
+    expect(block).not.toMatch(/to change this|improve your|you should|try to|aim for/i)
+  })
+})
