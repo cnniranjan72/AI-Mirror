@@ -51,3 +51,10 @@ build/
 # Chrome extension
 chrome-extension/*.pem
 chrome-extension/*.crx
+
+# LaTeX build output
+.texbuild/
+*.aux
+*.out
+*.synctex.gz
+texput.log

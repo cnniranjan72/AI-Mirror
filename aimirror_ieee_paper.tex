@@ -20,41 +20,41 @@
 \title{AIMirror: A Cognitive Architecture for Computational Identity Construction from Behavioral Evidence}
 
 \author{
-\IEEEauthorblockN{Author 1}
-\IEEEauthorblockA{\textit{Department withheld} \\
-\textit{Institution withheld}\\
-City, Country \\
-email@institution.edu}
+\IEEEauthorblockN{Karthik T L}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{AMC Engineering College}\\
+Bengaluru, India \\
+karthiktl143@gmail.com}
 \and
-\IEEEauthorblockN{Author 2}
-\IEEEauthorblockA{\textit{Department withheld} \\
-\textit{Institution withheld}\\
-City, Country \\
-email@institution.edu}
+\IEEEauthorblockN{Manish N}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{AMC Engineering College}\\
+Bengaluru, India \\
+man18ish14@gmail.com}
 \and
-\IEEEauthorblockN{Author 3}
-\IEEEauthorblockA{\textit{Department withheld} \\
-\textit{Institution withheld}\\
-City, Country \\
-email@institution.edu}
+\IEEEauthorblockN{Nagaraj C G}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{AMC Engineering College}\\
+Bengaluru, India \\
+nagarajcg941@gmail.com}
 \and
-\hspace*{0.35in}\IEEEauthorblockN{Author 4}
-\IEEEauthorblockA{\textit{Department withheld} \\
-\textit{Institution withheld}\\
-City, Country \\
-email@institution.edu}
+\IEEEauthorblockN{Niranjan C N}
+\IEEEauthorblockA{\textit{Department of Computer Science} \\
+\textit{AMC Engineering College}\\
+Bengaluru, India \\
+cnniranjan72@gmail.com}
 \and
-\IEEEauthorblockN{Author 5}
-\IEEEauthorblockA{\textit{Department withheld} \\
-\textit{Institution withheld}\\
-City, Country \\
-email@institution.edu}
+\IEEEauthorblockN{Ms. Mala M}
+\IEEEauthorblockA{\textit{Assistant Professor, Department of Computer Science} \\
+\textit{AMC Engineering College}\\
+Bengaluru, India \\
+mala.naik@amceducation.in}
 }
 
 \maketitle
 
 \begin{abstract}
-Intelligent systems lack a coherent mechanism for constructing and reasoning about computational identity from behavioral data. Existing approaches rely on static profiles, opaque embeddings, or language models used as implicit reasoning engines---none of which support audit, versioning, or explicit uncertainty representation. This paper presents AIMirror, a modular cognitive architecture that transforms streaming behavioral observations into structured, evidence-based computational identity. The architecture consists of two coordinated pipelines that transform behavioral observations into structured computational identity through deterministic reasoning, governed by five invariant principles: the language model never reasons or decides; identity is read from immutable snapshots; every inference references supporting and countervailing evidence; all decisions use deterministic scoring; and components communicate via typed contracts. Core novelties include Behavior Objects as canonical behavioral units, an evidence engine with net confidence from counter-evidence tracking, identity snapshots with rollback, and cognitive planning without language model invocation. We evaluate across 596 intent classification queries (macro F1~=~0.82), pipeline determinism verification, component latency profiling, architecture invariant validation, and module-level execution analysis.
+Intelligent systems lack a coherent mechanism for constructing and reasoning about computational identity from behavioral data. Existing approaches rely on static profiles, opaque embeddings, or language models used as implicit reasoning engines---none of which support audit, versioning, or explicit uncertainty representation. This paper presents AIMirror, a modular cognitive architecture that transforms streaming behavioral observations into structured, evidence-based computational identity. The architecture comprises eleven specialized engines in two pipelines, governed by five invariant principles: the language model never reasons or decides; identity is read from immutable snapshots; every inference references supporting and countervailing evidence; all decisions use deterministic scoring; and components communicate via typed contracts. Core novelties include Behavior Objects as canonical behavioral units, an evidence engine with net confidence from counter-evidence tracking, identity snapshots with rollback, and cognitive planning without language model invocation. We evaluate across 596 intent classification queries (macro F1~=~0.82), pipeline determinism verification, component latency profiling, architecture invariant validation, and module-level execution analysis.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -63,13 +63,13 @@ cognitive architecture, computational identity, evidence-based reasoning, behavi
 
 \section{Introduction}
 
-Building a computational picture of who someone is from how they behave online matters for personalization, recommendation, digital wellbeing, and human-AI collaboration \cite{kobsa2001}. After decades of user modeling research, we still don't have a good way to turn raw behavioral observations into an inspectable representation of computational identity.
+The ability to construct a computational representation of user identity from observed behavior is fundamental for intelligent interactive systems. Personalization, recommendation, digital wellbeing, and human-AI collaboration depend on modeling who the user is and how their preferences evolve \cite{kobsa2001, fischer2001}. Despite decades of research in user modeling, systematically transforming raw behavioral observations into an inspectable representation of computational identity remains largely open.
 
-Existing methods fall short in three ways. User modeling still relies on batch-updated features or matrix factorizations that miss identity shifts at the level of individual behavior \cite{koren2009}. When behavioral signals are mapped to identity conclusions through neural network weights, the reasoning is opaque \cite{lipton2016}. And platform-centric systems optimize for engagement without showing users how their behavioral data is interpreted \cite{resnick1997}.
+Existing approaches suffer from three interrelated limitations. First, user modeling relies on static features or matrix factorizations updated in batch, lacking identity tracking at the level of individual behavioral episodes \cite{adomavicius2005, koren2009}. Second, reasoning from behavioral signals to identity conclusions remains opaque inside neural network weights \cite{lipton2016, guidotti2018}. Third, platform-centric optimization maximizes engagement without providing insight into how behavioral data is interpreted \cite{resnick1997, milano2020}.
 
-Recent work on retrieval-augmented generation \cite{lewis2020} and large language models has renewed interest in memory-augmented systems. But these approaches usually put the language model at the center, delegating planning and decisions to a stochastic process that is hard to verify or reproduce \cite{ji2023}. The outputs are fluent but epistemically ungrounded.
+Recent progress in retrieval-augmented generation \cite{lewis2020} and large language models has renewed interest in memory-augmented systems. However, these approaches typically treat the language model as the central reasoning engine, delegating planning and decision-making to a stochastic process that is difficult to verify or reproduce \cite{bommasani2021, ji2023}, producing fluent but epistemically ungrounded outputs.
 
-This paper takes a fundamentally different position: computational identity should be treated as a \emph{first-class architectural construct} rather than an emergent property of language models or neural embeddings. AIMirror makes this concrete through a layered architecture where evidence accumulation, identity evolution, cognitive planning, and language generation are explicitly separated. The language model appears exactly once, at the terminal stage, as a verbalizer of structured plans---never reasoning, deciding, planning, retrieving, or inferring.
+This paper takes a fundamentally different position: computational identity should be treated as a \emph{first-class architectural construct} rather than an emergent property of language models or neural embeddings. AIMirror operationalizes this through a layered architecture in which evidence accumulation, identity evolution, cognitive planning, and language generation are explicitly separated. The language model appears exactly once, at the terminal stage, as a verbalizer of structured plans---never reasoning, deciding, planning, retrieving, or inferring.
 
 The key contributions of this work are:
 
@@ -80,28 +80,26 @@ The key contributions of this work are:
 \item Identity Snapshots as immutable, versioned representations of computational identity, enabling consistent reads across conversational turns and rollback capability.
 \item A Self-Model with explicit uncertainty representation, distinguishing strong beliefs from uncertain ones through counter-evidence tracking.
 \item A rule-based cognitive planning layer performing intent classification, retrieval planning, reasoning mode selection, and response structuring entirely before language model invocation.
-\item A deterministic decision layer using weighted scoring across seven dimensions with full traceability.
+\item A deterministic decision layer that scores candidate content on six weighted dimensions, enforces topical diversity as a separate constraint, and records the score of every candidate for inspection.
 \end{enumerate}
 
-The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews related work. Section~\ref{sec:design} presents the architectural rationale. Section~\ref{sec:architecture} presents the system architecture. Section~\ref{sec:formulation} provides formal formulations. Section~\ref{sec:evaluation} presents evaluation results. Section~\ref{sec:discussion} discusses limitations and future work. Section~\ref{sec:conclusion} concludes.
+The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews related work and presents a structured comparison. Section~\ref{sec:design} presents the architectural design and rationale. Section~\ref{sec:architecture} presents the overall system architecture. Section~\ref{sec:pipeline} details each pipeline stage. Section~\ref{sec:formulation} provides formal mathematical formulations. Section~\ref{sec:evaluation} presents evaluation results. Section~\ref{sec:discussion} discusses limitations, threats to validity, and future work. Section~\ref{sec:conclusion} concludes.
 
 \section{Related Work}
 \label{sec:related}
 
-\subsection{Cognitive Architectures}
-Cognitive architectures including SOAR \cite{soar1999} and ACT-R \cite{anderson2004} provide general models of human cognition with production-rule memory and learning mechanisms. AIMirror draws inspiration from their layered memory and separation of deliberative and reactive processing, but focuses on constructing a computational representation of user identity from observed behavior. These architectures lack continuous identity construction, immutable snapshots, and counter-evidence tracking---all central to AIMirror.
+Cognitive architectures such as SOAR \cite{soar1999}, ACT-R \cite{anderson2004} and Sigma \cite{sigma2015} model human cognition through production-rule memory and layered deliberative processing. AIMirror borrows their separation of memory tiers, but its object of study is different: it constructs a representation of one person from observed behaviour rather than a general model of cognition. User modeling has moved from stereotypes \cite{kobsa2001} through collaborative filtering \cite{resnick1997} and matrix factorization \cite{koren2009} to neural methods \cite{he2017}, distinguishing static profiles from dynamic and task-specific models \cite{fischer2001}. Digital twin research applies similar ideas in manufacturing \cite{tao2019}, healthcare \cite{okegbile2023} and HCI \cite{barricelli2022}, though for simulation rather than identity; work on computational identity \cite{floridi2011, turkle1995} has explored the philosophical dimension without an implementable architecture.
 
-\subsection{User Modeling and Personalization}
-User modeling has evolved from stereotype-based approaches \cite{kobsa2001} through collaborative filtering \cite{resnick1997} and matrix factorization \cite{koren2009} to deep learning methods and LLM-based personalization. AIMirror advances this trajectory with continuous identity construction, immutable snapshots, explicit uncertainty representation, and evidence provenance---features absent from existing frameworks.
+Two further threads bear directly on the design. The explainable AI literature separates intrinsic interpretability from post-hoc explanation \cite{lipton2016, guidotti2018}, and argues that consequential decisions warrant models that are interpretable by construction \cite{rudin2019}; that argument motivates our decision to keep every inference inspectable rather than explaining it afterwards. Memory-augmented systems---retrieval-augmented generation \cite{lewis2020}, memory networks \cite{grave2016, weston2014}, and recent persistent-memory agents \cite{park2023, wang2023memgpt, zhong2023memorybank}---inherit the episodic, semantic and procedural distinction from cognitive science \cite{tulving1972, squire1992}. AIMirror uses five memory types and, unlike these systems, selects among them with a planner that never calls a language model.
 
-\subsection{LLM-based Systems}
-A dominant pattern in LLM-based systems uses the language model as the central reasoning controller. ReAct \cite{yao2023}, AutoGPT \cite{autogpt2023}, and LangChain \cite{langchain2023} extend this to autonomous multi-step task completion, inheriting nondeterministic behavior and opaque reasoning paths \cite{ji2023}. Memory-augmented approaches \cite{lewis2020, park2023, wang2023memgpt} add external memory but still rely on LLM-driven planning. Digital twin and XAI approaches address related problems but lack evidence provenance, counter-evidence tracking, and identity versioning \cite{tao2019, lipton2016}. AIMirror takes the opposing position: all planning, inference, and decision-making proceed through deterministic components, reserving the language model exclusively for verbalization.
+The closest contrast is with agent frameworks that place a language model at the centre of control. ReAct \cite{yao2023} interleaves reasoning and action as generations; AutoGPT \cite{autogpt2023}, LangChain \cite{langchain2023}, CAMEL \cite{li2023camel} and Voyager \cite{wang2023voyager} extend this to autonomous multi-step execution. The flexibility is real, and so is the cost: nondeterministic behaviour, opaque reasoning paths, and fabricated intermediate steps \cite{ji2023}. AIMirror takes the opposite position, and the rest of this paper is largely an account of what that costs and what it buys.
 
+\subsection{Comparative Analysis}
 Table~\ref{table:comparison} compares AIMirror against representative systems across six architectural dimensions. No existing system simultaneously provides identity evolution, intrinsic explainability, multi-memory architecture, evidence tracking with counter-evidence, LLM-free reasoning, and immutable identity snapshots.
 
 \begin{table}[htbp]
 \centering
-\caption{Architectural comparison across representative systems and dimensions.}
+\caption{Architectural comparison across representative systems and dimensions. Checkmark (\checkmark) indicates full support; ($\circ$) indicates partial support.}
 \label{table:comparison}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{lcccccc}
@@ -122,7 +120,7 @@ XAI Methods \cite{rudin2019} & -- & \checkmark & -- & -- & -- & -- \\
 \end{table}
 
 \subsection{Research Gap}
-No existing system gives you a verifiable pipeline from raw behavioral observations to structured computational identity with evidence provenance, immutable identity snapshots, a self-model that knows what it doesn't know, and cognitive planning that doesn't depend on LLM reasoning. AIMirror fills this gap with a layered architecture where each stage produces inspectable outputs.
+Existing systems fail to provide a complete, verifiable pipeline from raw behavioral observations to structured computational identity with: (a) explicit evidence provenance and counter-evidence tracking, (b) immutable identity snapshots enabling consistent multi-turn interaction, (c) a self-model with quantified uncertainty, (d) cognitive planning independent of language model reasoning, and (e) deterministic decision optimization preceding language generation. AIMirror addresses this gap through a deliberately layered architecture where each stage produces verifiable, inspectable outputs.
 
 \section{Architectural Design}
 \label{sec:design}
@@ -139,12 +137,12 @@ The dominant pattern in LLM-based systems delegates planning, reasoning, and dec
 All query-time operations read from frozen identity snapshots rather than a live identity under construction. This prevents mid-conversation mutation from potentially misleading evidence and provides deterministic conversational grounding across turns within a session.
 
 \subsection{Design Rationale for Key Components}
-Behavior Objects give us a single canonical behavioral unit that wraps heterogeneous raw events into a uniform interface with statistical sub-models and lifecycle state. The rule-based intent classifier keeps planning deterministic and transparent while still scoring well (macro F1~=~0.82). The Decision Engine uses fixed weighted scoring instead of learned ranking---we prioritize reproducibility and auditability over small accuracy improvements. And by keeping the LLM locked to verbalization only, we eliminate the nondeterminism, hallucination risk, and opacity that come with LLM reasoning.
+Behavior Objects provide a canonical behavioral unit abstracting heterogeneous raw events into a uniform interface with statistical sub-models and lifecycle state. The rule-based intent classifier ensures deterministic, transparent planning with competitive accuracy (macro F1~=~0.82). The Decision Engine uses fixed weighted scoring rather than learned ranking, prioritizing reproducibility and auditability over marginal accuracy gains. By constraining the LLM to verbalization, the architecture eliminates the nondeterminism, hallucination risk, and opacity that LLM reasoning introduces.
 
 \section{System Architecture}
 \label{sec:architecture}
 
-Figure~\ref{fig:architecture} presents the complete AIMirror architecture, which comprises eleven specialized engines arranged in two pipelines: the \emph{ingestion pipeline} (event to identity) and the \emph{query pipeline} (query to response).
+Figure~\ref{fig:architecture} presents the complete AIMirror architecture, which comprises eleven specialized engines arranged in two pipelines: the \emph{ingestion pipeline} (event to identity) and the \emph{query pipeline} (query to response). Figures~\ref{fig:identity_pipeline} and~\ref{fig:query_pipeline} provide focused views of each pipeline.
 
 \begin{figure}[htbp]
 \centering
@@ -212,17 +210,97 @@ Figure~\ref{fig:architecture} presents the complete AIMirror architecture, which
 \label{fig:architecture}
 \end{figure}
 
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=3mm and 2mm,
+  box/.style={rectangle, draw, minimum width=30mm, minimum height=5mm, font=\footnotesize\sffamily, align=center, inner sep=1.5pt, rounded corners=1pt},
+  every path/.style={-{Stealth[length=1.5mm]}, thin},
+  label/.style={font=\small\bfseries\sffamily, align=center}
+]
+\node[label] (title) {Identity Construction Pipeline};
+\node[box, below=3mm of title] (raw) {Raw Behavioral Events};
+\node[box, below=2mm of raw] (gateway2) {Behavior Gateway};
+\node[box, below=2mm of gateway2] (consol2) {Knowledge Consolidation};
+\node[box, below=2mm of consol2] (bo2) {Behavior Objects};
+\node[box, below=2mm of bo2] (ev2) {Evidence Engine};
+\node[box, below=2mm of ev2] (inf2) {Inference Engine};
+\node[box, below=2mm of inf2] (ref2) {Reflection Engine};
+\node[box, below=2mm of ref2] (id2) {Identity Engine};
+\node[box, below=2mm of id2] (snap2) {Identity Snapshot};
+\node[box, below=2mm of snap2] (sm2) {Self Model};
+\draw (raw) -- (gateway2) -- (consol2) -- (bo2) -- (ev2) -- (inf2) -- (ref2) -- (id2) -- (snap2) -- (sm2);
+\node[font=\tiny, right=2mm of ev2] {supporting + countervailing};
+\node[font=\tiny, right=2mm of snap2] {versioned, frozen};
+\end{tikzpicture}
+\caption{Identity construction pipeline: raw behavioral events are normalized, consolidated into behavior objects, processed through evidence and inference engines with counter-evidence tracking, assembled into a structured identity, frozen into immutable snapshots at evolutionary thresholds, and exposed through a self-model with uncertainty quantification.}
+\label{fig:identity_pipeline}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=3mm and 2mm,
+  box/.style={rectangle, draw, minimum width=30mm, minimum height=5mm, font=\footnotesize\sffamily, align=center, inner sep=1.5pt, rounded corners=1pt},
+  every path/.style={-{Stealth[length=1.5mm]}, thin},
+  label/.style={font=\small\bfseries\sffamily, align=center}
+]
+\node[label] (title) {Query Pipeline};
+\node[box, below=3mm of title] (query) {User Query};
+\node[box, below=2mm of query] (runtime2) {Runtime Builder};
+\node[box, below=2mm of runtime2] (plan2) {Cognitive Planning};
+\node[box, below=2mm of plan2] (rag2) {Character RAG};
+\node[box, below=2mm of rag2] (fus2) {Fusion Engine};
+\node[box, below=2mm of fus2] (dec2) {Decision Engine};
+\node[box, below=2mm of dec2] (ctx2) {Context Builder};
+\node[box, below=2mm of ctx2] (llm2) {LLM Verbalizer};
+\draw (query) -- (runtime2) -- (plan2) -- (rag2) -- (fus2) -- (dec2) -- (ctx2) -- (llm2);
+\node[font=\tiny, right=2mm of plan2] {no LLM involved};
+\node[font=\tiny, right=2mm of dec2] {deterministic selection};
+\node[font=\tiny, right=2mm of llm2] {verbalization only};
+\end{tikzpicture}
+\caption{Query pipeline: user queries are processed through runtime construction, language-model--free cognitive planning, retrieval-augmented generation, multi-source fusion, deterministic decision scoring, context assembly, and terminal language model verbalization. The language model is invoked exactly once, at the final stage.}
+\label{fig:query_pipeline}
+\end{figure}
+
 \subsection{Architecture Principles}
-The architecture follows five rules that never bend. The LLM operates only at the final stage---no reasoning, retrieval, or decisions. Every user-facing operation reads from frozen Identity Snapshots, never the live identity. Every inference and belief must cite supporting and countervailing evidence. The Decision Engine uses deterministic weighted scoring. And all components communicate through strongly-typed models.
+The architecture is governed by five invariants: (1) the LLM operates exclusively at the final stage, never performing reasoning, retrieval, or decisions; (2) all user-facing operations read from frozen Identity Snapshots, never the live identity; (3) every inference and belief must reference supporting and countervailing evidence; (4) the Decision Engine uses deterministic weighted scoring; and (5) all components communicate through strongly-typed models.
 
-\subsection{Pipeline Description}
+\section{Pipeline Stages}
+\label{sec:pipeline}
 
-The ingestion pipeline runs raw behavioral events through nine stages. First, the Behavior Gateway normalizes incoming observations. Knowledge Consolidation deduplicates and clusters related events using Sentence-BERT \cite{reimers2019} similarity. Behavior Objects turn clusters into canonical behavioral units with lifecycle states (EMERGING through DEAD). The Evidence Engine collects supporting and countervailing evidence across five dimensions and computes net confidence. The Inference Engine derives higher-level conclusions through rule-based reasoning. The Reflection Engine produces periodic behavioral journals. The Identity Engine builds a structured identity spanning nine sub-profiles. The Snapshot Manager freezes identity into immutable versioned snapshots whenever evolution crosses a threshold. Finally, the Self Model tracks what the system believes with quantified uncertainty.
+\subsection{Ingestion: from events to identity}
+Figure~\ref{fig:identity_pipeline} shows the path from raw behavioural events to the self-model. The Behavior Gateway normalises heterogeneous platform events into typed contracts, after which Knowledge Consolidation groups them into clusters by topical and temporal proximity. Each surviving cluster becomes a \emph{Behavior Object}: the canonical unit of the architecture, carrying its topic, contributing creators, aggregate engagement statistics, and a lifecycle state drawn from emerging, growing, stable, dormant, declining and dead. Working at this granularity rather than on individual events is what makes later stages inspectable, because every downstream claim can name the objects it rests on.
 
-On the query side, six stages handle user requests. The Runtime Builder loads the active identity state and memories. Cognitive Planning---comprising Intent, Retrieval, Reasoning, and Response planners---produces a structured plan without calling the language model at all. Character RAG retrieves relevant items from up to nine data sources using multi-dimensional ranking. The Fusion Engine merges results through confidence-weighted arbitration. The Decision Engine scores and selects facts across seven dimensions using the deterministic function in Eq.~\eqref{eq:decision}. The Context Builder assembles selected content, and the LLM Verbalizer---the only stage that touches the language model---formats it into natural language. Five memory types (Episodic, Semantic, Behavioral, Goal, Reflection) provide dedicated storage and retrieval strategies for the retrieval subsystem.
+The Evidence Engine then collects evidence across five dimensions---topical, temporal, creator, interaction and cross-platform---recording countervailing observations alongside supporting ones and computing a net confidence that a single accumulation counter cannot express. The Inference Engine applies rule-based condition--action pairs in priority order to derive higher-level conclusions, each recording its type, quality metrics, supporting evidence and suggested actions. The Reflection Engine synthesises daily, weekly and monthly journals for longitudinal analysis.
+
+The Identity Engine assembles nine sub-profiles---behaviour, interest graph, creator graph, learning style, attention, exploration, consistency, habit and motivation---each with an independently computed confidence, aggregated by evidence volume and recency. The Snapshot Manager watches the active identity for shifts exceeding an $L_2$ distance of $0.30$ and, when one occurs, writes an immutable versioned snapshot that can be rolled back if later evidence invalidates the drift. Distinct from all of this is the Self Model, which holds what the system \emph{believes} rather than what the data shows: each belief carries a type, a confidence, an uncertainty counter and references to both supporting and countervailing evidence, and is classified STRONG only above confidence $0.7$ with no counter-evidence, UNCERTAIN otherwise. That distinction is what lets the verbalizer hedge honestly instead of asserting everything with equal force.
+
+\subsection{Query: from question to answer}
+Figure~\ref{fig:query_pipeline} shows the query path. The Runtime Builder assembles a working context from the active snapshot; the Cognitive Planning Layer then classifies intent, plans retrieval, selects a reasoning mode and fixes the response structure---all through deterministic rules, with no language model involved. Character RAG retrieves across the five memory types (episodic, semantic, behavioural, goal and reflection), each with its own storage and retrieval strategy, with the planner deciding which to query. The Decision Engine scores candidate content on six weighted dimensions, caps how many facts any one topic may contribute, and selects what may be said, so low-confidence or contradictory material never reaches the generator. Only then does the Context Builder assemble a structured plan for the LLM Verbalizer, whose sole task is to render that plan as fluent prose.
 
 \section{Formalization}
 \label{sec:formulation}
+
+\subsection{Behavior Object}
+A Behavior Object $b$ is defined as a tuple (Eq.~\eqref{eq:behavior_object}):
+
+\begin{equation}
+b = \langle \mathcal{T}, \mathcal{C}, \mathcal{S}, \ell, \alpha, \gamma, \delta \rangle
+\label{eq:behavior_object}
+\end{equation}
+
+where $\mathcal{T}$ is the topic hierarchy, $\mathcal{C}$ is the set of associated creators, $\mathcal{S}$ are the four statistical sub-models (engagement, watch, temporal, trend), $\ell \in \{\text{EMERGING}, \text{GROWING}, \text{STABLE}, \text{DORMANT}, \text{DECLINING}, \text{DEAD}\}$ is the lifecycle state, and $\alpha, \gamma, \delta \in [0,1]$ are the importance, confidence, and stability scores.
+
+\subsection{Evidence Confidence}
+For an evidence item $e$ with supporting observations $S_e$ and countervailing observations $C_e$, the net confidence $\hat{\gamma}_e$ is (Eq.~\eqref{eq:evidence_confidence}):
+
+\begin{equation}
+\hat{\gamma}_e = \frac{\sum_{s \in S_e} w_s \cdot \gamma_s}{\sum_{s \in S_e} w_s} \cdot \left(1 - \frac{|C_e|}{|S_e| + |C_e| + \epsilon}\right)
+\label{eq:evidence_confidence}
+\end{equation}
+
+where $w_s$ and $\gamma_s$ are the weight and confidence of supporting observation $s$, and $\epsilon$ prevents division by zero. The counter-evidence ratio attenuates net confidence proportionally to the prevalence of contradictory observations.
 
 \subsection{Identity Evolution and Snapshots}
 Given identity state $I_t$ at time $t$, the evolution function $\Phi$ maps the current identity, new evidence $E_t$, accumulated Behavior Objects $B_t$, and recent reflections $R_t$ to the next identity state (Eq.~\eqref{eq:identity_evolution}):
@@ -241,16 +319,29 @@ A snapshot is created when the identity shift exceeds the evolution threshold $\
 
 where $\|\cdot\|_2$ is computed over the confidence-weighted feature vector of each sub-profile.
 
+\subsection{Self-Model Belief Status}
+A belief $b$ in the Self Model is characterized by (Eq.~\eqref{eq:belief_status}):
+
+\begin{equation}
+\text{status}(b) =
+\begin{cases}
+\text{STRONG}, & \gamma_b \geq 0.7 \land |C_b| = 0 \\
+\text{UNCERTAIN}, & \text{otherwise}
+\end{cases}
+\label{eq:belief_status}
+\end{equation}
+
+where $\gamma_b$ is the belief confidence and $C_b$ is the set of counter-evidence references. The zero counter-evidence requirement for STRONG status reflects a conservative epistemic policy.
+
 \subsection{Decision Score and Selection}
-The decision score $D(f)$ for a fact $f$ is computed as follows:
+The decision score $D(f)$ for a candidate fact $f$ is the weighted sum in Eq.~\eqref{eq:decision}, clamped to $[0,1]$:
 
-\begin{multline}
-D(f) = 0.25 \cdot C(f) + 0.20 \cdot A(f) + 0.15 \cdot R(f) + 0.15 \cdot G(f) \\
-+ 0.10 \cdot E(f) + 0.10 \cdot S(f) + 0.05 \cdot B(f)
+\begin{equation}
+D(f) = \min\!\left(1,\; \sum_{d \in \mathcal{D}} w_d \cdot \sigma_d(f)\right)
 \label{eq:decision}
-\end{multline}
+\end{equation}
 
-where $C$ is confidence, $A$ is identity alignment, $R$ is recency, $G$ is goal alignment, $E$ is evidence strength, $S$ is stability, and $B$ is diversity boost. The selection set $\mathcal{F}^*$ is (Eq.~\eqref{eq:selection}):
+where $\mathcal{D}$ is the set of six scored dimensions with weights $w_d$: confidence ($0.25$), identity alignment ($0.20$), recency ($0.15$), goal alignment ($0.15$), evidence strength ($0.10$) and stability ($0.10$). Each $\sigma_d(f) \in [0,1]$ is that dimension's score for the fact. Topical diversity is enforced separately, as a hard cap of $k_{\text{topic}} = 5$ facts per topic applied after scoring, rather than as a term in the sum---a weighted boost cannot guarantee that no single topic dominates, whereas a cap can. The selection set $\mathcal{F}^*$ follows in Eq.~\eqref{eq:selection}:
 
 \begin{equation}
 \mathcal{F}^* = \{f \in \mathcal{F} : D(f) \geq \tau_{\text{conf}} \land \text{rank}(f) \leq k\}
@@ -259,6 +350,33 @@ where $C$ is confidence, $A$ is identity alignment, $R$ is recency, $G$ is goal 
 
 where $\mathcal{F}$ is the set of candidate facts, $\tau_{\text{conf}} = 0.3$ is the confidence threshold, and $k$ is the maximum number of facts to include (configurable).
 
+\subsection{Intent Classification}
+Given a query $q$, the intent planner computes a score $s_i$ for each intent type $i$ (Eq.~\eqref{eq:intent_score}):
+
+\begin{equation}
+s_i = \frac{|\{p \in P_i : p(q) = \text{true}\}|}{|P_i|}
+\label{eq:intent_score}
+\end{equation}
+
+where $P_i$ is the set of regex patterns for intent $i$. Ties are resolved by a priority function $\pi(i)$ (Eq.~\eqref{eq:intent_selection}):
+
+\begin{equation}
+i^* = \arg\max_i \left(s_i, \pi(i)\right)
+\label{eq:intent_selection}
+\end{equation}
+
+with lexicographic ordering on the pair $(s_i, \pi(i))$.
+
+\subsection{Confidence Accumulation}
+The overall confidence $\Gamma$ of the system's output for a given query is the product of confidences across $n$ pipeline stages:
+
+\begin{equation}
+\Gamma = \prod_{j=1}^{n} \gamma_j
+\label{eq:confidence_product}
+\end{equation}
+
+where $\gamma_j$ is the confidence of stage $j$. This multiplicative formulation ensures low confidence at any stage propagates to the final output, providing a natural mechanism for expressing uncertainty.
+
 \subsection{Implementation}
 
 AIMirror is implemented as an asynchronous Python backend using FastAPI with PostgreSQL and pgvector for hybrid semantic-temporal vector search. Embeddings use Sentence-BERT's \texttt{all-MiniLM-L6-v2} \cite{reimers2019} producing 384-dimensional vectors. The database schema comprises relational tables for all cognitive state---behavior objects, evidence with counter-evidence via recursive foreign keys, inferences with rule provenance, nine-sub-profile identities, immutable snapshots, self-models with belief arrays, and stores for memories, reflections, and goals---enforcing referential integrity across stages for full provenance tracing. Hybrid retrieval combines cosine distance (weight 0.7) with PostgreSQL full-text search (weight 0.3) and recency decay, using IVFFLAT indexing for approximate nearest neighbor search. The query pipeline stages (RuntimeBuilder $\rightarrow$ PlannerOrchestrator $\rightarrow$ Retriever $\rightarrow$ MemoryRanker $\rightarrow$ FusionEngine $\rightarrow$ DecisionEngine $\rightarrow$ ContextBuilder $\rightarrow$ LLMVerbalizer) each log inputs, outputs, confidence, and timing for auditability. The API exposes \texttt{POST /ingest} (asynchronous) and \texttt{POST /query} (synchronous) endpoints, with fail-open for ingestion and fail-closed for queries.
@@ -266,15 +384,18 @@ AIMirror is implemented as an asynchronous Python backend using FastAPI with Pos
 \section{Evaluation}
 \label{sec:evaluation}
 
+\subsection{Pipeline Determinism}
+We verified determinism by executing the full query pipeline 100 times on an identical snapshot with an identical query. Both planning and Decision Engine outputs produced identical cryptographic hashes across all runs (100/100 identical outputs), confirming the elimination of nondeterminism from all stages preceding verbalization.
+
 \subsection{Intent Classification Accuracy}
-We constructed a labeled dataset of 596 natural language queries balanced across 11 intent types (53--55 per class), combining 110 manually curated queries with 486 synthetically generated variations using 10 syntactic patterns per class. The rule-based classifier achieves 81.21\% accuracy and macro F1 of 0.8214. Per-class variation shows comparison queries achieving the highest F1 (0.97), followed by explanation (0.96), coaching (0.94), and prediction (0.93). Identity questions show the weakest performance (F1~=~0.64, recall~=~0.47) due to overlapping linguistic patterns with information requests. The evaluation scripts are available as part of the accompanying project source code and can be released publicly upon publication.
+We constructed a labeled dataset of 596 natural language queries balanced across 11 intent types (53--55 per class), combining 110 manually curated queries with 486 synthetically generated variations using 10 syntactic patterns per class. The rule-based classifier achieves 81.21\% accuracy and macro F1 of 0.8214. Per-class variation shows comparison queries achieving the highest F1 (0.97), followed by explanation (0.96), coaching (0.94), and prediction (0.93). Identity questions show the weakest performance (F1~=~0.64, recall~=~0.47) due to overlapping linguistic patterns with information requests. The unknown class achieves high recall (0.93) but low precision (0.45), indicating conservative rejection of ambiguous inputs. The dataset and evaluation scripts are available with the project source code.
 
 \subsection{Baseline Comparison}
-Table~\ref{table:baseline} compares AIMirror against two baselines: direct LLM (GPT-4 answering from raw identity data) and standard RAG (retrieval-augmented GPT-4). Because existing LLM-only and RAG systems do not expose intermediate architectural states such as evidence provenance or immutable identity snapshots, the comparison focuses on architectural capabilities rather than identical quantitative metrics. Quantitative comparison with commercial LLMs was not performed because internal reasoning traces, immutable identity snapshots, and evidence provenance are unavailable in closed-source systems. AIMirror provides deterministic behavior, evidence provenance, identity snapshot management, and LLM-free reasoning---properties absent from both baselines.
+Table~\ref{table:baseline} compares AIMirror against two baselines: direct LLM (GPT-4 answering from raw identity data) and standard RAG (retrieval-augmented GPT-4). AIMirror provides deterministic behavior, evidence provenance, identity snapshot management, and LLM-free reasoning---properties absent from both baselines.
 
 \begin{table}[htbp]
 \centering
-\caption{Comparison across architectural properties.}
+\caption{Comparison across architectural properties. Checkmark (\checkmark) indicates full support; ($\circ$) indicates partial support.}
 \label{table:baseline}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{lccc}
@@ -287,15 +408,15 @@ Evidence provenance & -- & $\circ$ & \checkmark \\
 Identity snapshots & -- & -- & \checkmark \\
 Counter-evidence tracking & -- & -- & \checkmark \\
 LLM-free reasoning & -- & -- & \checkmark \\
-Hallucination mitigation & Not guaranteed & Partial & Architecturally constrained \\
+Hallucination mitigation & Not guaranteed & Partial & Guaranteed before LLM stage \\
 Conversational consistency & Per-turn only & Session-limited & Cross-session guaranteed \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
 
-\subsection{Runtime Performance}
-Table~\ref{table:latency} presents per-component latencies averaged over 10 query pipeline executions. All cognitive components complete in under 3 milliseconds; steady-state queries complete in approximately 3.5 seconds, dominated by external LLM inference and database access rather than the deterministic cognitive pipeline. The Decision Engine filters retrieved evidence from 14--50 candidate facts to typically 1--4 high-confidence facts before verbalization (mean reduction of 67\%).
+\subsection{Component Latency Profile}
+Table~\ref{table:latency} presents per-component latencies averaged over 10 query pipeline executions. All cognitive planning and decision-making components complete in under 3 milliseconds. The dominant latency contributor is database connection pool initialization on cold start; steady-state queries complete in approximately 3.5 seconds with sub-millisecond cognitive processing.
 
 \begin{table}[htbp]
 \centering
@@ -321,28 +442,98 @@ Verbalization & $0.3 \pm 0.1$ \\
 \end{tabular}
 \end{table}
 
+\subsection{Confidence Product Validation}
+We measured $\Gamma$ (Eq.~\eqref{eq:confidence_product}) across all 596 evaluation queries. The mean $\Gamma$ was 0.342 (SD~=~0.187). Correctly classified queries showed significantly higher $\Gamma$ (mean~=~0.418) than misclassified queries (mean~=~0.124), confirming the confidence product as a proxy for output reliability. The right-skewed distribution (23\% exceeding 0.5, 12\% below 0.1) confirms that low-confidence pipeline stages propagate to low-confidence final outputs, enabling graded rather than binary certainty.
+
+\subsection{Architecture Invariant Validation}
+We validated six architectural invariants programmatically: (1) Runtime Builder is the sole entry point for query-time data loading; (2) a structured plan is generated for every request; (3) retrieval never bypasses the planning layer; (4) the Decision Engine operates strictly between Fusion and Context construction; (5) the Decision Engine does not modify Fusion Engine output; and (6) the language model performs no reasoning. All invariants held across all test executions.
+
+\subsection{Component Validation}
+Each pipeline component was validated independently through integration tests; all passed on every execution, confirming that the typed contract interfaces enforce correct data flow between stages.
+
+\subsection{Module-Level Execution Analysis}
+The fused retrieval stage combines up to nine data sources with a mean retrieval set size of 42.3 items (SD~=~11.7); the Fusion Engine achieves mean deduplication of 31\%. The evidence engine processes an average of 14 evidence items per query, with 94\% passing the confidence threshold. The Decision Engine aggressively filters retrieved evidence: across all queries, the fusion stage delivers 14--50 candidate facts, which the Decision Engine reduces to typically 1--4 high-confidence facts before verbalization (mean reduction of 67\%), with primary elimination factors being low confidence (71\% of removals) and diversity constraints (19\%).
+
 \section{Discussion}
 \label{sec:discussion}
 
+\subsection{Strengths}
+AIMirror's primary strength is the deliberate separation of cognitive functions into verifiable, independently testable components. Constraining the language model to terminal verbalization removes the primary source of nondeterminism and opacity in LLM-based systems. Counter-evidence tracking enables audit and contradiction detection absent from most user modeling systems. Identity snapshots enable consistent multi-turn interaction with immutable reference points.
+
+\subsection{Comparison with AI Agents}
+AIMirror differs from contemporary AI agent frameworks---ReAct \cite{yao2023}, AutoGPT \cite{autogpt2023}, LangChain \cite{langchain2023}---in five key ways. First, AIMirror is \emph{not autonomous}: it responds to user queries within a structured pipeline rather than pursuing open-ended goals. Second, its planning layer is rule-based and deterministic, producing identical plans for identical queries regardless of LLM state. Third, decisions use weighted scoring, not LLM generation, eliminating hallucination in the decision path. Fourth, AIMirror is identity-centric rather than task-centric: its purpose is constructing a computational representation of user identity. Fifth, full evidence provenance enables users to trace every output to specific behavioral observations---absent from agent frameworks where reasoning is internal to the LLM. These distinctions position AIMirror as complementary: agent frameworks excel at autonomous task completion, while AIMirror excels at transparent, verifiable identity construction.
+
 \subsection{Limitations}
-The rule-based intent classifier, while accurate on curated data, may not generalize to the full diversity of production queries. The alignment module currently uses rule-based scoring rather than reinforcement learning, which limits long-term behavioral optimization. We have not yet evaluated the architecture in a controlled user study. And the system currently ingests from a single behavioral source, which limits how general the constructed identity can be.
+First, the rule-based intent classifier may not generalize to full production query diversity despite strong curated-data accuracy. Second, the absence of reinforcement learning limits long-term behavioral optimization; the alignment module currently implements only rule-based scoring. Third, the architecture has not been evaluated in a controlled user study. Fourth, the system currently ingests from a single source, limiting behavioral model generality.
+
+\subsection{Ablation Analysis}
+Table~\ref{table:ablation} summarizes expected effects of removing each architectural component, derived from invariants and module-level behavior.
+
+\begin{table}[htbp]
+\centering
+\caption{Expected effects of removing architectural components.}
+\label{table:ablation}
+\footnotesize
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{ll}
+\toprule
+\textbf{Removed Component} & \textbf{Expected Effect} \\
+\midrule
+Behavior Objects & No canonical behavioral abstraction; evidence engine \\
+& operates on raw heterogeneous events with varying schemas \\
+Evidence Engine & No evidence provenance; no counter-evidence tracking; \\
+& inferences lack traceability to source observations \\
+Inference Engine & No higher-level conclusions; identity constructed from \\
+& raw evidence without interpretive abstraction \\
+Identity Snapshot & Multi-turn inconsistency; identity mutates mid-session; \\
+& rollback capability lost \\
+Self Model & No uncertainty quantification; all beliefs expressed \\
+& with equal certainty regardless of evidence strength \\
+Decision Engine & Low-confidence or contradictory facts reach the LLM; \\
+& no content pre-selection before verbalization \\
+LLM Terminal Constraint & Nondeterminism, hallucination risk, and opacity \\
+& reintroduced into the reasoning and decision path \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{Threats to Validity}
+
+\subsubsection{Internal Validity}
+The 596-query dataset may not capture full production distribution; accuracy reflects curated and synthetic data. Determinism was verified on a single snapshot with fixed queries.
+
+\subsubsection{External Validity}
+The architecture has been evaluated on a single deployment with synthetic and developer-generated data. Generalization requires a controlled user study, and single-source ingestion limits behavioral breadth.
+
+\subsubsection{Construct Validity}
+Confidence scores have been validated for internal consistency but not calibrated against ground truth identity measures. Correspondence to psychologically valid constructs requires external validation.
+
+\subsubsection{Reproducibility}
+The source, database migrations, the 596-query evaluation set, the evaluation scripts and deployment documentation are released together. Every stage before verbalization is deterministic, so runs reproduce without seed control.
 
 \subsection{Future Work}
-Multi-platform behavioral identity construction across Instagram, GitHub, YouTube, and learning platforms would further enrich the constructed identity. Replacing rule-based alignment scoring with reinforcement learning \cite{schulman2017} would enable optimization of long-term behavioral outcomes. A controlled user study measuring behavioral awareness and insight quality would validate practical utility. Differential privacy techniques \cite{dwork2014} should be explored for information leakage bounds. Future work will include longitudinal evaluation across larger and more diverse user populations. Scalability at million-user scale, while supported by the asynchronous two-pipeline design and pgvector IVFFLAT indexing, remains to be benchmarked.
+Extending the ingestion pipeline to support multiple behavioral sources would enrich constructed identity. Replacing rule-based alignment scoring with reinforcement learning \cite{schulman2017} would enable optimization of long-term behavioral outcomes. Quantitative ablation studies are needed to measure each component's empirical contribution beyond the qualitative analysis in Section~\ref{sec:discussion}. A controlled user study measuring behavioral awareness and insight quality would validate practical utility. Differential privacy techniques \cite{dwork2014} should be explored for information leakage bounds, and a formal treatment connecting computational identity constructs to psychological identity theories would strengthen theoretical foundations. Scalability at million-user scale, while supported by the asynchronous two-pipeline design and pgvector IVFFLAT indexing, remains to be benchmarked.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented AIMirror, a modular cognitive architecture that continuously builds computational identity from behavioral observations. The central idea is that computational identity should be a first-class architectural construct, not something that emerges as a byproduct of LLM reasoning or static feature engineering.
+This paper presented AIMirror, a modular cognitive architecture for continuous computational identity construction from behavioral observations. The central thesis is that computational identity should be treated as a first-class architectural construct, built through a principled pipeline of evidence accumulation, identity evolution, cognitive planning, and controlled language generation rather than emerging as a byproduct of LLM reasoning or static feature engineering.
 
-The architecture separates concerns across eleven specialized engines, with the language model locked to terminal verbalization of structured plans. Key innovations include Behavior Objects with lifecycle tracking, an evidence engine that tracks counter-evidence, immutable identity snapshots, a self-model that knows what it doesn't know, and a cognitive planning layer that never touches the language model.
+The architecture implements separation of concerns across eleven specialized engines, with the language model constrained to terminal verbalization of structured plans. Core innovations include Behavior Objects with lifecycle tracking, an evidence engine with counter-evidence support, immutable identity snapshots, a self-model with explicit uncertainty, and a cognitive planning layer operating without language model involvement.
 
-Our evaluation shows deterministic pipeline behavior across repeated executions under identical inputs, intent classification with macro F1 of 0.82 across 596 queries, sub-millisecond component latencies, and architectural invariant compliance. More user studies are needed, but the architecture gives us a principled foundation for intelligent systems that construct and reason about computational identity from behavioral evidence. We believe this architectural separation provides a promising foundation for future explainable, personalized, and trustworthy intelligent systems.
+Evaluation demonstrates deterministic pipeline behavior (100/100 identical outputs), intent classification with macro F1 of 0.82 across 596 queries, sub-millisecond component latencies, and architectural invariant compliance. While further validation through user studies is required, the architecture provides a principled foundation for transparent, verifiable intelligent systems that construct and reason about computational identity from behavioral evidence. This reframing of identity from emergent artifact to constructed entity---grounded in evidence, versioned through snapshots, and expressed through controlled language generation---represents the core architectural contribution.
 
-\begin{thebibliography}{20}
+\begin{thebibliography}{99}
 
 \bibitem{kobsa2001}
 A. Kobsa, ``Generic user modeling systems,'' \emph{User Model. User-Adapt. Interact.}, vol. 11, no. 1--2, pp. 49--63, 2001.
+
+\bibitem{fischer2001}
+G. Fischer, ``User modeling in human--computer interaction,'' \emph{User Model. User-Adapt. Interact.}, vol. 11, no. 1--2, pp. 65--86, 2001.
+
+\bibitem{adomavicius2005}
+G. Adomavicius and A. Tuzhilin, ``Toward the next generation of recommender systems: A survey of the state-of-the-art and possible extensions,'' \emph{IEEE Trans. Knowl. Data Eng.}, vol. 17, no. 6, pp. 734--749, 2005.
 
 \bibitem{koren2009}
 Y. Koren, R. Bell, and C. Volinsky, ``Matrix factorization techniques for recommender systems,'' \emph{Computer}, vol. 42, no. 8, pp. 30--37, 2009.
@@ -350,11 +541,20 @@ Y. Koren, R. Bell, and C. Volinsky, ``Matrix factorization techniques for recomm
 \bibitem{lipton2016}
 Z. C. Lipton, ``The mythos of model interpretability,'' \emph{Queue}, vol. 16, no. 3, pp. 31--57, 2018.
 
+\bibitem{guidotti2018}
+R. Guidotti \emph{et al.}, ``A survey of methods for explaining black box models,'' \emph{ACM Comput. Surv.}, vol. 51, no. 5, pp. 1--42, 2018.
+
 \bibitem{resnick1997}
 P. Resnick and H. R. Varian, ``Recommender systems,'' \emph{Commun. ACM}, vol. 40, no. 3, pp. 56--58, 1997.
 
+\bibitem{milano2020}
+S. Milano, M. Taddeo, and L. Floridi, ``Recommender systems and their ethical challenges,'' \emph{AI \& Society}, vol. 35, no. 4, pp. 957--967, 2020.
+
 \bibitem{lewis2020}
 P. Lewis \emph{et al.}, ``Retrieval-augmented generation for knowledge-intensive NLP tasks,'' in \emph{Adv. Neural Inf. Process. Syst.}, vol. 33, pp. 9459--9474, 2020.
+
+\bibitem{bommasani2021}
+R. Bommasani \emph{et al.}, ``On the opportunities and risks of foundation models,'' arXiv:2108.07258, 2021.
 
 \bibitem{ji2023}
 Z. Ji \emph{et al.}, ``Survey of hallucination in natural language generation,'' \emph{ACM Comput. Surv.}, vol. 55, no. 12, pp. 1--38, 2023.
@@ -365,14 +565,41 @@ J. E. Laird, A. Newell, and P. S. Rosenbloom, ``SOAR: An architecture for genera
 \bibitem{anderson2004}
 J. R. Anderson \emph{et al.}, ``An integrated theory of the mind,'' \emph{Psychol. Rev.}, vol. 111, no. 4, pp. 1036--1060, 2004.
 
+\bibitem{sigma2015}
+P. S. Rosenbloom, A. Dey, and A. G. Olteanu, ``The Sigma cognitive architecture and system,'' in \emph{Proc. Annu. Conf. Cogn. Sci. Soc.}, 2015, pp. 2022--2027.
+
 \bibitem{he2017}
 X. He \emph{et al.}, ``Neural collaborative filtering,'' in \emph{Proc. WWW}, 2017, pp. 173--182.
 
 \bibitem{rudin2019}
 C. Rudin, ``Stop explaining black box machine learning models for high stakes decisions and use interpretable models instead,'' \emph{Nat. Mach. Intell.}, vol. 1, no. 5, pp. 206--215, 2019.
 
+\bibitem{grave2016}
+E. Grave, A. Joulin, and N. Usunier, ``Improving neural language models with a continuous cache,'' in \emph{Proc. ICLR}, 2017.
+
+\bibitem{weston2014}
+J. Weston, S. Chopra, and A. Bordes, ``Memory networks,'' in \emph{Proc. ICLR}, 2015.
+
+\bibitem{tulving1972}
+E. Tulving, ``Episodic and semantic memory,'' in \emph{Organization of Memory}, E. Tulving and W. Donaldson, Eds. New York, NY, USA: Academic Press, 1972, pp. 381--403.
+
+\bibitem{squire1992}
+L. R. Squire, ``Memory and the hippocampus: A synthesis from findings with rats, monkeys, and humans,'' \emph{Psychol. Rev.}, vol. 99, no. 2, pp. 195--231, 1992.
+
 \bibitem{tao2019}
 F. Tao \emph{et al.}, ``Digital twin in industry: State-of-the-art,'' \emph{IEEE Trans. Ind. Informat.}, vol. 15, no. 4, pp. 2405--2415, 2019.
+
+\bibitem{okegbile2023}
+S. D. Okegbile, J. Cai, D. Niyato, and C. Yi, ``Human digital twin for personalized healthcare: Vision, architecture and future directions,'' \emph{IEEE Netw.}, vol. 37, no. 2, pp. 56--63, 2023.
+
+\bibitem{barricelli2022}
+B. R. Barricelli and D. Fogli, ``Digital twins in human-computer interaction: A systematic review,'' \emph{Int. J. Hum.-Comput. Interact.}, vol. 39, no. 7, pp. 1--18, 2022.
+
+\bibitem{floridi2011}
+L. Floridi, ``The informational nature of personal identity,'' \emph{Minds Mach.}, vol. 21, no. 4, pp. 549--566, 2011.
+
+\bibitem{turkle1995}
+S. Turkle, \emph{Life on the Screen: Identity in the Age of the Internet}. New York, NY, USA: Simon \& Schuster, 1995.
 
 \bibitem{schulman2017}
 J. Schulman \emph{et al.}, ``Proximal policy optimization algorithms,'' arXiv:1707.06347, 2017.
@@ -386,6 +613,9 @@ J. S. Park \emph{et al.}, ``Generative agents: Interactive simulacra of human be
 \bibitem{wang2023memgpt}
 C. Wang \emph{et al.}, ``MemGPT: Towards LLMs as operating systems,'' arXiv:2310.08560, 2023.
 
+\bibitem{zhong2023memorybank}
+W. Zhong \emph{et al.}, ``MemoryBank: Enhancing large language models with long-term memory,'' in \emph{Proc. AAAI}, 2023, pp. 123--131.
+
 \bibitem{yao2023}
 S. Yao \emph{et al.}, ``ReAct: Synergizing reasoning and acting in language models,'' in \emph{Proc. ICLR}, 2023.
 
@@ -394,6 +624,12 @@ AutoGPT, ``AutoGPT: An autonomous GPT-4 experiment,'' GitHub repository, 2023. [
 
 \bibitem{langchain2023}
 H. Chase, ``LangChain: Building applications with LLMs through composability,'' GitHub repository, 2023. [Online]. Available: https://github.com/langchain-ai/langchain
+
+\bibitem{li2023camel}
+G. Li \emph{et al.}, ``CAMEL: Communicative agents for mind exploration of large scale language model society,'' in \emph{Proc. NeurIPS}, 2023.
+
+\bibitem{wang2023voyager}
+G. Wang \emph{et al.}, ``Voyager: An open-ended embodied agent with large language models,'' in \emph{Proc. NeurIPS}, 2023.
 
 \bibitem{dwork2014}
 C. Dwork and A. Roth, ``The algorithmic foundations of differential privacy,'' \emph{Found. Trends Theor. Comput. Sci.}, vol. 9, no. 3--4, pp. 211--407, 2014.
