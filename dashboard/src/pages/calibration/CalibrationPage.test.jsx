@@ -190,3 +190,64 @@ describe('answering a claim', () => {
     expect(await screen.findByText(/Nothing waiting/i)).toBeTruthy()
   })
 })
+
+/**
+ * A verdict on a claim the user cannot inspect is a guess — and the guess
+ * still counts toward the calibration score. So each open claim names the rule
+ * that produced it.
+ *
+ * What matters as much is what it must NOT show. Inference rows carry
+ * affected_creators / affected_topics / supporting_evidence, which look like
+ * per-claim evidence and are not: every inference for a user is written with
+ * the same global set. Under a claim they would read as "this is why", be
+ * identical everywhere, and invite a verdict formed from evidence with no
+ * bearing on the claim.
+ */
+describe('the basis shown with each question', () => {
+  const CLAIM = {
+    claim_id: 'inf_1', claim_type: 'inference', label: 'Creator dependence detected',
+    description: 'Top 3 creators account for 68% of activity', confidence: 0.92,
+    basis: {
+      rule: 'CreatorDependenceRule',
+      detail: 'Top 3 creators account for 68% of activity',
+      claim_specific_evidence: false,
+    },
+  }
+
+  it('names the rule that fired', async () => {
+    setup({ open: [CLAIM] })
+    render(<CalibrationPage />)
+    expect(await screen.findByText('CreatorDependenceRule')).toBeTruthy()
+  })
+
+  it('shows the numbers the rule fired on', async () => {
+    setup({ open: [CLAIM] })
+    render(<CalibrationPage />)
+    expect(await screen.findByText(/68% of activity/)).toBeTruthy()
+  })
+
+  it("does not render global context as if it were this claim's evidence", async () => {
+    /* Even if a server sent them, the page must not present them as the
+       reason for this particular claim. */
+    setup({
+      open: [{ ...CLAIM, basis: { ...CLAIM.basis, creators: ['natgeo'], topics: ['space'] } }],
+    })
+    render(<CalibrationPage />)
+    await screen.findByText('CreatorDependenceRule')
+    expect(screen.queryByText('natgeo')).toBeNull()
+    expect(screen.queryByText('space')).toBeNull()
+  })
+
+  it('renders a claim with no basis rather than breaking', async () => {
+    setup({ open: [{ ...CLAIM, basis: null }] })
+    render(<CalibrationPage />)
+    expect(await screen.findByText('Creator dependence detected')).toBeTruthy()
+    expect(screen.getByTitle('Right')).toBeTruthy()
+  })
+
+  it('tells the user they are not being asked to judge blind', async () => {
+    setup({ open: [CLAIM] })
+    render(<CalibrationPage />)
+    expect(await screen.findByText(/cannot inspect/i)).toBeTruthy()
+  })
+})

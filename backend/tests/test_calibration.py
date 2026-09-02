@@ -410,3 +410,94 @@ async def test_erasure_takes_the_verdicts_too(db, client):
     await data_privacy.delete_all_user_data(user_id)
     assert await fetchval(
         "SELECT COUNT(*) FROM claim_verdicts WHERE user_id = $1", user_id) == 0
+
+
+# -- The basis shown with each question ---------------------------------------
+
+class TestClaimBasis:
+    """The Ledger scores the system on the user's verdicts, so a claim the user
+    cannot inspect produces a guess - and a guess still counts. Each open claim
+    therefore carries what it rests on.
+
+    The hard part was what to LEAVE OUT. Inference rows carry
+    affected_creators, affected_topics, supporting_evidence and
+    evidence_summary, and they look exactly like per-claim evidence. They are
+    not: every inference for a user is written with the same global set.
+    Verified across production - 10 of 10 users had exactly one distinct
+    creator set and one topic set spanning all of their claims. Rendered under
+    a claim they would read as "this is why", be identical everywhere, and
+    invite a verdict formed from evidence with no bearing on the claim.
+    """
+
+    def test_it_carries_the_rule_that_fired(self):
+        """Naming the rule is what makes a claim auditable rather than an
+        opaque assertion about a person."""
+        assert cal._basis({"rule_name": "CreatorDependenceRule"})["rule"] == "CreatorDependenceRule"
+
+    def test_it_carries_the_claim_specific_detail(self):
+        """Rules embed their numbers in the description, and that text is the
+        one part that genuinely differs per claim."""
+        detail = "15 distinct creators, top 3 only 25% of activity"
+        assert cal._basis({"description": detail})["detail"] == detail
+
+    def test_it_does_not_pass_off_global_context_as_evidence(self):
+        """The failure this shape exists to avoid."""
+        basis = cal._basis({
+            "rule_name": "R",
+            "affected_creators": ["natgeo", "veritasium"],
+            "affected_topics": ["space"],
+            "supporting_evidence": ["e1", "e2"],
+            "evidence_summary": "2 pieces of evidence",
+        })
+        for leaked in ("creators", "topics", "evidence_count", "evidence_summary"):
+            assert leaked not in basis, f"{leaked} is global, not per-claim"
+
+    def test_it_says_outright_that_evidence_is_not_claim_specific(self):
+        """Recorded in the payload so a future client cannot assume otherwise."""
+        assert cal._basis({})["claim_specific_evidence"] is False
+
+    def test_a_row_missing_everything_does_not_raise(self):
+        basis = cal._basis({})
+        assert basis["rule"] is None and basis["detail"] is None
+
+
+class TestDecodeList:
+    """Kept because JSONB arrives as text - the gap that caused a production
+    500 in services/persona.py."""
+
+    def test_it_decodes_a_json_string(self):
+        assert cal._decode_list('["a","b"]') == ["a", "b"]
+
+    def test_malformed_json_becomes_empty_rather_than_raising(self):
+        assert cal._decode_list("not json") == []
+        assert cal._decode_list(None) == []
+        assert cal._decode_list(42) == []
+
+    def test_an_already_decoded_list_passes_through(self):
+        assert cal._decode_list(["a"]) == ["a"]
+
+
+@pytest.mark.db
+@pytest.mark.asyncio
+async def test_open_claims_carry_their_basis(db, demo_user_id, client):
+    from app.db.postgres import execute
+
+    inference_id = f"inf_{uuid.uuid4().hex[:12]}"
+    await execute(
+        """INSERT INTO inferences (inference_id, user_id, inference_type, label,
+               description, confidence, rule_name, evidence_summary,
+               affected_creators, affected_topics, supporting_evidence,
+               inferred_at, valid_from)
+           VALUES ($1,$2,'interest',$3,$4,0.9,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,NOW(),NOW())""",
+        inference_id, demo_user_id, "Creator dependence detected", "d",
+        "CreatorDependenceRule", "4 pieces of evidence",
+        '["natgeo","veritasium"]', '["space"]', '["e1","e2"]',
+    )
+
+    claims = (await client.get(f"/calibration/open?user_id={demo_user_id}")).json()
+    claim = next(c for c in claims if c["claim_id"] == inference_id)
+
+    assert claim["basis"]["rule"] == "CreatorDependenceRule"
+    assert claim["basis"]["detail"] == "d"
+    # The global columns were populated above and must NOT surface as evidence.
+    assert "creators" not in claim["basis"]

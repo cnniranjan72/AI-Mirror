@@ -21,6 +21,7 @@ samples and extreme proportions this will spend most of its life in.
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import math
 from typing import Any, Dict, Iterable, List, Optional, Set
@@ -357,6 +358,53 @@ def _verdict_line(accuracy: float, judged: List[Dict], overconfident: List[Dict]
     )
 
 
+def _decode_list(value: Any) -> List[Any]:
+    """JSONB comes back as text.
+
+    No JSON codec is registered on the pool (app/db/postgres.py), which has
+    already caused one production 500 — see services/persona.py. Anything
+    reading a JSONB column has to handle the string form.
+    """
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            return []
+    return list(value) if isinstance(value, (list, tuple)) else []
+
+
+def _basis(row: Dict[str, Any]) -> Dict[str, Any]:
+    """What this claim rests on, restricted to what is actually about it.
+
+    The Ledger scores the system on the user's verdicts, so a claim the user
+    cannot inspect produces a guess — and a guess still counts. The basis is
+    shown with the question for that reason.
+
+    It carries only the rule and the claim's own description, because those are
+    the only claim-specific things the pipeline records. affected_creators,
+    affected_topics, supporting_evidence and evidence_summary look like
+    per-claim evidence and are not: every inference for a user is written with
+    the SAME global set. Checked across production — 10 of 10 users had exactly
+    one distinct creator set and one topic set spanning all of their claims.
+
+    Rendering those next to a claim would be worse than showing nothing. They
+    would read as "this is why", be identical under every claim, and invite a
+    verdict formed from evidence that has no bearing on it. The description is
+    the real justification: rules embed their numbers in it ("15 distinct
+    creators, top 3 only 25% of activity"), and that text IS claim-specific.
+
+    If the inference engine ever records which evidence supports which claim,
+    this is where it belongs.
+    """
+    return {
+        # Naming the rule is what makes a claim auditable rather than an
+        # opaque assertion about a person.
+        "rule": row.get("rule_name"),
+        "detail": row.get("description"),
+        "claim_specific_evidence": False,
+    }
+
+
 async def list_answered_claims(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
     """Claims the user has already answered, so an answer can be changed.
 
@@ -426,7 +474,8 @@ async def list_open_claims(user_id: str, limit: int = 20) -> List[Dict[str, Any]
             SELECT DISTINCT ON (i.claim_key)
                    i.inference_id AS claim_id, 'inference' AS claim_type,
                    i.label, i.description, i.confidence,
-                   i.inferred_at AS created_at, i.claim_key
+                   i.inferred_at AS created_at, i.claim_key,
+                   i.rule_name
             FROM inferences i
             LEFT JOIN claim_verdicts v
                    ON v.user_id = i.user_id
@@ -450,4 +499,8 @@ async def list_open_claims(user_id: str, limit: int = 20) -> List[Dict[str, Any]
         "description": r["description"],
         "confidence": round(float(r["confidence"] or 0.0), 3),
         "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+        # Shown with the question, not behind a second request: a verdict on a
+        # claim the user cannot inspect is a guess, and the calibration score
+        # is built entirely from these verdicts.
+        "basis": _basis(dict(r)),
     } for r in rows]

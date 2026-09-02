@@ -123,6 +123,37 @@ function Bar({ bucket }) {
   )
 }
 
+
+function Basis({ basis }) {
+  /* What the claim rests on, shown with the question rather than behind a
+     disclosure: the Ledger scores the system on these verdicts, so a claim the
+     user cannot inspect produces a guess — and a guess still counts.
+
+     Only the rule is shown. The inference rows also carry affected_creators,
+     affected_topics and supporting_evidence, and it is tempting to render them
+     here as evidence — but every inference for a user is written with the SAME
+     global set (verified across production: 10 of 10 users had one creator set
+     spanning all their claims). Under each claim they would read as "this is
+     why", be identical everywhere, and invite a verdict formed from evidence
+     that has no bearing on the claim. The description above already carries
+     the numbers the rule fired on, and that text IS claim-specific. */
+  if (!basis?.rule) return null
+
+  return (
+    <div style={{
+      marginTop: 6, fontSize: 11, color: 'var(--text-muted)',
+      display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap',
+    }}>
+      <span>fired by</span>
+      <code style={{
+        fontFamily: 'var(--font-mono)', fontSize: 11,
+        padding: '1px 6px', borderRadius: 5,
+        background: 'rgba(148,163,184,0.10)', color: 'var(--text-tertiary)',
+      }}>{basis.rule}</code>
+    </div>
+  )
+}
+
 export default function CalibrationPage() {
   const { data: report, loading, error, refetch } = useApi(() => api.getCalibrationReport(), [])
   const { data: open, refetch: refetchOpen } = useApi(() => api.getOpenClaims(), [])
@@ -246,7 +277,9 @@ export default function CalibrationPage() {
             </h3>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 18 }}>
               Most confident first — a confident claim that turns out to be wrong is the
-              most useful thing you can tell it.
+              most useful thing you can tell it. Each claim names the rule that produced it
+              and the numbers it fired on, so you are not asked to judge something you
+              cannot inspect.
             </p>
 
             {claims.length === 0 ? (
@@ -266,6 +299,7 @@ export default function CalibrationPage() {
                   <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
                     it claims {Math.round(claim.confidence * 100)}% confidence
                   </div>
+                  <Basis basis={claim.basis} />
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   {[
