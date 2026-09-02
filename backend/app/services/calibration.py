@@ -51,11 +51,32 @@ MIN_TOTAL_SAMPLES = 20
 CALIBRATION_TOLERANCE = 0.15
 
 VALID_VERDICTS = ("right", "wrong", "unsure")
-VALID_CLAIM_TYPES = ("inference", "reflection")
+
+# Inferences only, deliberately.
+#
+# "reflection" was listed here first, on the assumption that a reflection is a
+# claim about the user like an inference is. The stored rows say otherwise.
+# Every summary in production reads:
+#
+#     "Reflection covering 7 behavior objects across 2 evidence items with
+#      41 total events. Key topics: ..."
+#
+# That is a statistic about a pipeline run, not an assertion about a person.
+# There is no answer to "is this right or wrong about you", so asking would
+# collect noise and score the system on it.
+#
+# It would also break claim_key, which fingerprints content: those counts
+# change on every ingest, so each run would mint a brand new "claim" and the
+# open list would fill with the same reflection over and over. reflection_type
+# cannot rescue it either — every row in production is 'periodic'.
+#
+# The claim_verdicts CHECK constraint still permits 'reflection' so old rows
+# remain valid. Re-enabling means giving reflections a summary that actually
+# asserts something about the person, and a stable key that is not a row count.
+VALID_CLAIM_TYPES = ("inference",)
 
 _SOURCE = {
     "inference": ("inferences", "inference_id", "label"),
-    "reflection": ("reflections", "reflection_id", "summary"),
 }
 
 
@@ -159,9 +180,8 @@ async def record_verdict(
         raise ValueError(f"unknown verdict: {verdict}")
 
     table, id_column, label_column = _SOURCE[claim_type]
-    rule_column = "rule_name" if claim_type == "inference" else "reflection_type"
     row = await fetchrow(
-        f"SELECT confidence, {label_column} AS label, {rule_column} AS rule FROM {table} "
+        f"SELECT confidence, {label_column} AS label, rule_name AS rule FROM {table} "
         f"WHERE {id_column} = $1 AND user_id = $2",
         claim_id, user_id,
     )
@@ -353,6 +373,11 @@ async def list_answered_claims(user_id: str, limit: int = 50) -> List[Dict[str, 
     When no live row matches, the system is no longer making that claim at
     all: live_claim_id is None and there is nothing to restore. Still listed,
     because the answer is part of the user's record and still scores.
+
+    The live lookup goes to `inferences` because that is the only contestable
+    claim type (see VALID_CLAIM_TYPES). A historical 'reflection' verdict —
+    recorded while that type was briefly accepted — therefore resolves to no
+    live claim, which is the correct answer for it anyway.
     """
     rows = await fetch(
         """
@@ -360,6 +385,7 @@ async def list_answered_claims(user_id: str, limit: int = 50) -> List[Dict[str, 
                v.confidence_at_verdict, v.updated_at,
                (SELECT i.inference_id FROM inferences i
                  WHERE i.user_id = v.user_id AND i.claim_key = v.claim_key
+                   AND v.claim_type = 'inference'
                  ORDER BY i.inferred_at DESC LIMIT 1) AS live_claim_id
         FROM claim_verdicts v
         WHERE v.user_id = $1

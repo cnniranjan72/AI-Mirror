@@ -458,3 +458,42 @@ async def test_the_final_answer_is_the_one_that_counts(db, demo_user_id, client)
     report = (await client.get(f"/calibration/report?user_id={demo_user_id}")).json()
     assert report["summary"]["correct"] == 1, "the stale verdict won"
     assert DENIED in await _assertable(demo_user_id)
+
+
+class TestOnlyInferencesAreContestable:
+    """Reflections were briefly accepted as a claim type. The stored rows say
+    they should not be.
+
+    Every reflection summary in production reads "Reflection covering 7
+    behavior objects across 2 evidence items with 41 total events" — a
+    statistic about a pipeline run, not an assertion about a person. There is
+    no honest answer to "is this right about you", so asking would collect
+    noise and then score the system on it.
+
+    It also breaks claim_key, which fingerprints content: those counts change
+    every ingest, so each run would mint a new "claim" and the open list would
+    refill with the same reflection forever.
+    """
+
+    def test_reflection_is_not_accepted(self):
+        assert cal.VALID_CLAIM_TYPES == ("inference",)
+        assert "reflection" not in cal._SOURCE
+
+    @pytest.mark.asyncio
+    async def test_posting_a_reflection_verdict_is_rejected(self):
+        with pytest.raises(ValueError, match="reflection"):
+            await cal.record_verdict("u", "reflection", "r1", "wrong")
+
+    def test_a_reflection_summary_would_churn_its_key(self):
+        """Why the content fingerprint cannot work here: consecutive runs
+        produce different counts, so the same reflection gets a new identity
+        every time."""
+        run_one = "Reflection covering 7 behavior objects across 2 evidence items."
+        run_two = "Reflection covering 8 behavior objects across 3 evidence items."
+        assert cal.claim_key("periodic", run_one) != cal.claim_key("periodic", run_two)
+
+    def test_inference_labels_by_contrast_are_stable(self):
+        """The contrast that makes inferences safe to key on: their labels
+        assert something and carry no counts."""
+        for _, label in CLAIMS:
+            assert not any(ch.isdigit() for ch in label), label
