@@ -124,3 +124,27 @@ class TestTheDemoSeedsThePlatformSide:
         from app.api import seed
 
         assert "claim_verdicts" not in inspect.getsource(seed)
+
+
+class TestSeedCaptionsCarryNoBoilerplate:
+    """A word in every caption survives topic selection and becomes a
+    behaviour object of its own. The old template said "{topic} content —
+    exploring ..." and the live demo duly grew a topic called `content` -
+    the same failure the real taxonomy guards against, manufactured by the
+    demo's own data."""
+
+    def test_no_token_appears_in_almost_every_caption(self):
+        from collections import Counter
+
+        from app.api.seed import _generate_events
+
+        events = _generate_events("demo_test", 400)
+        counts = Counter()
+        for event in events:
+            for token in set(event["caption"].lower().replace(":", " ").split()):
+                counts[token] += 1
+
+        ubiquitous = {t: n / len(events) for t, n in counts.items() if n / len(events) > 0.9}
+        # Topic words themselves are fine; a filler word shared by every
+        # caption is not.
+        assert not ubiquitous, f"boilerplate in every caption: {ubiquitous}"

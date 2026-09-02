@@ -94,7 +94,13 @@ def _generate_events(user_id: str, count: int = 800) -> List[dict]:
         events.append({
             "reel_id": f"demo_reel_{i:04d}",
             "username": creator,
-            "caption": f"{topic} content — exploring {random.choice(['new ideas', 'advanced concepts', 'tutorials', 'inspiration', 'case studies'])}",
+            # No word common to every caption. The old template was
+            # "{topic} content — exploring ..." and "content" appeared in all
+            # 800, which is enough for it to survive topic selection and
+            # become a behaviour object of its own — the same boilerplate-topic
+            # failure the real taxonomy guards against, manufactured by the
+            # demo's own data.
+            "caption": f"{topic}: {random.choice(['a walkthrough', 'the basics', 'an advanced look', 'field notes', 'a case study'])}",
             "hashtags": random.sample(HASHTAGS, random.randint(1, 4)),
             "audio": random.choice(AUDIO_TRACKS),
             "watch_time": round(watch_time, 1),
