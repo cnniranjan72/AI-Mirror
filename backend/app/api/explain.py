@@ -28,7 +28,7 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, HTTPException
 
 from app.api.deps import enforce_user_match, resolve_user_id
 from pydantic import BaseModel
@@ -93,6 +93,27 @@ async def get_current_identity(user_id: str = Depends(resolve_user_id)):
         "identity": dict(identity),
         "latest_snapshot": dict(snapshot) if snapshot else None,
     }
+
+
+@router.get("/query/traces/{trace_id}/xray")
+async def get_reasoning_xray(
+    trace_id: str,
+    authorization: Optional[str] = Header(default=None),
+    user_id: str = Query(default="default"),
+):
+    """One reasoning run, opened up: per-stage timings, the decision funnel,
+    and the split between deciding and talking.
+
+    Scoped by user_id and checked, like the other trace endpoints: a run
+    records what the system concluded about a specific person.
+    """
+    enforce_user_match(authorization, user_id)
+    from app.services.reasoning_xray import build_xray
+
+    xray = await build_xray(user_id, trace_id)
+    if xray is None:
+        raise HTTPException(status_code=404, detail="Trace not found for this user")
+    return xray
 
 
 @router.get("/identity/drift")

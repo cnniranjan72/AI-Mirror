@@ -63,6 +63,7 @@ const navSections = [
       { path: '/provenance', label: 'Interest Provenance', icon: CompassIcon },
       { path: '/calibration', label: 'Accuracy Ledger', icon: TargetIcon },
       { path: '/drift', label: 'Identity Drift', icon: CompassIcon },
+      { path: '/xray', label: 'Reasoning X-Ray', icon: NetworkIcon },
       { path: '/report', label: 'Report', icon: BookIcon },
       { path: '/insights', label: 'Insights Export', icon: DownloadIcon },
       { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },

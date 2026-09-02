@@ -145,6 +145,12 @@ export const api = {
     const { data } = await client.get('/query/traces', { params: { user_id: userId, limit } });
     return data;
   },
+  // One reasoning run opened up: per-stage timings, the decision funnel, and
+  // the split between deciding and talking. Built from what the run recorded.
+  getReasoningXray: async (traceId, userId = activeUser()) => {
+    const { data } = await client.get(`/query/traces/${traceId}/xray`, { params: { user_id: userId } });
+    return data;
+  },
   getTraceDetail: async (traceId) => {
     const { data } = await client.get(`/query/traces/${traceId}`);
     return data;

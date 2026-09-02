@@ -169,6 +169,7 @@ class TestExplainAPI:
         expected = sorted([
             "/identity/snapshot", "/identity/current", "/identity/self-model",
             "/identity/drift",
+            "/query/traces/{trace_id}/xray",
             "/reasoning/evidence", "/reasoning/inferences", "/reasoning/reflections",
             "/reasoning/behavior-objects", "/query/traces", "/query/traces/{trace_id}",
             "/cognitive/metrics", "/cognitive/summary",
