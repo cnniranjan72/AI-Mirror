@@ -138,6 +138,20 @@ async def post_counterfactual(
     return await run_counterfactual(body.user_id, body.events)
 
 
+@router.get("/identity/space")
+async def get_behaviour_space(
+    user_id: str = Depends(resolve_user_id),
+    limit: int = Query(default=600, le=600),
+):
+    """The stored embeddings of what this person watched, projected to 3D.
+
+    PCA rather than t-SNE or UMAP: a map of someone that rearranges itself on
+    every view would sit badly in a product arguing its reasoning reproduces.
+    """
+    from app.services.behaviour_space import build_space
+    return await build_space(user_id, limit)
+
+
 @router.get("/identity/drift")
 async def get_identity_drift(
     user_id: str = Depends(resolve_user_id),

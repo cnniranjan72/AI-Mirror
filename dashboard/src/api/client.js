@@ -292,6 +292,13 @@ export const api = {
     return data;
   },
 
+  // The stored embeddings projected to 3D. PCA, so the same history always
+  // draws the same shape; the response carries how much structure survives.
+  getBehaviourSpace: async (userId = activeUser(), limit = 600) => {
+    const { data } = await client.get('/identity/space', { params: { user_id: userId, limit } });
+    return data;
+  },
+
   // === Collection control ===
   // Whether the system is allowed to collect. Enforced server-side at /ingest:
   // a switch honoured only by the client would be a request, not a guarantee.

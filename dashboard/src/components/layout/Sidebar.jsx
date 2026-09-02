@@ -66,6 +66,7 @@ const navSections = [
       { path: '/drift', label: 'Identity Drift', icon: CompassIcon },
       { path: '/xray', label: 'Reasoning X-Ray', icon: NetworkIcon },
       { path: '/counterfactual', label: 'What Would Change It', icon: BrainIcon },
+      { path: '/space', label: 'Behaviour Space', icon: MemoryIcon },
       { path: '/report', label: 'Report', icon: BookIcon },
       { path: '/insights', label: 'Insights Export', icon: DownloadIcon },
       { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },
