@@ -130,12 +130,16 @@ class TestTheSplit:
         assert rows[1]["contested"] is False
 
     @pytest.mark.asyncio
-    async def test_annotation_is_a_no_op_with_no_denials(self, monkeypatch):
+    async def test_the_field_is_present_even_when_nothing_is_denied(self, monkeypatch):
+        """The response shape must not depend on the data in it. Omitting
+        `contested` for the common case made its absence ambiguous - a client
+        could not tell "not contested" from "this build does not report it"."""
         async def fake_fetch(*_a, **_k):
             return []
         monkeypatch.setattr(cal, "fetch", fake_fetch)
         rows = await cal.annotate_contested("u", [{"rule_name": "R", "label": "x"}])
         assert len(rows) == 1
+        assert rows[0]["contested"] is False
 
 
 # -- Against the live database -----------------------------------------------

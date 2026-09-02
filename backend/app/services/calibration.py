@@ -104,12 +104,14 @@ async def annotate_contested(user_id: str, rows: Iterable[Dict[str, Any]]) -> Li
     invisible and irreversible; the user should see that their objection stuck.
     """
     contested = await contested_claim_keys(user_id)
-    if not contested:
-        return list(rows)
     out = []
     for row in rows:
         row = dict(row)
         key = row.get("claim_key") or claim_key(row.get("rule_name"), row.get("label"))
+        # Always set, even when nothing is contested. Skipping the field for
+        # the common case made its absence ambiguous — a caller could not tell
+        # "not contested" from "this build does not report it" — and the shape
+        # of a response should not depend on the data in it.
         row["contested"] = key in contested
         out.append(row)
     return out
