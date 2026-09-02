@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import logging
+
 import uuid
 
 from backend.reasoning import BehaviorObject, Inference, Evidence
@@ -251,7 +252,15 @@ class IdentityEvolutionEngine:
             # and returns the same object, so diffing against it is always 0.
             shift_baseline = baseline_snapshot if baseline_snapshot is not None else old_identity_snapshot_for_diff
             identity_shift = self._compute_identity_shift(shift_baseline, updated_identity)
-            threshold_exceeded = identity_shift > self.config.get("snapshot_threshold", 0.15)
+            # 0.30, matching the documented design. The default was 0.15,
+            # which the specification never called for and which fires once the
+            # average of seventeen measures moves 0.036 - noise. That is how
+            # one account accumulated fifteen consecutive snapshots whose
+            # contents were byte-identical. At 0.30 a snapshot needs either
+            # broad drift (about 0.073 across every measure) or one sub-profile
+            # moving 0.30 on its own, and a wholesale change in what someone
+            # watches clears it several times over.
+            threshold_exceeded = identity_shift > self.config.get("snapshot_threshold", 0.30)
 
             updated_identity.metadata["identity_shift"] = identity_shift
             updated_identity.metadata["snapshot_threshold_exceeded"] = bool(threshold_exceeded or force_snapshot)
@@ -470,13 +479,35 @@ class IdentityEvolutionEngine:
             logger.error(f"Error detecting shifts: {str(e)}", exc_info=True)
             return []
     
+    # Longest attention span treated as "fully attentive". Matches the cap the
+    # ingest path already applies to a single watch time, so the normalisation
+    # cannot be exceeded by data the pipeline accepts.
+    ATTENTION_SPAN_CAP_SECONDS = 300.0
+
     @staticmethod
     def _identity_vector(obj) -> "list[float]":
         """The 17 dimensions Eq. 2 measures, pulled off either an Identity or an
         IdentitySnapshot. Both carry the same sub-profile objects (see
         IdentitySnapshot.from_identity), so the shift can be measured against a
         stored snapshot as well as against a live identity — which is what lets
-        drift be accumulated rather than only compared step to step."""
+        drift be accumulated rather than only compared step to step.
+
+        Every dimension is scaled to [0,1] so the L2 distance means something.
+        Sixteen of them already are, declared ge=0.0/le=1.0. The seventeenth,
+        avg_attention_span, is a raw count of SECONDS and carries no bounds,
+        and until now it entered the norm unscaled.
+
+        The effect was that Eq. 2 did not measure identity shift at all: it
+        measured a change in seconds, with the sixteen scores contributing
+        differences of at most 1.0 against a term that ranges over hundreds. A
+        drift experiment through the real pipeline - deep technical viewing
+        (120-240s) replaced by shallow entertainment (3-12s) - produced a
+        recorded shift of 118.2. Against a threshold of 0.30, a snapshot was
+        warranted whenever average attention moved by a third of a second,
+        which is how one account accumulated fifteen consecutive snapshots
+        holding identical contents. A min(1.0, ...) clamp had been placed on
+        the result, which hid the magnitude without addressing the cause.
+        """
         return [
             obj.overall_confidence,
             obj.identity_completeness,
@@ -487,7 +518,8 @@ class IdentityEvolutionEngine:
             obj.creator_graph.creator_diversity_score,
             obj.creator_graph.dependence_score,
             obj.learning_style.confidence,
-            obj.attention_profile.avg_attention_span,
+            min(1.0, max(0.0, (obj.attention_profile.avg_attention_span or 0.0)
+                         / IdentityEvolutionEngine.ATTENTION_SPAN_CAP_SECONDS)),
             obj.exploration_profile.novelty_seeking_score,
             obj.exploration_profile.exploration_rate,
             obj.consistency_profile.overall_consistency,
@@ -498,16 +530,35 @@ class IdentityEvolutionEngine:
         ]
 
     def _compute_identity_shift(self, old, new_id) -> float:
-        """Paper Eq. 2: compute ‖I_{t+1} - I_t‖₂.
+        """Paper Eq. 2: ‖I_{t+1} - I_t‖₂, normalised by the vector's dimension.
 
         `old` may be an Identity or an IdentitySnapshot — see _identity_vector.
+
+        The result is NOT clamped. It previously returned min(1.0, ...), and
+        across 17 dimensions each bounded in [0,1] the largest possible L2 is
+        sqrt(17) = 4.12, so the metric saturated once the average dimension
+        moved 0.243. A drift experiment through the real pipeline - a month of
+        deep technical viewing followed by a month of shallow entertainment,
+        sharing no topic or creator - returned exactly 1.0, pinned to the
+        ceiling. A moderate shift and a total inversion were indistinguishable,
+        which also makes the recorded value useless for showing a user how much
+        they moved.
+
+        Normalising by sqrt(d) was the other candidate and is worse here: it
+        reports the mean per-dimension change, which dilutes a large movement
+        in one sub-profile by the sixteen that stayed put. A creator-dependence
+        score going from 0.4 to 1.0 is a real change in someone, and should not
+        be averaged away.
         """
         try:
             import numpy as np
 
-            return min(1.0, float(np.linalg.norm(
-                np.array(self._identity_vector(new_id)) - np.array(self._identity_vector(old))
-            )))
+            new_vec = np.array(self._identity_vector(new_id), dtype=float)
+            old_vec = np.array(self._identity_vector(old), dtype=float)
+            if new_vec.size == 0 or new_vec.size != old_vec.size:
+                return 0.0
+
+            return float(np.linalg.norm(new_vec - old_vec))
         except Exception as e:
             logger.warning(f"Error computing identity shift: {e}")
             return 0.0
