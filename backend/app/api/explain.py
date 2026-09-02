@@ -138,12 +138,17 @@ async def get_inferences(
     rows = await fetch(
         """SELECT inference_id, inference_type, label, description,
                   confidence, importance, strength,
-                  rule_name, inferred_at::text
+                  rule_name, claim_key, inferred_at::text
            FROM inferences WHERE user_id = $1
            ORDER BY confidence DESC LIMIT $2""",
         user_id, limit,
     )
-    return [dict(r) for r in rows]
+    # Annotated, not filtered. This endpoint SHOWS the reasoning rather than
+    # asserting it, so a claim the user denied stays visible and marked —
+    # hiding it would make their own correction invisible and irreversible.
+    # The surfaces that assert (chat, the character) exclude it instead.
+    from app.services.calibration import annotate_contested
+    return await annotate_contested(user_id, [dict(r) for r in rows])
 
 
 @router.get("/reasoning/reflections", response_model=list)

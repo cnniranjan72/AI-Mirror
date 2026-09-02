@@ -152,9 +152,14 @@ export default function ReportPage() {
 
   const sortedInferences = useMemo(
     () => (Array.isArray(inferences) ? [...inferences] : [])
-      .sort((a, b) => (b.confidence || 0) - (a.confidence || 0)),
+      // Claims the user has denied sink to the bottom. They stay visible —
+      // hiding a correction makes it invisible and irreversible — but the
+      // report should lead with what still stands.
+      .sort((a, b) => (Number(a.contested || false) - Number(b.contested || false))
+        || (b.confidence || 0) - (a.confidence || 0)),
     [inferences]
   )
+  const contestedCount = sortedInferences.filter(i => i.contested).length
 
   const latestReflection = Array.isArray(reflections) ? reflections[0] : null
   const generatedAt = new Date()
@@ -507,6 +512,14 @@ export default function ReportPage() {
       <Reveal variant="depth">
         <GlassCard gradient style={{ marginBottom: 26 }}>
           <SectionHeading title="What the system concluded" source="/reasoning/inferences · each tagged with the rule that fired" />
+          {contestedCount > 0 && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+              {contestedCount} claim{contestedCount === 1 ? ' is' : 's are'} struck through:
+              you marked {contestedCount === 1 ? 'it' : 'them'} wrong in the Accuracy Ledger,
+              so the system no longer asserts {contestedCount === 1 ? 'it' : 'them'} in chat.
+              Shown here rather than hidden, so the correction stays visible and you can take it back.
+            </p>
+          )}
           {sortedInferences.length === 0 ? (
             <Empty>No inferences yet — these appear once enough behaviour has accumulated for a rule to fire.</Empty>
           ) : (
@@ -515,10 +528,15 @@ export default function ReportPage() {
                 <div key={inf.inference_id} style={{
                   padding: '14px 16px', borderRadius: 12,
                   background: 'rgba(148,163,184,0.05)', border: '1px solid var(--border-subtle)',
+                  opacity: inf.contested ? 0.62 : 1,
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{inf.label}</span>
+                    <span style={{
+                      fontSize: 14, fontWeight: 700, color: 'var(--text-primary)',
+                      textDecoration: inf.contested ? 'line-through' : 'none',
+                    }}>{inf.label}</span>
                     <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                      {inf.contested && <Badge variant="rose">You marked this wrong</Badge>}
                       <Badge variant={(inf.confidence || 0) >= 0.75 ? 'emerald' : (inf.confidence || 0) >= 0.5 ? 'indigo' : 'amber'}>
                         {pct(inf.confidence)}% confidence
                       </Badge>

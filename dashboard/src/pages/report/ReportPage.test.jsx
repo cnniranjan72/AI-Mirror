@@ -257,3 +257,77 @@ describe('ReportPage - the audits are part of the document', () => {
     expect(await screen.findByText(/reliability gates/i)).toBeInTheDocument()
   })
 })
+
+/**
+ * A correction the user made must be visible in the Report.
+ *
+ * The system stops ASSERTING a denied claim (chat, the character) but the
+ * Report SHOWS reasoning, so it marks the claim instead of dropping it. A
+ * correction that makes something silently vanish is not a control the user
+ * can inspect or reverse.
+ */
+describe('claims the user marked wrong', () => {
+  it('strikes them through instead of hiding them', async () => {
+    setup({
+      inferences: [
+        { inference_id: 'i1', label: 'Kept claim', description: 'still stands',
+          confidence: 0.9, rule_name: 'RuleA', contested: false },
+        { inference_id: 'i2', label: 'Denied claim', description: 'user said no',
+          confidence: 0.95, rule_name: 'RuleB', contested: true },
+      ],
+    })
+    render(<ReportPage />)
+
+    // Present, not removed.
+    const denied = await screen.findByText('Denied claim')
+    expect(denied).toBeTruthy()
+    expect(denied.style.textDecoration).toBe('line-through')
+    expect(screen.getByText('You marked this wrong')).toBeTruthy()
+
+    // The one that still stands is untouched.
+    expect(screen.getByText('Kept claim').style.textDecoration).toBe('none')
+  })
+
+  it('explains what the strike-through means', async () => {
+    setup({
+      inferences: [
+        { inference_id: 'i2', label: 'Denied claim', description: 'x',
+          confidence: 0.95, rule_name: 'RuleB', contested: true },
+      ],
+    })
+    render(<ReportPage />)
+    const note = await screen.findByText(/no longer asserts/i)
+    expect(note.textContent).toMatch(/take it back/i)
+  })
+
+  it('leads with what still stands, despite lower confidence', async () => {
+    /* The denied claim has the HIGHER confidence, so ordering by confidence
+       alone would put it first. */
+    setup({
+      inferences: [
+        { inference_id: 'i2', label: 'Denied claim', description: 'x',
+          confidence: 0.99, rule_name: 'RuleB', contested: true },
+        { inference_id: 'i1', label: 'Kept claim', description: 'y',
+          confidence: 0.40, rule_name: 'RuleA', contested: false },
+      ],
+    })
+    render(<ReportPage />)
+    await screen.findByText('Kept claim')
+
+    const body = document.body.textContent
+    expect(body.indexOf('Kept claim')).toBeLessThan(body.indexOf('Denied claim'))
+  })
+
+  it('says nothing about corrections when there are none', async () => {
+    setup({
+      inferences: [
+        { inference_id: 'i1', label: 'Kept claim', description: 'x',
+          confidence: 0.9, rule_name: 'RuleA' },
+      ],
+    })
+    render(<ReportPage />)
+    await screen.findByText('Kept claim')
+    expect(screen.queryByText(/no longer asserts/i)).toBeNull()
+    expect(screen.queryByText('You marked this wrong')).toBeNull()
+  })
+})

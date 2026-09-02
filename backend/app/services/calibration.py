@@ -20,9 +20,10 @@ samples and extreme proportions this will spend most of its life in.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from app.db.postgres import execute, fetch, fetchrow
 
@@ -58,6 +59,88 @@ _SOURCE = {
 }
 
 
+def claim_key(rule_name: Optional[str], label: Optional[str]) -> str:
+    """A stable identity for a claim: its rule plus what it asserts.
+
+    inference_id cannot serve, because it is minted as
+    inference_{rule}_{context_id}_{utcnow().timestamp()} and context_id is
+    itself ctx_{timestamp}. Every ingest deletes and regenerates the whole
+    inference set, so the id of a given claim changes on every run — and a
+    ledger keyed on it asked the user the same question forever.
+
+    rule_name alone would be too coarse: EngagementDepthRule emits both
+    "Engagement style is deep, attentive" and "... quick, scanning", and
+    denying one must not silently deny the other.
+
+    MUST stay identical to the md5 expression in migration_v19.sql. md5 is a
+    fingerprint here, not a security primitive.
+    """
+    basis = f"{(rule_name or '').strip().lower()}|{(label or '').strip().lower()}"
+    return hashlib.md5(basis.encode("utf-8")).hexdigest()
+
+
+async def contested_claim_keys(user_id: str) -> Set[str]:
+    """Claims this user has explicitly marked wrong.
+
+    Only 'wrong' counts. 'unsure' is a real answer but it is not a denial, and
+    treating hesitation as rejection would let the system quietly discard
+    anything the user merely found hard to judge.
+    """
+    rows = await fetch(
+        """
+        SELECT DISTINCT claim_key FROM claim_verdicts
+        WHERE user_id = $1 AND verdict = 'wrong' AND claim_key IS NOT NULL
+        """,
+        user_id,
+    )
+    return {r["claim_key"] for r in rows}
+
+
+async def annotate_contested(user_id: str, rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Tag rows the user has denied, without dropping them.
+
+    Used where the point is to SHOW the reasoning (the Report, /explain) rather
+    than to assert it. Hiding a denied claim there would make the correction
+    invisible and irreversible; the user should see that their objection stuck.
+    """
+    contested = await contested_claim_keys(user_id)
+    if not contested:
+        return list(rows)
+    out = []
+    for row in rows:
+        row = dict(row)
+        key = row.get("claim_key") or claim_key(row.get("rule_name"), row.get("label"))
+        row["contested"] = key in contested
+        out.append(row)
+    return out
+
+
+# A SQL predicate for "the user has not denied this claim".
+#
+# Applied where the system ASSERTS something to the user — chat answers, the
+# character's speech, wellbeing nudges. Not applied where the point is to SHOW
+# the reasoning (the Report, /explain); those annotate instead, so a correction
+# is visible and reversible rather than making the claim silently vanish.
+#
+# Written against the `inferences` alias the caller uses, hence the format slot.
+# It matches on claim_key, so a denial survives the pipeline regenerating the
+# whole inference set with new ids.
+NOT_CONTESTED_SQL = """
+    AND NOT EXISTS (
+        SELECT 1 FROM claim_verdicts cv
+         WHERE cv.user_id = {alias}.user_id
+           AND cv.claim_type = 'inference'
+           AND cv.verdict = 'wrong'
+           AND cv.claim_key = {alias}.claim_key
+    )
+"""
+
+
+def not_contested(alias: str = "inferences") -> str:
+    """The predicate above, bound to a table alias."""
+    return NOT_CONTESTED_SQL.format(alias=alias)
+
+
 async def record_verdict(
     user_id: str, claim_type: str, claim_id: str, verdict: str
 ) -> Dict[str, Any]:
@@ -74,8 +157,9 @@ async def record_verdict(
         raise ValueError(f"unknown verdict: {verdict}")
 
     table, id_column, label_column = _SOURCE[claim_type]
+    rule_column = "rule_name" if claim_type == "inference" else "reflection_type"
     row = await fetchrow(
-        f"SELECT confidence, {label_column} AS label FROM {table} "
+        f"SELECT confidence, {label_column} AS label, {rule_column} AS rule FROM {table} "
         f"WHERE {id_column} = $1 AND user_id = $2",
         claim_id, user_id,
     )
@@ -85,22 +169,27 @@ async def record_verdict(
         return {"recorded": False, "reason": "claim_not_found"}
 
     confidence = float(row["confidence"] or 0.0)
+    key = claim_key(row["rule"], row["label"])
     await execute(
         """
         INSERT INTO claim_verdicts
-            (user_id, claim_type, claim_id, verdict, confidence_at_verdict, claim_label)
-        VALUES ($1, $2, $3, $4, $5, $6)
+            (user_id, claim_type, claim_id, verdict, confidence_at_verdict,
+             claim_label, claim_key)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (user_id, claim_type, claim_id) DO UPDATE
             SET verdict = EXCLUDED.verdict,
                 -- confidence_at_verdict is deliberately NOT refreshed: the
                 -- user is changing their answer, not the claim being scored.
                 claim_label = EXCLUDED.claim_label,
+                claim_key = EXCLUDED.claim_key,
                 updated_at = NOW()
         """,
-        user_id, claim_type, claim_id, verdict, confidence, (row["label"] or "")[:500],
+        user_id, claim_type, claim_id, verdict, confidence,
+        (row["label"] or "")[:500], key,
     )
     return {"recorded": True, "claim_type": claim_type, "claim_id": claim_id,
-            "verdict": verdict, "confidence_at_verdict": round(confidence, 3)}
+            "verdict": verdict, "confidence_at_verdict": round(confidence, 3),
+            "claim_key": key}
 
 
 def wilson_interval(successes: int, total: int, z: float = 1.96) -> List[float]:
@@ -247,14 +336,21 @@ async def list_open_claims(user_id: str, limit: int = 20) -> List[Dict[str, Any]
     """
     rows = await fetch(
         """
-        SELECT i.inference_id AS claim_id, 'inference' AS claim_type,
-               i.label, i.description, i.confidence, i.inferred_at AS created_at
+        SELECT DISTINCT ON (i.claim_key)
+               i.inference_id AS claim_id, 'inference' AS claim_type,
+               i.label, i.description, i.confidence, i.inferred_at AS created_at,
+               i.claim_key
         FROM inferences i
         LEFT JOIN claim_verdicts v
-               ON v.claim_id = i.inference_id AND v.user_id = i.user_id
+               ON v.user_id = i.user_id
               AND v.claim_type = 'inference'
-        WHERE i.user_id = $1 AND v.id IS NULL
-        ORDER BY i.confidence DESC
+              -- The stable key, NOT inference_id: ids are regenerated on every
+              -- ingest, so joining on them re-asks answered questions forever.
+              AND v.claim_key = i.claim_key
+        WHERE i.user_id = $1 AND i.claim_key IS NOT NULL AND v.id IS NULL
+        -- DISTINCT ON collapses the duplicate rows regeneration leaves behind,
+        -- so one logical claim is asked once rather than once per copy.
+        ORDER BY i.claim_key, i.confidence DESC
         LIMIT $2
         """,
         user_id, limit,

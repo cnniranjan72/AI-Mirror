@@ -26,6 +26,17 @@ from .decision_engine import get_decision_engine, FinalContext
 logger = logging.getLogger(__name__)
 
 
+def _not_contested() -> str:
+    """SQL fragment excluding claims the user has marked wrong.
+
+    Imported lazily: this module is loaded inside a threadpool worker in some
+    paths, and app.services pulls in the DB layer at import time.
+    """
+    from app.services.calibration import not_contested
+    return not_contested("inferences")
+
+
+
 @dataclass
 class CognitivePipelineResult:
     pipeline_id: str = ""
@@ -521,7 +532,11 @@ class CognitivePipeline:
             from backend.reasoning.inference_engine import Inference
 
             rows = await fetch(
-                "SELECT * FROM inferences WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
+                "SELECT * FROM inferences WHERE user_id = $1"
+                # A claim the user has told us is wrong must not come back
+                # as an answer. See calibration.not_contested().
+                + _not_contested() +
+                " ORDER BY created_at DESC LIMIT $2",
                 user_id, limit,
             )
 
@@ -739,7 +754,9 @@ class CognitivePipeline:
 
             # Inferences
             inf_rows = await fetch(
-                "SELECT * FROM inferences WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30",
+                "SELECT * FROM inferences WHERE user_id = $1"
+                + _not_contested() +
+                " ORDER BY created_at DESC LIMIT 30",
                 user_id
             )
             ctx["inferences"] = []

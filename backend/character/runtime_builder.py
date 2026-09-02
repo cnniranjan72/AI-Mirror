@@ -25,6 +25,14 @@ from .character_state import CharacterState, get_character_state_builder
 from .runtime_metrics import RuntimeMetrics, get_runtime_metrics
 
 
+def _not_contested() -> str:
+    """SQL excluding claims the user marked wrong. Imported lazily because this
+    module runs inside a threadpool worker."""
+    from app.services.calibration import not_contested
+    return not_contested("inferences")
+
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -481,7 +489,10 @@ class RuntimeBuilder:
                     rows = asyncio.run_coroutine_threadsafe(
                         fetch(
                             "SELECT * FROM inferences WHERE user_id = $1 "
-                            "ORDER BY created_at DESC LIMIT $2",
+                            # The character speaks to the user, so a claim they
+                            # denied must not come out of its mouth.
+                            + _not_contested() +
+                            " ORDER BY created_at DESC LIMIT $2",
                             user_id, self.max_inferences
                         ),
                         loop
