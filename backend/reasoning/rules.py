@@ -25,6 +25,9 @@ class Rule(ABC):
     - score(): Calculate rule strength
     - confidence(): Calculate confidence in rule
     - explanation(): Generate human-readable explanation
+
+    A rule MAY also implement subjects(), naming the entities it actually
+    reasoned over. See that method for why it matters.
     """
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -37,6 +40,33 @@ class Rule(ABC):
         self.config = config or {}
         self.name = self.__class__.__name__
     
+
+    def subjects(
+        self,
+        behavior_objects: List[BehaviorObject],
+        events: List[BehaviorEvent],
+        evidence: List[Evidence]
+    ) -> Dict[str, List[str]]:
+        """The entities this rule actually reasoned over.
+
+        Returns {"topics": [...], "creators": [...], "behaviors": [...]}, any
+        key optional.
+
+        This exists because the inference engine had no way to ask. It filled
+        affected_topics/creators/behaviors from the eight most active behaviour
+        objects for EVERY rule, so every inference for a user carried an
+        identical set — verified in production, 10 of 10 users had exactly one
+        distinct creator set spanning all their claims. Surfaced to a user as
+        "why the system thinks this", that is a claim about evidence which had
+        no bearing on the conclusion.
+
+        The default is deliberately EMPTY rather than a global fallback. A rule
+        that has not declared its subjects should produce no evidence at all;
+        showing the user something plausible-but-unrelated is worse than
+        showing nothing, because they will judge the claim on it.
+        """
+        return {}
+
     @abstractmethod
     def condition(
         self,
@@ -220,6 +250,20 @@ class LearningMotivationRule(Rule):
             logger.error(f"Error in LearningMotivationRule explanation: {str(e)}", exc_info=True)
             return "Error generating explanation"
 
+    def subjects(self, behavior_objects, events, evidence):
+        """Only the behaviours classified as educational — the ones the share
+        was computed from. Citing the rest would be citing the denominator."""
+        try:
+            educational = self._educational(behavior_objects)
+            if not educational:
+                return {}
+            return {
+                "topics": sorted({b.topic for b in educational}),
+                "creators": sorted({c for b in educational for c in b.creators})[:8],
+                "behaviors": [b.unique_id for b in educational],
+            }
+        except Exception:
+            return {}
 
 class EntertainmentDominanceRule(Rule):
     """
@@ -333,6 +377,21 @@ class EntertainmentDominanceRule(Rule):
             logger.error(f"Error in EntertainmentDominanceRule explanation: {str(e)}", exc_info=True)
             return "Error generating explanation"
 
+    def subjects(self, behavior_objects, events, evidence):
+        """The entertainment behaviours the ratio was built from."""
+        try:
+            keywords = ["entertainment", "funny", "meme", "comedy", "music", "dance"]
+            matched = [b for b in behavior_objects
+                       if any(k in (b.topic or "").lower() for k in keywords)]
+            if not matched:
+                return {}
+            return {
+                "topics": sorted({b.topic for b in matched}),
+                "creators": sorted({c for b in matched for c in b.creators})[:8],
+                "behaviors": [b.unique_id for b in matched],
+            }
+        except Exception:
+            return {}
 
 class CreatorDependenceRule(Rule):
     """
@@ -454,6 +513,28 @@ class CreatorDependenceRule(Rule):
             logger.error(f"Error in CreatorDependenceRule explanation: {str(e)}", exc_info=True)
             return "Error generating explanation"
 
+    def subjects(self, behavior_objects, events, evidence):
+        """The concentrated creators, and the behaviours they appear in.
+
+        The explanation already names them ("Top 3 creators (a, b, c) account
+        for 62%"); this makes the same set machine-readable."""
+        try:
+            from collections import Counter
+            counts = Counter()
+            for behavior in behavior_objects:
+                for creator in behavior.creators:
+                    counts[creator] += behavior.temporal_statistics.occurrence_count
+            top = [name for name, _ in counts.most_common(3)]
+            if not top:
+                return {}
+            involved = [b for b in behavior_objects if any(c in top for c in b.creators)]
+            return {
+                "creators": top,
+                "topics": sorted({b.topic for b in involved}),
+                "behaviors": [b.unique_id for b in involved],
+            }
+        except Exception:
+            return {}
 
 class AttentionImprovementRule(Rule):
     """
@@ -562,6 +643,11 @@ class AttentionImprovementRule(Rule):
             logger.error(f"Error in AttentionImprovementRule explanation: {str(e)}", exc_info=True)
             return "Error generating explanation"
 
+    def subjects(self, behavior_objects, events, evidence):
+        """This rule reasons over EVENTS in time, not behaviour clusters, so
+        it has no topic or creator subset to cite. Declaring nothing is the
+        honest answer — the description carries the before/after figures."""
+        return {}
 
 class PrimaryInterestRule(Rule):
     """
@@ -621,6 +707,32 @@ class PrimaryInterestRule(Rule):
         except Exception:
             return "Error generating explanation"
 
+    def subjects(self, behavior_objects, events, evidence):
+        """The topics that actually dominate, not merely the most active
+        behaviours overall."""
+        try:
+            ranked = sorted(
+                behavior_objects,
+                key=lambda b: b.temporal_statistics.occurrence_count,
+                reverse=True,
+            )
+            total = sum(b.temporal_statistics.occurrence_count for b in behavior_objects)
+            if not total:
+                return {}
+            # The smallest set of topics covering a majority of activity.
+            running, chosen = 0, []
+            for behavior in ranked:
+                chosen.append(behavior)
+                running += behavior.temporal_statistics.occurrence_count
+                if running / total >= 0.5:
+                    break
+            return {
+                "topics": sorted({b.topic for b in chosen}),
+                "creators": sorted({c for b in chosen for c in b.creators})[:8],
+                "behaviors": [b.unique_id for b in chosen],
+            }
+        except Exception:
+            return {}
 
 class CreatorDiversityRule(Rule):
     """
@@ -676,6 +788,20 @@ class CreatorDiversityRule(Rule):
         except Exception:
             return "Error generating explanation"
 
+    def subjects(self, behavior_objects, events, evidence):
+        """Diversity is a claim about the spread, so the whole creator set is
+        genuinely what it reasoned over — unlike the global fallback, which
+        was the same list regardless of rule."""
+        try:
+            creators = sorted({c for b in behavior_objects for c in b.creators})
+            if not creators:
+                return {}
+            return {
+                "creators": creators[:12],
+                "behaviors": [b.unique_id for b in behavior_objects],
+            }
+        except Exception:
+            return {}
 
 class TemporalHabitRule(Rule):
     """
@@ -738,6 +864,20 @@ class TemporalHabitRule(Rule):
         except Exception:
             return "Error generating explanation"
 
+    def subjects(self, behavior_objects, events, evidence):
+        """Only the recurring behaviours — a habit claim is about what repeats,
+        so a one-off is not part of its basis."""
+        try:
+            recurring = [b for b in behavior_objects
+                         if b.temporal_statistics.occurrence_count >= 2]
+            if not recurring:
+                return {}
+            return {
+                "topics": sorted({b.topic for b in recurring}),
+                "behaviors": [b.unique_id for b in recurring],
+            }
+        except Exception:
+            return {}
 
 class EngagementDepthRule(Rule):
     """
@@ -790,6 +930,21 @@ class EngagementDepthRule(Rule):
             )
         except Exception:
             return "Error generating explanation"
+
+    def subjects(self, behavior_objects, events, evidence):
+        """Exactly the behaviours _stats averages over, so the evidence shown
+        is the evidence the score was computed from."""
+        try:
+            active = [b for b in behavior_objects
+                      if b.temporal_statistics.occurrence_count > 0]
+            if not active:
+                return {}
+            return {
+                "topics": sorted({b.topic for b in active}),
+                "behaviors": [b.unique_id for b in active],
+            }
+        except Exception:
+            return {}
 
 
 class RuleEngine:
@@ -860,7 +1015,10 @@ class RuleEngine:
                             "applies": True,
                             "score": rule.score(behavior_objects, events, evidence),
                             "confidence": rule.confidence(behavior_objects, events, evidence),
-                            "explanation": rule.explanation(behavior_objects, events, evidence)
+                            "explanation": rule.explanation(behavior_objects, events, evidence),
+                            # What this rule reasoned over. Empty when the rule
+                            # has not declared it — see Rule.subjects().
+                            "subjects": rule.subjects(behavior_objects, events, evidence),
                         }
                         results.append(result)
                 except Exception as e:

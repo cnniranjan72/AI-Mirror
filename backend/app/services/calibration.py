@@ -358,6 +358,11 @@ def _verdict_line(accuracy: float, judged: List[Dict], overconfident: List[Dict]
     )
 
 
+# How many topics/creators to show before summarising the rest. Enough to
+# recognise the claim, few enough to read at a glance.
+BASIS_PREVIEW = 6
+
+
 def _decode_list(value: Any) -> List[Any]:
     """JSONB comes back as text.
 
@@ -380,29 +385,59 @@ def _basis(row: Dict[str, Any]) -> Dict[str, Any]:
     cannot inspect produces a guess — and a guess still counts. The basis is
     shown with the question for that reason.
 
-    It carries only the rule and the claim's own description, because those are
-    the only claim-specific things the pipeline records. affected_creators,
-    affected_topics, supporting_evidence and evidence_summary look like
-    per-claim evidence and are not: every inference for a user is written with
-    the SAME global set. Checked across production — 10 of 10 users had exactly
-    one distinct creator set and one topic set spanning all of their claims.
+    The rule and the description are always claim-specific: rules embed their
+    numbers in the text ("15 distinct creators, top 3 only 25% of activity").
 
-    Rendering those next to a claim would be worse than showing nothing. They
-    would read as "this is why", be identical under every claim, and invite a
-    verdict formed from evidence that has no bearing on it. The description is
-    the real justification: rules embed their numbers in it ("15 distinct
-    creators, top 3 only 25% of activity"), and that text IS claim-specific.
+    Topics and creators are included only when the row carries
+    metadata.basis_version >= 2, meaning the rule DECLARED what it reasoned
+    over (see reasoning/rules.py:Rule.subjects). Earlier rows hold the eight
+    most active behaviour objects, computed identically for every rule — in
+    production 10 of 10 users had one creator set spanning all their claims.
+    Shown under a claim that reads as "this is why" while having no bearing on
+    the conclusion, which is worse than showing nothing because the resulting
+    verdict still feeds the accuracy score.
 
-    If the inference engine ever records which evidence supports which claim,
-    this is where it belongs.
+    The two cannot be told apart by shape, so this gates on the marker. Old
+    rows age out on their own: the pipeline regenerates every inference on
+    each ingest.
     """
-    return {
+    metadata = row.get("metadata")
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except (ValueError, TypeError):
+            metadata = {}
+    metadata = metadata or {}
+
+    basis: Dict[str, Any] = {
         # Naming the rule is what makes a claim auditable rather than an
         # opaque assertion about a person.
         "rule": row.get("rule_name"),
         "detail": row.get("description"),
         "claim_specific_evidence": False,
     }
+
+    if int(metadata.get("basis_version") or 0) < 2:
+        return basis
+
+    topics = _decode_list(row.get("affected_topics"))
+    creators = _decode_list(row.get("affected_creators"))
+    behaviors = _decode_list(row.get("affected_behaviors"))
+    if not (topics or creators or behaviors):
+        # The rule declared nothing. Honest emptiness, not a fallback.
+        return basis
+
+    basis.update({
+        "claim_specific_evidence": True,
+        # Capped for readability, with the true total alongside — a truncated
+        # list that looked complete would understate what the claim rests on.
+        "topics": topics[:BASIS_PREVIEW],
+        "topics_total": len(topics),
+        "creators": creators[:BASIS_PREVIEW],
+        "creators_total": len(creators),
+        "behaviour_count": len(behaviors),
+    })
+    return basis
 
 
 async def list_answered_claims(user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
@@ -475,7 +510,8 @@ async def list_open_claims(user_id: str, limit: int = 20) -> List[Dict[str, Any]
                    i.inference_id AS claim_id, 'inference' AS claim_type,
                    i.label, i.description, i.confidence,
                    i.inferred_at AS created_at, i.claim_key,
-                   i.rule_name
+                   i.rule_name, i.metadata,
+                   i.affected_topics, i.affected_creators, i.affected_behaviors
             FROM inferences i
             LEFT JOIN claim_verdicts v
                    ON v.user_id = i.user_id

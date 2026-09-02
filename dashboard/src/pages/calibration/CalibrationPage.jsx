@@ -129,27 +129,56 @@ function Basis({ basis }) {
      disclosure: the Ledger scores the system on these verdicts, so a claim the
      user cannot inspect produces a guess — and a guess still counts.
 
-     Only the rule is shown. The inference rows also carry affected_creators,
-     affected_topics and supporting_evidence, and it is tempting to render them
-     here as evidence — but every inference for a user is written with the SAME
-     global set (verified across production: 10 of 10 users had one creator set
-     spanning all their claims). Under each claim they would read as "this is
-     why", be identical everywhere, and invite a verdict formed from evidence
-     that has no bearing on the claim. The description above already carries
-     the numbers the rule fired on, and that text IS claim-specific. */
+     Topics and creators appear ONLY when the server sets
+     claim_specific_evidence, meaning the rule declared what it reasoned over.
+     Inference rows written before that carry the eight most active behaviours
+     regardless of rule — identical under every claim — and rendering those
+     would read as "this is why" while having no bearing on the conclusion.
+     The rule name and the description are always claim-specific. */
   if (!basis?.rule) return null
 
+  const specific = basis.claim_specific_evidence === true
+  const Row = ({ label, items = [], total = 0 }) => (
+    items.length === 0 ? null : (
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'baseline', marginTop: 4 }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 54 }}>{label}</span>
+        {items.map(x => (
+          <span key={x} style={{
+            fontSize: 11, padding: '1px 7px', borderRadius: 999,
+            background: 'rgba(148,163,184,0.10)', color: 'var(--text-tertiary)',
+          }}>{x}</span>
+        ))}
+        {total > items.length && (
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            and {total - items.length} more
+          </span>
+        )}
+      </div>
+    )
+  )
+
   return (
-    <div style={{
-      marginTop: 6, fontSize: 11, color: 'var(--text-muted)',
-      display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap',
-    }}>
-      <span>fired by</span>
-      <code style={{
-        fontFamily: 'var(--font-mono)', fontSize: 11,
-        padding: '1px 6px', borderRadius: 5,
-        background: 'rgba(148,163,184,0.10)', color: 'var(--text-tertiary)',
-      }}>{basis.rule}</code>
+    <div style={{ marginTop: 6 }}>
+      <div style={{
+        fontSize: 11, color: 'var(--text-muted)',
+        display: 'flex', gap: 6, alignItems: 'baseline', flexWrap: 'wrap',
+      }}>
+        <span>fired by</span>
+        <code style={{
+          fontFamily: 'var(--font-mono)', fontSize: 11,
+          padding: '1px 6px', borderRadius: 5,
+          background: 'rgba(148,163,184,0.10)', color: 'var(--text-tertiary)',
+        }}>{basis.rule}</code>
+        {specific && basis.behaviour_count > 0 && (
+          <span>· over {basis.behaviour_count} behaviour cluster{basis.behaviour_count === 1 ? '' : 's'}</span>
+        )}
+      </div>
+      {specific && (
+        <>
+          <Row label="creators" items={basis.creators} total={basis.creators_total} />
+          <Row label="topics" items={basis.topics} total={basis.topics_total} />
+        </>
+      )}
     </div>
   )
 }

@@ -270,22 +270,25 @@ class InferenceEngine:
             confidence = rule_result["confidence"]
             strength = confidence * importance
             
-            # Extract affected entities from the most active behaviors (per-object
-            # confidence_score is intentionally conservative, so rank by activity
-            # rather than gating on a high absolute confidence).
-            affected_topics = []
-            affected_creators = []
-            affected_behaviors = []
-
-            ranked = sorted(
-                context.behavior_objects,
-                key=lambda b: b.temporal_statistics.occurrence_count,
-                reverse=True,
-            )[:8]
-            for behavior in ranked:
-                affected_topics.append(behavior.topic)
-                affected_creators.extend(behavior.creators[:3])
-                affected_behaviors.append(behavior.unique_id)
+            # What this rule actually reasoned over, as declared by the rule.
+            #
+            # This used to be the eight most active behaviour objects, computed
+            # identically for every rule — the loop never looked at
+            # rule_result. So every inference for a user carried the same
+            # topics, creators and behaviours, and surfacing them as "why the
+            # system thinks this" meant showing evidence with no bearing on the
+            # conclusion. Verified in production: 10 of 10 users had exactly
+            # one distinct creator set spanning all of their claims.
+            #
+            # A rule that has not implemented subjects() yields EMPTY lists on
+            # purpose. Falling back to the global set would restore the very
+            # problem this replaces; showing nothing is the honest answer, and
+            # downstream (see services/calibration.py) reports the absence
+            # rather than inventing a basis.
+            subjects = rule_result.get("subjects") or {}
+            affected_topics = list(subjects.get("topics", []))
+            affected_creators = list(subjects.get("creators", []))
+            affected_behaviors = list(subjects.get("behaviors", []))
             
             # Generate recommendation seed
             recommendation_seed = self._generate_recommendation_seed(
@@ -316,7 +319,18 @@ class InferenceEngine:
                 rule_name=rule_name,
                 context_id=context.context_id,
                 metadata={
-                    "rule_score": rule_result["score"]
+                    "rule_score": rule_result["score"],
+                    # Marks affected_topics/creators/behaviors as this rule's
+                    # declared subjects rather than the old global fallback.
+                    # Rows written before this cannot be told apart by shape —
+                    # an eight-item global set looks exactly like a genuine
+                    # one — so consumers gate on the marker, not the contents.
+                    # Inferences are regenerated wholesale on every ingest, so
+                    # old rows age out on their own.
+                    "basis_version": 2,
+                    "subjects_declared": bool(
+                        affected_topics or affected_creators or affected_behaviors
+                    ),
                 }
             )
             

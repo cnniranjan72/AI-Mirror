@@ -15,6 +15,7 @@ So what is pinned is mostly the statistics and the refusals:
   * the confidence being scored is the one claimed AT THE TIME, so the
     pipeline recomputing confidences cannot rewrite the system's record
 """
+import json
 import math
 
 import pytest
@@ -416,49 +417,81 @@ async def test_erasure_takes_the_verdicts_too(db, client):
 
 class TestClaimBasis:
     """The Ledger scores the system on the user's verdicts, so a claim the user
-    cannot inspect produces a guess - and a guess still counts. Each open claim
-    therefore carries what it rests on.
+    cannot inspect produces a guess - and a guess still counts.
 
-    The hard part was what to LEAVE OUT. Inference rows carry
-    affected_creators, affected_topics, supporting_evidence and
-    evidence_summary, and they look exactly like per-claim evidence. They are
-    not: every inference for a user is written with the same global set.
-    Verified across production - 10 of 10 users had exactly one distinct
-    creator set and one topic set spanning all of their claims. Rendered under
-    a claim they would read as "this is why", be identical everywhere, and
-    invite a verdict formed from evidence with no bearing on the claim.
+    The hard part is which evidence is real. Inference rows written before
+    Rule.subjects() existed carry the eight most active behaviour objects,
+    computed identically for every rule: in production 10 of 10 users had one
+    distinct creator set spanning all their claims. Those cannot be told from
+    genuine subjects by shape, so the basis gates on metadata.basis_version.
     """
 
-    def test_it_carries_the_rule_that_fired(self):
-        """Naming the rule is what makes a claim auditable rather than an
-        opaque assertion about a person."""
-        assert cal._basis({"rule_name": "CreatorDependenceRule"})["rule"] == "CreatorDependenceRule"
+    DECLARED = {"basis_version": 2, "subjects_declared": True}
 
-    def test_it_carries_the_claim_specific_detail(self):
-        """Rules embed their numbers in the description, and that text is the
-        one part that genuinely differs per claim."""
-        detail = "15 distinct creators, top 3 only 25% of activity"
-        assert cal._basis({"description": detail})["detail"] == detail
+    def test_rule_and_detail_are_always_present(self):
+        """Both are claim-specific regardless of vintage: rules embed their
+        numbers in the description."""
+        basis = cal._basis({"rule_name": "CreatorDependenceRule",
+                            "description": "top 3 account for 68%"})
+        assert basis["rule"] == "CreatorDependenceRule"
+        assert basis["detail"] == "top 3 account for 68%"
 
-    def test_it_does_not_pass_off_global_context_as_evidence(self):
-        """The failure this shape exists to avoid."""
+    def test_a_pre_change_row_yields_no_evidence(self):
+        """The regression this gate exists for: global context presented as
+        the reason for one specific claim."""
         basis = cal._basis({
-            "rule_name": "R",
-            "affected_creators": ["natgeo", "veritasium"],
-            "affected_topics": ["space"],
-            "supporting_evidence": ["e1", "e2"],
-            "evidence_summary": "2 pieces of evidence",
+            "rule_name": "R", "metadata": json.dumps({"rule_score": 0.5}),
+            "affected_creators": json.dumps(["natgeo", "veritasium"]),
+            "affected_topics": json.dumps(["space"]),
         })
-        for leaked in ("creators", "topics", "evidence_count", "evidence_summary"):
-            assert leaked not in basis, f"{leaked} is global, not per-claim"
+        assert basis["claim_specific_evidence"] is False
+        for leaked in ("creators", "topics", "behaviour_count"):
+            assert leaked not in basis
 
-    def test_it_says_outright_that_evidence_is_not_claim_specific(self):
-        """Recorded in the payload so a future client cannot assume otherwise."""
-        assert cal._basis({})["claim_specific_evidence"] is False
+    def test_a_declared_row_yields_its_subjects(self):
+        basis = cal._basis({
+            "rule_name": "R", "metadata": json.dumps(self.DECLARED),
+            "affected_creators": json.dumps(["natgeo", "veritasium"]),
+            "affected_topics": json.dumps(["space"]),
+            "affected_behaviors": json.dumps(["bo1", "bo2", "bo3"]),
+        })
+        assert basis["claim_specific_evidence"] is True
+        assert basis["creators"] == ["natgeo", "veritasium"]
+        assert basis["topics"] == ["space"]
+        assert basis["behaviour_count"] == 3
+
+    def test_a_declared_row_that_declared_nothing_is_empty_not_faked(self):
+        """A rule with no subjects() must produce no evidence rather than
+        falling back to something plausible."""
+        basis = cal._basis({
+            "rule_name": "R", "metadata": json.dumps(self.DECLARED),
+            "affected_creators": "[]", "affected_topics": "[]",
+            "affected_behaviors": "[]",
+        })
+        assert basis["claim_specific_evidence"] is False
+
+    def test_it_reports_the_true_total_when_truncating(self):
+        """A capped list that looked complete would understate the evidence."""
+        creators = [f"c{i}" for i in range(11)]
+        basis = cal._basis({
+            "rule_name": "R", "metadata": json.dumps(self.DECLARED),
+            "affected_creators": creators,
+        })
+        assert len(basis["creators"]) == cal.BASIS_PREVIEW
+        assert basis["creators_total"] == 11
+
+    def test_malformed_metadata_falls_back_to_no_evidence(self):
+        """Unparseable metadata must not be read as "declared"."""
+        basis = cal._basis({
+            "rule_name": "R", "metadata": "not json",
+            "affected_creators": json.dumps(["natgeo"]),
+        })
+        assert basis["claim_specific_evidence"] is False
 
     def test_a_row_missing_everything_does_not_raise(self):
         basis = cal._basis({})
         assert basis["rule"] is None and basis["detail"] is None
+        assert basis["claim_specific_evidence"] is False
 
 
 class TestDecodeList:
