@@ -284,6 +284,14 @@ export const api = {
     return data;
   },
 
+  // Re-runs the reasoning stages over real history plus hypothetical events.
+  // Writes nothing: the result is discarded, which is what makes the question
+  // safe to ask of your own profile.
+  runCounterfactual: async (events, userId = activeUser()) => {
+    const { data } = await client.post('/identity/counterfactual', { user_id: userId, events });
+    return data;
+  },
+
   // === Collection control ===
   // Whether the system is allowed to collect. Enforced server-side at /ingest:
   // a switch honoured only by the client would be a request, not a guarantee.

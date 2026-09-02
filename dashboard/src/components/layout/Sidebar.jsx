@@ -4,7 +4,8 @@ import {
   DashboardIcon, IdentityIcon, MemoryIcon, EvidenceIcon, BehaviorIcon,
   PlanningIcon, DecisionIcon, PipelineIcon, AnalyticsIcon, ChatIcon, SettingsIcon,
   SearchIcon, ChevronLeftIcon, ZapIcon, AlertIcon, CpuIcon, DownloadIcon,
-  UploadIcon, BookIcon, CompassIcon, ClockIcon, NetworkIcon, DiaryIcon, TargetIcon, BuildingIcon
+  UploadIcon, BookIcon, CompassIcon, ClockIcon, NetworkIcon, DiaryIcon, TargetIcon, BuildingIcon,
+  BrainIcon
 } from '../../icons/icons'
 import { api, isAuthed, displayName } from '../../api/client'
 import { useMediaQuery } from '../../hooks/useMotion'
@@ -64,6 +65,7 @@ const navSections = [
       { path: '/calibration', label: 'Accuracy Ledger', icon: TargetIcon },
       { path: '/drift', label: 'Identity Drift', icon: CompassIcon },
       { path: '/xray', label: 'Reasoning X-Ray', icon: NetworkIcon },
+      { path: '/counterfactual', label: 'What Would Change It', icon: BrainIcon },
       { path: '/report', label: 'Report', icon: BookIcon },
       { path: '/insights', label: 'Insights Export', icon: DownloadIcon },
       { path: '/analytics', label: 'Analytics', icon: AnalyticsIcon },

@@ -26,7 +26,7 @@ giving a signed-out user a clear "sign in" error instead of a false 404.
 """
 import json
 import logging
-from typing import Optional
+from typing import Optional, Any, Dict, List
 
 from fastapi import APIRouter, Depends, Header, Query, HTTPException
 
@@ -114,6 +114,28 @@ async def get_reasoning_xray(
     if xray is None:
         raise HTTPException(status_code=404, detail="Trace not found for this user")
     return xray
+
+
+class CounterfactualRequest(BaseModel):
+    user_id: str
+    events: List[Dict[str, Any]]
+
+
+@router.post("/identity/counterfactual")
+async def post_counterfactual(
+    body: CounterfactualRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    """What the system would conclude if these events had also happened.
+
+    Reads the caller's real history, so it is gated like a read of that
+    history. It writes nothing: the reasoning stages run and the result is
+    discarded, which is the property that makes the question safe to ask.
+    """
+    enforce_user_match(authorization, body.user_id)
+    from app.services.counterfactual import run_counterfactual
+
+    return await run_counterfactual(body.user_id, body.events)
 
 
 @router.get("/identity/drift")

@@ -169,6 +169,7 @@ class TestExplainAPI:
         expected = sorted([
             "/identity/snapshot", "/identity/current", "/identity/self-model",
             "/identity/drift",
+            "/identity/counterfactual",
             "/query/traces/{trace_id}/xray",
             "/reasoning/evidence", "/reasoning/inferences", "/reasoning/reflections",
             "/reasoning/behavior-objects", "/query/traces", "/query/traces/{trace_id}",
@@ -188,6 +189,11 @@ class TestExplainAPI:
             "/query/traces/{trace_id}", "/explain/{trace_id}",
             "/explain/evidence/{evidence_id}", "/explain/identity/{identity_id}",
             "/search",
+            # POST, so the user_id is a field of the request body rather than
+            # a signature parameter. That shape has its own enforcement check
+            # in test_auth_coverage.py (_body_identified_routes), which is
+            # where this route is covered.
+            "/identity/counterfactual",
         }
         for r in router.routes:
             sig = inspect.signature(r.endpoint)
