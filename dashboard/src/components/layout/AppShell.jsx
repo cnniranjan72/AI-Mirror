@@ -43,6 +43,7 @@ const CounterfactualPage = lazy(() => import('../../pages/counterfactual/Counter
 const SpacePage = lazy(() => import('../../pages/space/SpacePage'))
 const ContestedPage = lazy(() => import('../../pages/contested/ContestedPage'))
 const BlindSpotsPage = lazy(() => import('../../pages/blindspots/BlindSpotsPage'))
+const LifecyclePage = lazy(() => import('../../pages/lifecycle/LifecyclePage'))
 const PipelinePage = lazy(() => import('../../pages/pipeline/PipelinePage'))
 const TracePage = lazy(() => import('../../pages/trace/TracePage'))
 const AnalyticsPage = lazy(() => import('../../pages/analytics/AnalyticsPage'))
@@ -227,6 +228,7 @@ export default function AppShell() {
                 <Route path="/space" element={<SpacePage />} />
                 <Route path="/contested" element={<ContestedPage />} />
                 <Route path="/blind-spots" element={<BlindSpotsPage />} />
+                <Route path="/moved-on" element={<LifecyclePage />} />
                 <Route path="/pipeline" element={<PipelinePage />} />
                 <Route path="/trace/:traceId" element={<TracePage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />

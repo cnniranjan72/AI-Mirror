@@ -34,6 +34,7 @@ const navSections = [
       { path: '/identity', label: 'Identity', icon: IdentityIcon },
       { path: '/character', label: 'Character', icon: CpuIcon },
       { path: '/behavior', label: 'Behavior', icon: BehaviorIcon },
+      { path: '/moved-on', label: 'Moved On', icon: ClockIcon },
       { path: '/memory', label: 'Memory', icon: MemoryIcon },
       { path: '/graph', label: 'Knowledge Graph', icon: NetworkIcon },
       { path: '/diary', label: 'Diary', icon: DiaryIcon },

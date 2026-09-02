@@ -294,6 +294,11 @@ export const api = {
 
   // The stored embeddings projected to 3D. PCA, so the same history always
   // draws the same shape; the response carries how much structure survives.
+  getLifecycle: async (userId = activeUser()) => {
+    const { data } = await client.get('/reasoning/lifecycle', { params: { user_id: userId } });
+    return data;
+  },
+
   getBlindSpots: async (userId = activeUser()) => {
     const { data } = await client.get('/identity/blind-spots', { params: { user_id: userId } });
     return data;

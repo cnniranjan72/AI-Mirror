@@ -79,6 +79,17 @@ class TrendInformation(BaseModel):
     prediction_confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in trend prediction")
     expected_trajectory: str = Field(..., description="Expected future trajectory")
 
+    # Share of this behaviour's occurrences falling in the recent half of its
+    # own lifespan. growth_rate, despite the name, is occurrence_count divided
+    # by days - a positive frequency that says nothing about direction, which
+    # is why DECLINING (defined as growth_rate < 0) could never occur. This is
+    # the direction, and it is optional because it needs at least four
+    # timestamps to compute.
+    recent_share: Optional[float] = Field(
+        default=None, ge=0.0, le=1.0,
+        description="Share of occurrences in the recent half of the lifespan"
+    )
+
 
 class EvolutionSnapshot(BaseModel):
     """Snapshot of behavior at a point in time"""

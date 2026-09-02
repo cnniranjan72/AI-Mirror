@@ -334,7 +334,9 @@ b = \langle \mathcal{T}, \mathcal{C}, \mathcal{S}, \ell, \alpha, \gamma, \delta 
 \label{eq:behavior_object}
 \end{equation}
 
-where $\mathcal{T}$ is the topic hierarchy, $\mathcal{C}$ is the set of associated creators, $\mathcal{S}$ are the four statistical sub-models (engagement, watch, temporal, trend), $\ell \in \{\text{EMERGING}, \text{GROWING}, \text{STABLE}, \text{DORMANT}, \text{DECLINING}, \text{DEAD}\}$ is the lifecycle state, and $\alpha, \gamma, \delta \in [0,1]$ are the importance, confidence, and stability scores.
+where $\mathcal{T}$ is the topic hierarchy, $\mathcal{C}$ is the set of associated creators, $\mathcal{S}$ are the four statistical sub-models (engagement, watch, temporal, trend), $\ell \in \{\text{EMERGING}, \text{GROWING}, \text{STABLE}, \text{DECLINING}, \text{DORMANT}, \text{ARCHIVED}\}$ is the lifecycle state, and $\alpha, \gamma, \delta \in [0,1]$ are the importance, confidence, and stability scores.
+
+The state is evaluated when asked rather than fixed at consolidation: a behaviour someone has abandoned never appears in another batch, so a state written once cannot be revised for precisely those needing retirement. Silence is judged against the behaviour's own rhythm, $\Delta_{\text{last}} \geq \max(14\text{ days},\ 3/\phi_b)$ for historical daily frequency $\phi_b$, since a topic recurring daily and one recurring monthly are not equally absent after a fortnight; the floor stops a burst reading as abandonment two days later. Direction comes from the share of occurrences in the recent half of the lifespan, not from \texttt{growth\_rate}, which is $|b|/\Delta_{\text{age}}$ and positive by construction.
 
 \subsection{Evidence Confidence}
 For an evidence item $e$ with supporting observations $S_e$ and countervailing observations $C_e$, the net confidence $\hat{\gamma}_e$ is (Eq.~\eqref{eq:evidence_confidence}):

@@ -39,6 +39,26 @@ IMPORTANCE_SATURATION_COUNT = 20.0
 STABILITY_SATURATION_COUNT = 10.0
 
 
+def _trend_direction_for(cluster) -> str:
+    """The deprecated trend field, kept consistent with the real lifecycle.
+
+    Only recency is available at this point - the trajectory needs event
+    timestamps, which the lifecycle sweep supplies later - so this reports
+    "stable" rather than guessing a direction it cannot see.
+    """
+    from backend.reasoning.lifecycle import evaluate_lifecycle
+
+    state, _ = evaluate_lifecycle(
+        {"last_seen": cluster.last_seen, "first_seen": cluster.first_seen,
+         "occurrence_count": cluster.occurrence_count,
+         "daily_frequency": cluster.growth_rate},
+        {},
+    )
+    # TrendDirection has no "archived"; that distinction lives in
+    # lifecycle_state, which is the field to read.
+    return "dormant" if state == "archived" else state
+
+
 class V3PipelineResult:
     """Result of running the complete V3 pipeline"""
     def __init__(self):
@@ -142,6 +162,13 @@ class V3Pipeline:
             
             # Persist everything
             await self._persist_all(user_id, result)
+
+            # Every behaviour this user has, not only the ones in this
+            # batch. A topic they have abandoned never appears in a batch
+            # again, so without this sweep the only path that could mark
+            # it dormant is unreachable for exactly the behaviours that
+            # need it.
+            await self._refresh_lifecycles(user_id)
             
             logger.info(f"V3 pipeline complete: {len(result.behavior_objects)} behaviors, "
                        f"{len(result.evidence)} evidence, {len(result.inferences)} inferences, "
@@ -223,7 +250,7 @@ class V3Pipeline:
                             watch_statistics=stats["watch"],
                             temporal_statistics=stats["temporal"],
                             trend_information=stats["trend"],
-                            lifecycle_state=self._lifecycle_from_cluster(cluster),
+                            lifecycle_state=self._lifecycle_for(stats),
                             importance_score=min(1.0, cluster.occurrence_count / IMPORTANCE_SATURATION_COUNT),
                             confidence_score=cluster.confidence,
                             stability_score=min(1.0, cluster.occurrence_count / STABILITY_SATURATION_COUNT),
@@ -1131,17 +1158,117 @@ class V3Pipeline:
             return None
     
     @staticmethod
-    def _lifecycle_from_cluster(cluster) -> str:
-        """Derive lifecycle state from cluster metrics"""
-        from backend.reasoning.behavior_object import BehaviorLifecycleState
-        if cluster.growth_rate > 0.5:
-            return BehaviorLifecycleState.GROWING.value
-        elif cluster.growth_rate > 0.1:
-            return BehaviorLifecycleState.EMERGING.value
-        elif cluster.engagement_rate > 0.3:
-            return BehaviorLifecycleState.STABLE.value
-        else:
-            return BehaviorLifecycleState.DORMANT.value
+    def _lifecycle_for(stats) -> str:
+        """State from the behaviour's own statistics rather than from the batch.
+
+        This replaced a thresholding of cluster.growth_rate, which is
+        occurrence_count over days elapsed: a positive frequency averaging 3.08
+        on real data, so "> 0.5" caught 217 of 226 objects, and DECLINING,
+        which tested for a negative value, could not occur at all. See
+        reasoning/lifecycle.py.
+        """
+        from backend.reasoning.lifecycle import evaluate_lifecycle
+
+        temporal = stats["temporal"]
+        trend = stats["trend"]
+        state, _reason = evaluate_lifecycle(
+            temporal if isinstance(temporal, dict) else temporal.dict(),
+            trend if isinstance(trend, dict) else trend.dict(),
+        )
+        return state
+
+    async def _refresh_lifecycles(self, user_id: str) -> int:
+        """Re-evaluate every one of this user's behaviours, not just this batch.
+
+        This part was missing rather than wrong. State was written only when a
+        topic appeared in an ingest, and a topic someone has abandoned never
+        appears in one again, so the single code path that could mark it dormant
+        was unreachable for exactly the behaviours that needed it. Ninety-six
+        objects unseen for over thirty days were still labelled growing, the
+        oldest last seen 600 days earlier.
+
+        Sweeping all of them on every ingest costs two queries per user and
+        makes the stored state a statement about now rather than about whenever
+        the topic was last mentioned.
+        """
+        from backend.reasoning.lifecycle import evaluate_lifecycle, recent_share
+
+        try:
+            rows = await fetch(
+                """SELECT unique_id, temporal_statistics, trend_information,
+                          supporting_event_ids, lifecycle_state
+                   FROM behavior_objects WHERE user_id = $1""",
+                user_id,
+            )
+            if not rows:
+                return 0
+
+            def _load(value):
+                if isinstance(value, str):
+                    try:
+                        return json.loads(value)
+                    except (ValueError, TypeError):
+                        return {}
+                return value or {}
+
+            # One query for every event across every behaviour, rather than one
+            # query per behaviour.
+            wanted = set()
+            per_object = {}
+            for row in rows:
+                ids = []
+                for raw in (_load(row["supporting_event_ids"]) or []):
+                    try:
+                        ids.append(int(raw))
+                    except (TypeError, ValueError):
+                        continue
+                per_object[row["unique_id"]] = ids
+                wanted.update(ids)
+
+            stamps = {}
+            if wanted:
+                ordered = sorted(wanted)
+                placeholders = ", ".join(f"${i + 2}" for i in range(len(ordered)))
+                for ev in await fetch(
+                    f"""SELECT id, timestamp FROM events
+                        WHERE user_id = $1 AND id IN ({placeholders})""",
+                    user_id, *ordered,
+                ):
+                    stamps[ev["id"]] = ev["timestamp"]
+
+            changed = 0
+            for row in rows:
+                temporal = _load(row["temporal_statistics"])
+                trend = _load(row["trend_information"])
+
+                times = [stamps[i] for i in per_object[row["unique_id"]] if i in stamps]
+                share = recent_share(times)
+                if share is not None:
+                    trend["recent_share"] = share
+
+                state, _reason = evaluate_lifecycle(temporal, trend)
+                if state == row["lifecycle_state"] and share is None:
+                    continue
+
+                await execute(
+                    """UPDATE behavior_objects
+                       SET lifecycle_state = $1, trend_information = $2::jsonb,
+                           updated_at = NOW()
+                       WHERE unique_id = $3""",
+                    state, json.dumps(trend, default=str), row["unique_id"],
+                )
+                if state != row["lifecycle_state"]:
+                    changed += 1
+
+            if changed:
+                logger.info("Lifecycle refresh: %d behaviours changed state for %s",
+                            changed, user_id)
+            return changed
+
+        except Exception as e:
+            logger.error("Lifecycle refresh failed for %s: %s", user_id, e,
+                         exc_info=True)
+            return 0
     
     @staticmethod
     def _cluster_to_engagement(cluster):
@@ -1188,11 +1315,19 @@ class V3Pipeline:
                 "consistency_score": min(1.0, cluster.occurrence_count / STABILITY_SATURATION_COUNT)
             },
             "trend": {
-                "trend_direction": "growing" if cluster.growth_rate > 0.5 else "stable",
+                # trend_direction is derived from lifecycle_state rather than
+                # from growth_rate. growth_rate is occurrence_count over days
+                # elapsed - a positive frequency averaging 3.08 on real data -
+                # so thresholding it at 0.5 labelled 217 of 226 behaviours
+                # "growing", including ones last seen 600 days earlier. The
+                # enum itself is marked deprecated in favour of
+                # BehaviorLifecycleState; this keeps the two from disagreeing
+                # while anything still reads it.
+                "trend_direction": _trend_direction_for(cluster),
                 "growth_rate": cluster.growth_rate,
                 "momentum_score": min(1.0, cluster.growth_rate),
                 "volatility_score": 1.0 - cluster.temporal_weight,
                 "prediction_confidence": cluster.confidence,
-                "expected_trajectory": "continued growth" if cluster.growth_rate > 0.3 else "maintain"
+                "expected_trajectory": "unknown"
             }
         }

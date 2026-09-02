@@ -396,6 +396,36 @@ An explicit interaction outranks duration: someone who saves a reel two seconds
 in has not skipped it. Below 12 events there is no stable baseline, so nothing
 is called a skip at all.
 
+#### Behaviour lifecycle
+
+Every behaviour carries one of six states, evaluated **as of now** rather than
+when the topic last appeared in an ingest batch:
+
+| State | Meaning |
+|---|---|
+| `emerging` | First seen within 14 days |
+| `growing` | 65%+ of its activity falls in the recent half of its lifespan |
+| `stable` | Current, with activity spread evenly |
+| `declining` | 35% or less of its activity is recent — tailing off |
+| `dormant` | Silent for long, relative to the rhythm it used to keep |
+| `archived` | Not seen in 180 days |
+
+Dormancy is measured against the behaviour's **own rhythm**, not a fixed number
+of days: a topic that recurred daily and one that recurred monthly are not
+equally absent after a fortnight. The test is
+`gap ≥ max(14 days, 3 × typical_gap)`, where `typical_gap = 1 / daily_frequency`.
+The absolute floor stops a burst of activity from looking abandoned two days
+later.
+
+The sweep runs over **all** of a user's behaviours on every ingest, not just
+those in the batch. This is the part that matters: a topic someone abandoned
+never appears in a batch again, so a state written only at consolidation time
+can never be revised for exactly the behaviours that need it.
+
+Note that `growth_rate` in `trend_information` is `occurrence_count / days_elapsed`
+— occurrences per day, always positive. It is **not** a direction and is not used
+as one; `recent_share` carries the trajectory.
+
 ### Stage 4: Inference Generation
 
 Rule-driven reasoning engine that produces inferences from evidence + behavior objects.
@@ -1092,6 +1122,7 @@ flowchart TB
 | **Evidence** | `/evidence` | Evidence list, type distribution bar chart, detail drawer |
 | **Contested Claims** | `/contested` | Claims the system's own evidence argues against, ranked by how contested rather than how confident, naming the specific content behind each disagreement |
 | **Blind Spots** | `/blind-spots` | What the system doesn't know about you, separating "no opinion at all" from measured uncertainty |
+| **Moved On** | `/moved-on` | What's still current, what's tailing off, and what you've set aside — with the reason for each |
 | **Behavior** | `/behavior` | Behavior objects by topic/creator, lifecycle state distribution, Filter Bubble Score |
 | **Planning** | `/planning` | Pipeline planning breakdown, per-stage timing |
 | **Decision** | `/decision` | Decision traces, tree visualization, explainability panel |
@@ -1516,6 +1547,7 @@ flowchart TB
 | `GET` | `/identity/self-model` | Self-awareness model |
 | `GET` | `/reasoning/evidence` | Evidence items (filterable by type) |
 | `GET` | `/reasoning/contested` | Claims whose own evidence contradicts them, most contested first |
+| `GET` | `/reasoning/lifecycle` | Behaviours grouped into current, fading and set aside |
 | `GET` | `/reasoning/inferences` | Rule-based inferences |
 | `GET` | `/reasoning/reflections` | System reflections |
 | `GET` | `/reasoning/behavior-objects` | Behavior objects |

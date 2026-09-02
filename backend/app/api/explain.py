@@ -157,6 +157,20 @@ async def get_behaviour_space(
     return await build_space(user_id, limit)
 
 
+@router.get("/reasoning/lifecycle")
+async def get_lifecycle(user_id: str = Depends(resolve_user_id)):
+    """What is still current, what is fading, and what has been set aside.
+
+    The six-state lifecycle had only ever produced two. State was written when
+    a topic appeared in an ingest batch, and an abandoned topic never appears
+    in one again, so nothing could retire it: 96 behaviours unseen for over a
+    month were still labelled growing. It is evaluated as of now instead.
+    """
+    from app.services.lifecycle_view import build_lifecycle_view
+
+    return await build_lifecycle_view(user_id)
+
+
 @router.get("/identity/blind-spots")
 async def get_blind_spots(user_id: str = Depends(resolve_user_id)):
     """Where this model is thin, separated by what kind of thin.
