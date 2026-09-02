@@ -42,7 +42,33 @@ from typing import Dict, Iterable, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
+# The permissive default, used where a MISS is the costly error.
+#
+# Interest Provenance is the case: failing to connect "astrophotography setup"
+# to the topic `astronomy` reports that interest as FED — telling someone an
+# interest was installed in them when they went looking for it, which is the
+# most harmful thing that feature can say. A loose match there costs a topic
+# being called "chosen" on thin evidence; a strict one accuses the platform of
+# manufacturing an interest the user actually chose.
 SIMILARITY_THRESHOLD = 0.30
+
+# The strict threshold, used where a FALSE MATCH is the costly error.
+#
+# The Algorithmic Mirror asks whether a platform's claim about you is supported
+# by your behaviour. A loose match there does not merely mislabel a topic: it
+# reports an unevidenced claim as CORROBORATED, which launders exactly the kind
+# of assertion this feature exists to catch. At 0.30 the live embeddings match
+# "Automotive" to `tech` (0.424) and "Luxury goods" to `travel` (0.335), and
+# the demo duly told a user the platform was right about both.
+#
+# Calibrated against 24 hand-labelled pairs (see the commit): genuine matches
+# bottom out at 0.515 ("Software engineering" ~ coding) while spurious ones top
+# out at 0.514 ("Gambling" ~ gaming, genuinely adjacent). 0.45 keeps 12 of 12
+# true matches with room to spare and rejects 11 of 12 false ones.
+#
+# Judged on pairs chosen by hand, so treat it as a considered default rather
+# than a measured optimum; widen the set before moving it.
+CORROBORATION_THRESHOLD = 0.45
 
 # Embedding every candidate is a network round trip, so a single report must not
 # be able to turn into thousands of them.

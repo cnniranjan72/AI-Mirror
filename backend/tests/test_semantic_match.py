@@ -164,3 +164,77 @@ class TestLexicalStillWins:
         report = await build_mirror_report(disposable_user_id, coverage=0.8)
         assert len(report["corroborated"]) == 1
         assert report["corroborated"][0]["evidence"]["match_method"] == "lexical"
+
+
+class TestCorroborationThresholdIsStricter:
+    """One threshold cannot serve both features, because their costly errors
+    are opposite.
+
+    Interest Provenance: a MISS is the harm. Failing to connect
+    "astrophotography setup" to `astronomy` reports that interest as FED -
+    telling someone an interest was installed in them when they went looking
+    for it.
+
+    Algorithmic Mirror: a FALSE MATCH is the harm. It reports an unevidenced
+    platform claim as CORROBORATED, laundering exactly the kind of assertion
+    the report exists to catch. Against the live embeddings at 0.30 that meant
+    "Automotive" matching `tech` (0.424) and "Luxury goods" matching `travel`
+    (0.335) - the demo told a user the platform was right about both.
+
+    Vectors here are constructed, so the thresholds are tested without
+    depending on the embedding service being reachable.
+    """
+
+    @staticmethod
+    def _pair(similarity):
+        """Two unit vectors with exactly the given cosine similarity."""
+        import math
+        return {
+            "claim": [1.0, 0.0],
+            "topic": [similarity, math.sqrt(max(0.0, 1.0 - similarity ** 2))],
+        }
+
+    def test_the_strict_threshold_is_higher(self):
+        assert semantic_match.CORROBORATION_THRESHOLD > semantic_match.SIMILARITY_THRESHOLD
+
+    def test_a_loosely_related_claim_does_not_corroborate(self):
+        """0.424 is the measured "Automotive" ~ `tech` similarity."""
+        vectors = self._pair(0.424)
+        assert semantic_match.best_semantic_match("claim", ["topic"], vectors) is not None, \
+            "the permissive default should still match - provenance relies on it"
+        assert semantic_match.best_semantic_match(
+            "claim", ["topic"], vectors,
+            threshold=semantic_match.CORROBORATION_THRESHOLD,
+        ) is None, "a 0.42 similarity must not corroborate a platform claim"
+
+    def test_a_genuine_match_still_corroborates(self):
+        """0.546 is the measured "Machine learning" ~ `ai` similarity, and
+        0.515 the lowest true match in the calibration set."""
+        for similarity in (0.515, 0.546, 0.99):
+            hit = semantic_match.best_semantic_match(
+                "claim", ["topic"], self._pair(similarity),
+                threshold=semantic_match.CORROBORATION_THRESHOLD,
+            )
+            assert hit is not None, f"a genuine match at {similarity} was rejected"
+
+    def test_the_threshold_sits_below_every_true_match_in_the_calibration(self):
+        """The lowest genuine match measured was 0.515; leave headroom rather
+        than sitting on it."""
+        assert semantic_match.CORROBORATION_THRESHOLD < 0.515
+
+    def test_the_mirror_asks_for_the_strict_threshold(self):
+        import inspect
+
+        from app.services import algorithmic_mirror
+
+        source = inspect.getsource(algorithmic_mirror.build_mirror_report)
+        assert "CORROBORATION_THRESHOLD" in source
+
+    def test_provenance_keeps_the_permissive_default(self):
+        """Raising it here would report chosen interests as fed."""
+        import inspect
+
+        from app.services import interest_provenance
+
+        source = inspect.getsource(interest_provenance.build_provenance_report)
+        assert "CORROBORATION_THRESHOLD" not in source

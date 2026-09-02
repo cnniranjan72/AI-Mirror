@@ -271,7 +271,14 @@ async def build_mirror_report(user_id: str, coverage: Optional[float] = None) ->
             # No shared word. Before reporting a claim unsupported — which
             # accuses the platform of profiling this person wrongly — check
             # whether the two are simply phrased differently.
-            semantic = semantic_match.best_semantic_match(label, topic_names, vectors)
+            # The STRICT threshold: a loose match here reports an unevidenced
+            # platform claim as corroborated, which launders the very thing
+            # this report exists to catch. See semantic_match for the
+            # calibration.
+            semantic = semantic_match.best_semantic_match(
+                label, topic_names, vectors,
+                threshold=semantic_match.CORROBORATION_THRESHOLD,
+            )
             if semantic:
                 behaviour = by_topic.get(semantic["candidate"])
                 if behaviour:

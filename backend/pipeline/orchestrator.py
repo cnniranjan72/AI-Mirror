@@ -174,72 +174,91 @@ class V3Pipeline:
             # Convert clusters to behavior objects
             behavior_objects = list(existing_behavior_objects)
             
+            skipped: List[str] = []
             for cluster in clusters:
-                existing = None
-                for bo in behavior_objects:
-                    if bo.topic == cluster.primary_topic:
-                        existing = bo
-                        break
+                try:
+                    existing = None
+                    for bo in behavior_objects:
+                        if bo.topic == cluster.primary_topic:
+                            existing = bo
+                            break
                 
-                if existing:
-                    existing.update_version()
-                    existing.supporting_event_ids = list(set(
-                        existing.supporting_event_ids + cluster.event_ids
-                    ))
-                    # occurrence_count must reflect ALL events ever consolidated into
-                    # this topic, not just the latest batch — supporting_event_ids is
-                    # the accumulated (deduped) set, so its length is the true count.
-                    # Previously this was overwritten with cluster.occurrence_count
-                    # (the new batch's size alone), so a topic revisited many times
-                    # over many ingests never accumulated past a handful.
-                    true_occurrence_count = len(existing.supporting_event_ids)
-                    existing.temporal_statistics.occurrence_count = true_occurrence_count
-                    existing.temporal_statistics.last_seen = cluster.last_seen
-                    # confidence/importance/stability were also frozen at whatever the
-                    # topic's FIRST tiny batch produced — recompute from the true
-                    # accumulated count so an established, recurring pattern actually
-                    # reads as confident.
-                    existing.confidence_score = min(1.0, true_occurrence_count / CONFIDENCE_SATURATION_COUNT)
-                    existing.importance_score = min(1.0, true_occurrence_count / IMPORTANCE_SATURATION_COUNT)
-                    existing.stability_score = min(1.0, true_occurrence_count / STABILITY_SATURATION_COUNT)
-                    if cluster.creators:
-                        existing.creators = list(set(existing.creators + cluster.creators))
-                else:
-                    from datetime import timedelta
-                    stats = self._cluster_to_engagement(cluster)
-                    bo = BehaviorObject(
-                        unique_id=f"bo_{cluster.cluster_id}",
-                        topic=cluster.primary_topic,
-                        subtopics=cluster.related_topics,
-                        representative_embedding=cluster.metadata.get(
-                            "representative_embedding", [0.0] * 384
-                        ) if isinstance(cluster.metadata, dict) else [0.0] * 384,
-                        keywords=cluster.keywords,
-                        creators=cluster.creators or [],
-                        creator_diversity_score=min(1.0, len(cluster.creators or []) / 10.0),
-                        engagement_statistics=stats["engagement"],
-                        watch_statistics=stats["watch"],
-                        temporal_statistics=stats["temporal"],
-                        trend_information=stats["trend"],
-                        lifecycle_state=self._lifecycle_from_cluster(cluster),
-                        importance_score=min(1.0, cluster.occurrence_count / IMPORTANCE_SATURATION_COUNT),
-                        confidence_score=cluster.confidence,
-                        stability_score=min(1.0, cluster.occurrence_count / STABILITY_SATURATION_COUNT),
-                        evidence_references=[],
-                        supporting_event_ids=cluster.event_ids,
-                        supporting_cluster_ids=[cluster.cluster_id],
-                        evolution_history=[],
-                        version=1,
-                        created_at=cluster.created_at,
-                        updated_at=cluster.updated_at,
-                        metadata={
-                            "cluster_type": cluster.cluster_type,
-                            "source": "knowledge_consolidation"
-                        },
-                        tags=[]
+                    if existing:
+                        existing.update_version()
+                        existing.supporting_event_ids = list(set(
+                            existing.supporting_event_ids + cluster.event_ids
+                        ))
+                        # occurrence_count must reflect ALL events ever consolidated into
+                        # this topic, not just the latest batch — supporting_event_ids is
+                        # the accumulated (deduped) set, so its length is the true count.
+                        # Previously this was overwritten with cluster.occurrence_count
+                        # (the new batch's size alone), so a topic revisited many times
+                        # over many ingests never accumulated past a handful.
+                        true_occurrence_count = len(existing.supporting_event_ids)
+                        existing.temporal_statistics.occurrence_count = true_occurrence_count
+                        existing.temporal_statistics.last_seen = cluster.last_seen
+                        # confidence/importance/stability were also frozen at whatever the
+                        # topic's FIRST tiny batch produced — recompute from the true
+                        # accumulated count so an established, recurring pattern actually
+                        # reads as confident.
+                        existing.confidence_score = min(1.0, true_occurrence_count / CONFIDENCE_SATURATION_COUNT)
+                        existing.importance_score = min(1.0, true_occurrence_count / IMPORTANCE_SATURATION_COUNT)
+                        existing.stability_score = min(1.0, true_occurrence_count / STABILITY_SATURATION_COUNT)
+                        if cluster.creators:
+                            existing.creators = list(set(existing.creators + cluster.creators))
+                    else:
+                        from datetime import timedelta
+                        stats = self._cluster_to_engagement(cluster)
+                        bo = BehaviorObject(
+                            unique_id=f"bo_{cluster.cluster_id}",
+                            topic=cluster.primary_topic,
+                            subtopics=cluster.related_topics,
+                            representative_embedding=cluster.metadata.get(
+                                "representative_embedding", [0.0] * 384
+                            ) if isinstance(cluster.metadata, dict) else [0.0] * 384,
+                            keywords=cluster.keywords,
+                            creators=cluster.creators or [],
+                            creator_diversity_score=min(1.0, len(cluster.creators or []) / 10.0),
+                            engagement_statistics=stats["engagement"],
+                            watch_statistics=stats["watch"],
+                            temporal_statistics=stats["temporal"],
+                            trend_information=stats["trend"],
+                            lifecycle_state=self._lifecycle_from_cluster(cluster),
+                            importance_score=min(1.0, cluster.occurrence_count / IMPORTANCE_SATURATION_COUNT),
+                            confidence_score=cluster.confidence,
+                            stability_score=min(1.0, cluster.occurrence_count / STABILITY_SATURATION_COUNT),
+                            evidence_references=[],
+                            supporting_event_ids=cluster.event_ids,
+                            supporting_cluster_ids=[cluster.cluster_id],
+                            evolution_history=[],
+                            version=1,
+                            created_at=cluster.created_at,
+                            updated_at=cluster.updated_at,
+                            metadata={
+                                "cluster_type": cluster.cluster_type,
+                                "source": "knowledge_consolidation"
+                            },
+                            tags=[]
+                        )
+                        behavior_objects.append(bo)
+                except Exception as e:
+                    # One malformed cluster must cost that topic, not the twin.
+                    # This construction sat under a single try/except that
+                    # returned [] for the whole step, so one out-of-range value
+                    # produced a user with no behaviour objects, therefore no
+                    # inferences, no identity worth the name and an empty
+                    # Report — logged, but indistinguishable from "no data yet".
+                    skipped.append(cluster.primary_topic)
+                    logger.warning(
+                        "Skipped cluster %s (%s): %s",
+                        cluster.cluster_id, cluster.primary_topic, e,
                     )
-                    behavior_objects.append(bo)
-            
+
+            if skipped:
+                logger.warning(
+                    "Consolidation skipped %d of %d clusters: %s",
+                    len(skipped), len(clusters), skipped[:10],
+                )
             logger.info(f"Consolidation: {len(behavior_objects)} behavior objects from {len(events)} events")
             return behavior_objects
             
@@ -1158,7 +1177,14 @@ class V3Pipeline:
                 "occurrence_count": cluster.occurrence_count,
                 "daily_frequency": cluster.occurrence_count / days_span,
                 "weekly_frequency": cluster.occurrence_count / max(1, days_span // 7),
-                "recency_score": max(0.0, 1.0 - (now - cluster.last_seen).days / 30.0),
+                # Clamped at BOTH ends. timedelta.days floors toward negative
+                # infinity, so a last_seen even seconds in the future gives
+                # -1 and this returns 1.0333 — outside BehaviorObject's
+                # ge=0/le=1 bound, which made construction raise and (see
+                # _consolidate_events) discarded every behaviour object for
+                # the run. Future timestamps are not hypothetical: clock skew
+                # on a client produces them, and /seed did.
+                "recency_score": min(1.0, max(0.0, 1.0 - (now - cluster.last_seen).days / 30.0)),
                 "consistency_score": min(1.0, cluster.occurrence_count / STABILITY_SATURATION_COUNT)
             },
             "trend": {
