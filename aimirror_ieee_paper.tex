@@ -54,11 +54,11 @@ mala.naik@amceducation.in}
 \maketitle
 
 \begin{abstract}
-Intelligent systems lack a coherent mechanism for constructing and reasoning about computational identity from behavioral data. Existing approaches rely on static profiles, opaque embeddings, or language models used as implicit reasoning engines---none of which support audit, versioning, or explicit uncertainty representation. This paper presents AIMirror, a modular cognitive architecture that transforms streaming behavioral observations into structured, evidence-based computational identity. The architecture comprises eleven specialized engines in two pipelines, governed by five invariant principles: the language model never reasons or decides; identity is read from immutable snapshots; every inference references supporting and countervailing evidence; all decisions use deterministic scoring; and components communicate via typed contracts. Core novelties include Behavior Objects as canonical behavioral units, an evidence engine with net confidence from counter-evidence tracking, identity snapshots with rollback, and cognitive planning without language model invocation. We evaluate across 596 intent classification queries (macro F1~=~0.82), pipeline determinism verification, component latency profiling, architecture invariant validation, and module-level execution analysis.
+Intelligent systems lack a coherent mechanism for constructing and reasoning about computational identity from behavioral data. Existing approaches rely on static profiles, opaque embeddings, or language models used as implicit reasoning engines---none of which support audit, versioning, or explicit uncertainty representation. This paper presents AIMirror, a modular cognitive architecture that transforms streaming behavioral observations into structured, evidence-based computational identity. The architecture comprises eleven specialized engines in two pipelines, governed by five invariant principles: the language model never reasons or decides; identity is read from immutable snapshots; every inference references supporting and countervailing evidence; all decisions use deterministic scoring; and components communicate via typed contracts. Core novelties include Behavior Objects as canonical behavioral units, an evidence engine computing net confidence from counter-evidence, identity snapshots with rollback, and cognitive planning without language model invocation. Because the resulting model is derived independently of any platform, we also use it to audit: comparing a platform's declared interests against the user's own behavioral evidence, separating interests the user sought from those delivered to them, and scoring the system's own claims against the user's verdicts, reported as calibration rather than accuracy. Corrections entered there are withdrawn from what the system subsequently asserts. We evaluate across 596 intent classification queries (macro F1~=~0.82), determinism verification, latency profiling, and measured ablations in which weakening a single safeguard is shown to discard every behavioral object produced from 800 events.
 \end{abstract}
 
 \begin{IEEEkeywords}
-cognitive architecture, computational identity, evidence-based reasoning, behavioral inference, self-model, identity snapshot, explainable AI, multi-memory system
+cognitive architecture, computational identity, evidence-based reasoning, behavioral inference, self-model, identity snapshot, explainable AI, algorithmic accountability, confidence calibration
 \end{IEEEkeywords}
 
 \section{Introduction}
@@ -81,9 +81,10 @@ The key contributions of this work are:
 \item A Self-Model with explicit uncertainty representation, distinguishing strong beliefs from uncertain ones through counter-evidence tracking.
 \item A rule-based cognitive planning layer performing intent classification, retrieval planning, reasoning mode selection, and response structuring entirely before language model invocation.
 \item A deterministic decision layer that scores candidate content on six weighted dimensions, enforces topical diversity as a separate constraint, and records the score of every candidate for inspection.
+\item An accountability layer that turns the identity model outward and inward: auditing a platform's stated claims about the user against behavioral evidence, distinguishing chosen interests from delivered ones, and calibrating the system's own confidence against user judgement, with corrections that bind on subsequent output.
 \end{enumerate}
 
-The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews related work and presents a structured comparison. Section~\ref{sec:design} presents the architectural design and rationale. Section~\ref{sec:architecture} presents the overall system architecture. Section~\ref{sec:pipeline} details each pipeline stage. Section~\ref{sec:formulation} provides formal mathematical formulations. Section~\ref{sec:evaluation} presents evaluation results. Section~\ref{sec:discussion} discusses limitations, threats to validity, and future work. Section~\ref{sec:conclusion} concludes.
+The remainder of this paper is organized as follows. Section~\ref{sec:related} reviews related work and presents a structured comparison. Section~\ref{sec:design} presents the architectural design and rationale. Section~\ref{sec:architecture} presents the overall system architecture. Section~\ref{sec:pipeline} details each pipeline stage. Section~\ref{sec:accountability} describes the accountability layer. Section~\ref{sec:formulation} provides formal mathematical formulations. Section~\ref{sec:evaluation} presents evaluation results. Section~\ref{sec:discussion} discusses limitations, threats to validity, and future work. Section~\ref{sec:conclusion} concludes.
 
 \section{Related Work}
 \label{sec:related}
@@ -125,19 +126,11 @@ Existing systems fail to provide a complete, verifiable pipeline from raw behavi
 \section{Architectural Design}
 \label{sec:design}
 
-The question an IEEE reviewer will naturally ask is: \emph{why could this not be built by combining existing work?} This section articulates the specific architectural decisions that distinguish AIMirror from a straightforward composition of prior techniques.
+The obvious objection to this work is that it could be assembled from existing parts. Three decisions resist that reading. First, identity is \emph{constructed} as an explicit output---observations, evidence, inferences, sub-profiles, snapshot---rather than inferred as a byproduct of some downstream objective and left implicit in parameters. The architecture further separates \emph{Identity}, what the behavioural data shows, from the \emph{Self Model}, what the system believes, and models the gap between them through counter-evidence and uncertainty rather than collapsing it.
 
-\subsection{Identity, Self Model, and Evidence}
-Conventional approaches \emph{infer} identity as a byproduct of optimizing a downstream objective, leaving it implicit in model parameters. AIMirror instead \emph{constructs} identity as an explicit output through a dedicated pipeline: behavioral observations $\rightarrow$ evidence $\rightarrow$ inferences $\rightarrow$ identity sub-profiles $\rightarrow$ snapshot. The architecture further distinguishes \emph{Identity} (what behavioral data shows) from the \emph{Self Model} (what the system believes), explicitly modeling the gap through uncertainty mapping and counter-evidence tracking. Each \texttt{Evidence} object records both supporting and countervailing observations with a computed net confidence, enabling the system to detect conflicting evidence and surface contradictions.
+Second, the language model is confined to terminal verbalization, which two ordering rules enforce: planning precedes retrieval, so sources and reasoning mode are fixed before any data is fetched; and decision precedes verbalization, so the model formats content that has already been selected rather than choosing what to say. Third, query-time reads come from frozen snapshots, so an identity under construction cannot mutate mid-conversation.
 
-\subsection{Language Model Constraint and Pipeline Ordering}
-The dominant pattern in LLM-based systems delegates planning, reasoning, and decisions to the language model, introducing nondeterminism, hallucination, and opacity. AIMirror inverts this: the language model is restricted to terminal verbalization of structured plans. Two ordering decisions enforce this constraint. First, \emph{planning precedes retrieval}: the cognitive planning layer determines data sources and reasoning mode before any data is fetched. Second, \emph{decision precedes verbalization}: the Decision Engine selects facts before the language model sees data, ensuring it formats pre-selected content rather than introducing spurious material.
-
-\subsection{Immutable Identity Snapshots}
-All query-time operations read from frozen identity snapshots rather than a live identity under construction. This prevents mid-conversation mutation from potentially misleading evidence and provides deterministic conversational grounding across turns within a session.
-
-\subsection{Design Rationale for Key Components}
-Behavior Objects provide a canonical behavioral unit abstracting heterogeneous raw events into a uniform interface with statistical sub-models and lifecycle state. The rule-based intent classifier ensures deterministic, transparent planning with competitive accuracy (macro F1~=~0.82). The Decision Engine uses fixed weighted scoring rather than learned ranking, prioritizing reproducibility and auditability over marginal accuracy gains. By constraining the LLM to verbalization, the architecture eliminates the nondeterminism, hallucination risk, and opacity that LLM reasoning introduces.
+The component choices follow from these commitments. Behavior Objects give heterogeneous events a uniform interface with lifecycle state. The intent classifier is rule-based, trading some accuracy for plans that are identical on identical input. The Decision Engine uses fixed weights rather than learned ranking for the same reason: a score that can be recomputed by hand is one a user can contest.
 
 \section{System Architecture}
 \label{sec:architecture}
@@ -278,6 +271,55 @@ The Identity Engine assembles nine sub-profiles---behaviour, interest graph, cre
 
 \subsection{Query: from question to answer}
 Figure~\ref{fig:query_pipeline} shows the query path. The Runtime Builder assembles a working context from the active snapshot; the Cognitive Planning Layer then classifies intent, plans retrieval, selects a reasoning mode and fixes the response structure---all through deterministic rules, with no language model involved. Character RAG retrieves across the five memory types (episodic, semantic, behavioural, goal and reflection), each with its own storage and retrieval strategy, with the planner deciding which to query. The Decision Engine scores candidate content on six weighted dimensions, caps how many facts any one topic may contribute, and selects what may be said, so low-confidence or contradictory material never reaches the generator. Only then does the Context Builder assemble a structured plan for the LLM Verbalizer, whose sole task is to render that plan as fluent prose.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=3mm and 2mm,
+  box/.style={rectangle, draw, minimum width=21mm, minimum height=5mm, font=\scriptsize\sffamily, align=center, inner sep=1.5pt, rounded corners=1pt},
+  src/.style={box, densely dashed, minimum width=21mm},
+  audit/.style={box, fill=black!5},
+  every path/.style={-{Stealth[length=1.5mm]}, thin},
+  lbl/.style={font=\small\bfseries\sffamily, align=center}
+]
+\node[lbl] (t) {Accountability Layer};
+\node[box, below=3mm of t] (twin) {Identity Snapshot\\(behavioural evidence)};
+
+\node[audit, below left=7mm and 9mm of twin] (mirror) {Algorithmic\\Mirror};
+\node[audit, below=7mm of twin] (prov) {Interest\\Provenance};
+\node[audit, below right=7mm and 9mm of twin] (ledger) {Accuracy\\Ledger};
+
+\draw (twin) -- (mirror);
+\draw (twin) -- (prov);
+\draw (twin) -- (ledger);
+
+\node[src, below=4mm of mirror] (claims) {platform ad\\interests};
+\node[src, below=4mm of prov] (search) {search\\history};
+\node[src, below=4mm of ledger] (verdict) {user's\\verdicts};
+\draw (claims) -- (mirror);
+\draw (search) -- (prov);
+\draw (verdict) -- (ledger);
+
+\node[font=\tiny, align=center, above=1mm of mirror] {is the platform\\right about you?};
+\node[font=\tiny, align=center, above=1mm of prov] {did you choose\\this interest?};
+\node[font=\tiny, align=center, above=1mm of ledger] {is the system\\right about you?};
+\end{tikzpicture}
+\caption{The accountability layer. One identity model, derived independently of any platform, is compared against three different references: the interests a platform declares about the user, the searches that show what the user went looking for, and the user's own verdicts on the system's claims. Corrections entered at the ledger are withdrawn from what the system subsequently asserts.}
+\label{fig:accountability}
+\end{figure}
+
+\section{Accountability Layer}
+\label{sec:accountability}
+
+An identity model that only describes a user is of limited interest. Because AIMirror derives its model independently of any platform, it can also be used to check three claims that are ordinarily unverifiable, and Figure~\ref{fig:accountability} shows the three surfaces this produces.
+
+\textbf{Auditing the platform.} Advertising interests exported from a user's Meta or Google archive are compared against the twin's own evidence and sorted into corroborated, unsupported, and not comparable. The third category matters: a claim such as ``frequent travellers'' is demographic and a watch history can neither confirm nor refute it, so filing it as a failure would overstate the platform's error. Below a coverage floor the report withholds a verdict entirely rather than judging a platform on a fragment of a user's history.
+
+\textbf{Auditing provenance.} For each topic the system separates deliberate acts---searches, which require the user to have gone looking---from exposure. Agency is the ratio of the two, capped at one, and a topic is reported as fed, mixed or chosen. Reporting a chosen interest as fed is the more harmful error, since it tells someone an interest was installed in them when they sought it out, so the matching that connects a search to a topic is deliberately permissive; the corroboration test above, where a false match instead launders an unevidenced claim, uses a stricter threshold.
+
+\textbf{Auditing itself.} Users mark each claim the system makes as right, wrong or unsure. The ledger reports \emph{calibration} rather than accuracy: accuracy alone is trivially maximised by never claiming anything confidently, whereas the useful question is whether claims made at confidence $c$ are correct about $c$ of the time. Rates are withheld for any confidence band with fewer than ten answers and no overall verdict is given below twenty, with Wilson intervals throughout, since the normal approximation reports certainty at exactly the sample sizes this feature lives in. A Brier score accompanies the rates, because it penalises confident errors in a way a percentage cannot.
+
+Corrections bind. A claim the user marks wrong is withdrawn from everything the system asserts, while remaining visible and reversible where the reasoning is shown---hiding it would make the correction untraceable. Since the pipeline regenerates inferences on every ingest, a claim is identified by a fingerprint of its content rather than by row identity, so a correction survives regeneration. Finally, each claim states the threshold it turns on, distinguishing conditions a person could act on from those that merely reflect how much data exists.
 
 \section{Formalization}
 \label{sec:formulation}
@@ -457,63 +499,46 @@ The fused retrieval stage combines up to nine data sources with a mean retrieval
 \section{Discussion}
 \label{sec:discussion}
 
-\subsection{Strengths}
-AIMirror's primary strength is the deliberate separation of cognitive functions into verifiable, independently testable components. Constraining the language model to terminal verbalization removes the primary source of nondeterminism and opacity in LLM-based systems. Counter-evidence tracking enables audit and contradiction detection absent from most user modeling systems. Identity snapshots enable consistent multi-turn interaction with immutable reference points.
+\subsection{What the separation buys}
+The architecture's value is that each stage can be checked on its own. Constraining the language model to terminal verbalization removes the main source of nondeterminism; counter-evidence tracking makes contradiction visible; snapshots give multi-turn interaction a fixed reference. The contrast with agent frameworks \cite{yao2023, autogpt2023, langchain2023} is one of purpose rather than quality: those systems pursue open-ended goals and keep their reasoning inside the model, while AIMirror answers within a fixed pipeline and can name the observations behind every claim. The two are complementary.
 
-\subsection{Comparison with AI Agents}
-AIMirror differs from contemporary AI agent frameworks---ReAct \cite{yao2023}, AutoGPT \cite{autogpt2023}, LangChain \cite{langchain2023}---in five key ways. First, AIMirror is \emph{not autonomous}: it responds to user queries within a structured pipeline rather than pursuing open-ended goals. Second, its planning layer is rule-based and deterministic, producing identical plans for identical queries regardless of LLM state. Third, decisions use weighted scoring, not LLM generation, eliminating hallucination in the decision path. Fourth, AIMirror is identity-centric rather than task-centric: its purpose is constructing a computational representation of user identity. Fifth, full evidence provenance enables users to trace every output to specific behavioral observations---absent from agent frameworks where reasoning is internal to the LLM. These distinctions position AIMirror as complementary: agent frameworks excel at autonomous task completion, while AIMirror excels at transparent, verifiable identity construction.
+\subsection{Measured effects of weakening a safeguard}
+Rather than reason about what removing a component would do, we weakened five safeguards on the deployed instance and measured what the pipeline produced. Table~\ref{table:ablation} reports the results. Two are worth drawing out.
 
-\subsection{Limitations}
-First, the rule-based intent classifier may not generalize to full production query diversity despite strong curated-data accuracy. Second, the absence of reinforcement learning limits long-term behavioral optimization; the alignment module currently implements only rule-based scoring. Third, the architecture has not been evaluated in a controlled user study. Fourth, the system currently ingests from a single source, limiting behavioral model generality.
+Removing a single bounds check is enough to destroy the entire model. Recency is scored as $1 - \Delta_{\text{days}}/30$, and Python's \texttt{timedelta.days} floors toward negative infinity, so an event timestamped even seconds in the future yields $-1$ days and a score of $1.033$---outside the $[0,1]$ bound the Behavior Object declares. Construction raises, and because consolidation caught exceptions for the whole step rather than per cluster, every behaviour object for that run was discarded: 800 events produced none, and therefore no inferences and no identity. The failure was logged but indistinguishable downstream from an account with no data. Clock skew on a client produces the same input.
 
-\subsection{Ablation Analysis}
-Table~\ref{table:ablation} summarizes expected effects of removing each architectural component, derived from invariants and module-level behavior.
+Second, evidence that is not scoped to a claim is worse than no evidence. Before each rule declared which entities it had reasoned over, the inference engine attached the eight most active behaviour objects to every inference regardless of rule; across production, 10 of 10 users had exactly one distinct creator set spanning all of their claims. Displayed as justification, that reads as "this is why" while bearing no relation to the conclusion.
 
 \begin{table}[htbp]
 \centering
-\caption{Expected effects of removing architectural components.}
+\caption{Measured effect of weakening each safeguard, on a deployed instance. Corpus: 195 behaviour objects and 6{,}451 captioned events across 10 accounts, of which most are synthetically seeded.}
 \label{table:ablation}
 \footnotesize
 \resizebox{\columnwidth}{!}{%
-\begin{tabular}{ll}
+\begin{tabular}{lll}
 \toprule
-\textbf{Removed Component} & \textbf{Expected Effect} \\
+\textbf{Safeguard weakened} & \textbf{Measured effect} & \textbf{Magnitude} \\
 \midrule
-Behavior Objects & No canonical behavioral abstraction; evidence engine \\
-& operates on raw heterogeneous events with varying schemas \\
-Evidence Engine & No evidence provenance; no counter-evidence tracking; \\
-& inferences lack traceability to source observations \\
-Inference Engine & No higher-level conclusions; identity constructed from \\
-& raw evidence without interpretive abstraction \\
-Identity Snapshot & Multi-turn inconsistency; identity mutates mid-session; \\
-& rollback capability lost \\
-Self Model & No uncertainty quantification; all beliefs expressed \\
-& with equal certainty regardless of evidence strength \\
-Decision Engine & Low-confidence or contradictory facts reach the LLM; \\
-& no content pre-selection before verbalization \\
-LLM Terminal Constraint & Nondeterminism, hallucination risk, and opacity \\
-& reintroduced into the reasoning and decision path \\
+Recency bounds check & Behaviour objects discarded & 800 events $\rightarrow$ 0 objects \\
+Per-cluster error isolation & One bad cluster voids the run & all topics lost, not one \\
+Rule-declared evidence scope & Same evidence under every claim & 10/10 users, 1 distinct set \\
+Corroboration threshold ($0.45 \rightarrow 0.30$) & Unsupported claims corroborated & 4/12 false vs 1/12 \\
+Topic-scoped keyword match & Over-broad classification & 45\% vs 9\% of objects \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
 
+The corroboration row concerns the threshold at which a platform's stated interest counts as supported by behaviour. Judged against 24 hand-labelled claim--topic pairs, genuine matches score no lower than $0.515$ and spurious ones no higher than $0.514$; at $0.30$ the system corroborated ``Automotive'' against \texttt{tech} ($0.424$) and ``Luxury goods'' against \texttt{travel} ($0.335$). Since the pairs were labelled by the authors, $0.45$ should be read as a considered default rather than a tuned optimum.
+
+\subsection{Limitations}
+The rule-based intent classifier is evaluated on curated data and may not generalize to production query diversity. The alignment module implements rule-based scoring only, without reinforcement learning. The architecture has not been evaluated in a controlled user study, and the corpus behind Table~\ref{table:ablation} is dominated by seeded accounts, so the magnitudes are indicative rather than population estimates. Ingestion is currently single-source. Finally, the learning-orientation rule classifies subject matter rather than instructional intent: a topic labelled \texttt{\#coding} says what content is about, not whether it teaches. Captions carry the better signal---24\% of 6{,}451 real events contain instructional phrasing---but calibrating a threshold on it requires a corpus that is not mostly synthetic.
+
 \subsection{Threats to Validity}
-
-\subsubsection{Internal Validity}
-The 596-query dataset may not capture full production distribution; accuracy reflects curated and synthetic data. Determinism was verified on a single snapshot with fixed queries.
-
-\subsubsection{External Validity}
-The architecture has been evaluated on a single deployment with synthetic and developer-generated data. Generalization requires a controlled user study, and single-source ingestion limits behavioral breadth.
-
-\subsubsection{Construct Validity}
-Confidence scores have been validated for internal consistency but not calibrated against ground truth identity measures. Correspondence to psychologically valid constructs requires external validation.
-
-\subsubsection{Reproducibility}
-The source, database migrations, the 596-query evaluation set, the evaluation scripts and deployment documentation are released together. Every stage before verbalization is deterministic, so runs reproduce without seed control.
+The 596-query dataset is curated and partly synthetic, so classifier accuracy may not survive production query diversity, and determinism was verified on one snapshot with fixed queries. Evaluation is single-deployment, and the behavioural corpus is dominated by seeded accounts; the magnitudes in Table~\ref{table:ablation} are indicative rather than population estimates. Confidence scores are internally consistent but not calibrated against any external ground truth, so their correspondence to psychologically meaningful constructs is unestablished. The source, migrations, the 596-query evaluation set, the evaluation scripts and deployment documentation are released together; every stage before verbalization is deterministic, so runs reproduce without seed control.
 
 \subsection{Future Work}
-Extending the ingestion pipeline to support multiple behavioral sources would enrich constructed identity. Replacing rule-based alignment scoring with reinforcement learning \cite{schulman2017} would enable optimization of long-term behavioral outcomes. Quantitative ablation studies are needed to measure each component's empirical contribution beyond the qualitative analysis in Section~\ref{sec:discussion}. A controlled user study measuring behavioral awareness and insight quality would validate practical utility. Differential privacy techniques \cite{dwork2014} should be explored for information leakage bounds, and a formal treatment connecting computational identity constructs to psychological identity theories would strengthen theoretical foundations. Scalability at million-user scale, while supported by the asynchronous two-pipeline design and pgvector IVFFLAT indexing, remains to be benchmarked.
+The most useful next steps are empirical rather than architectural: a controlled user study measuring whether the accountability surfaces change what people believe about their own behaviour, and a corpus of real rather than seeded accounts, without which several thresholds in this paper remain considered defaults. Beyond that: multi-source ingestion, reinforcement learning in place of rule-based alignment scoring \cite{schulman2017}, differential privacy bounds on information leakage \cite{dwork2014}, and benchmarking the two-pipeline design at scale.
 
 \section{Conclusion}
 \label{sec:conclusion}
