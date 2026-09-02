@@ -263,17 +263,21 @@ async def demo_user_id(db):
         pass
 
 
-async def _seed_inference(user_id, confidence=0.9, label="Likes wildlife content"):
+async def _seed_inference(user_id, confidence=0.9, label="Likes wildlife content",
+                          rule_name="TestRule"):
     from app.db.postgres import execute
 
     inference_id = f"inf_{uuid.uuid4().hex[:12]}"
     await execute(
         """
         INSERT INTO inferences (inference_id, user_id, inference_type, label,
-                                description, confidence, inferred_at, valid_from)
-        VALUES ($1, $2, 'interest', $3, $4, $5, NOW(), NOW())
+                                description, confidence, rule_name,
+                                inferred_at, valid_from)
+        VALUES ($1, $2, 'interest', $3, $4, $5, $6, NOW(), NOW())
         """,
-        inference_id, user_id, label, "seeded by a test", confidence,
+        # rule_name matters: claim_key is generated from rule_name + label, and
+        # a row without one is invisible to the open-claims list.
+        inference_id, user_id, label, "seeded by a test", confidence, rule_name,
     )
     return inference_id
 

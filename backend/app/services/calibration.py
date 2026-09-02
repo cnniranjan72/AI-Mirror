@@ -336,21 +336,28 @@ async def list_open_claims(user_id: str, limit: int = 20) -> List[Dict[str, Any]
     """
     rows = await fetch(
         """
-        SELECT DISTINCT ON (i.claim_key)
-               i.inference_id AS claim_id, 'inference' AS claim_type,
-               i.label, i.description, i.confidence, i.inferred_at AS created_at,
-               i.claim_key
-        FROM inferences i
-        LEFT JOIN claim_verdicts v
-               ON v.user_id = i.user_id
-              AND v.claim_type = 'inference'
-              -- The stable key, NOT inference_id: ids are regenerated on every
-              -- ingest, so joining on them re-asks answered questions forever.
-              AND v.claim_key = i.claim_key
-        WHERE i.user_id = $1 AND i.claim_key IS NOT NULL AND v.id IS NULL
-        -- DISTINCT ON collapses the duplicate rows regeneration leaves behind,
-        -- so one logical claim is asked once rather than once per copy.
-        ORDER BY i.claim_key, i.confidence DESC
+        -- DISTINCT ON collapses the duplicate rows regeneration leaves behind
+        -- so one logical claim is asked once, but Postgres requires its
+        -- ORDER BY to lead with the DISTINCT ON expression. Ordering by
+        -- confidence therefore has to happen OUTSIDE, or the list comes back
+        -- sorted by an md5 hash and "most confident first" is a lie.
+        SELECT * FROM (
+            SELECT DISTINCT ON (i.claim_key)
+                   i.inference_id AS claim_id, 'inference' AS claim_type,
+                   i.label, i.description, i.confidence,
+                   i.inferred_at AS created_at, i.claim_key
+            FROM inferences i
+            LEFT JOIN claim_verdicts v
+                   ON v.user_id = i.user_id
+                  AND v.claim_type = 'inference'
+                  -- The stable key, NOT inference_id: ids are regenerated on
+                  -- every ingest, so joining on them re-asks answered
+                  -- questions forever.
+                  AND v.claim_key = i.claim_key
+            WHERE i.user_id = $1 AND i.claim_key IS NOT NULL AND v.id IS NULL
+            ORDER BY i.claim_key, i.confidence DESC
+        ) unanswered
+        ORDER BY confidence DESC
         LIMIT $2
         """,
         user_id, limit,

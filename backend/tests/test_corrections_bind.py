@@ -60,10 +60,14 @@ class TestClaimKey:
         new ones. If the two expressions drift, old verdicts stop matching new
         claims and corrections quietly stop binding.
 
-        Checked structurally here; the real round trip through Postgres is
-        covered by test_the_backfilled_key_matches_python below.
+        migration_v20 settled this by making claim_key a GENERATED column, so
+        Postgres owns the single definition and no insert can omit it. Python
+        keeps its copy only for matching rows in memory, and the two must
+        still agree - checked for real through Postgres in
+        test_the_generated_key_matches_python below.
         """
-        sql = (Path(__file__).parent.parent / "app" / "db" / "migration_v19.sql").read_text()
+        sql = (Path(__file__).parent.parent / "app" / "db" / "migration_v20.sql").read_text()
+        assert "GENERATED ALWAYS AS" in sql, "claim_key must not be insertable"
         assert "md5(" in sql
         # Same normalisation on both sides: lower + trim, joined by a pipe.
         assert "lower(btrim(coalesce(rule_name" in sql
@@ -173,11 +177,11 @@ async def _regenerate(user_id):
                         f"_{uuid.uuid4().hex[:4]}")
         await execute(
             """INSERT INTO inferences (inference_id, user_id, inference_type, label,
-                   description, confidence, rule_name, context_id, claim_key,
+                   description, confidence, rule_name, context_id,
                    inferred_at, valid_from)
-               VALUES ($1,$2,'interest',$3,$4,0.9,$5,$6,$7,NOW(),NOW())""",
+               VALUES ($1,$2,'interest',$3,$4,0.9,$5,$6,NOW(),NOW())""",
             inference_id, user_id, label, f"because: {label}", rule,
-            f"ctx_{datetime.utcnow().timestamp()}", cal.claim_key(rule, label),
+            f"ctx_{datetime.utcnow().timestamp()}",
         )
         ids[label] = inference_id
     return ids
@@ -266,19 +270,44 @@ async def test_unsure_does_not_suppress_anything(db, demo_user_id, client):
 
 @pytest.mark.db
 @pytest.mark.asyncio
-async def test_the_backfilled_key_matches_python(db, demo_user_id):
-    """The cross-language invariant, through Postgres for real. If the SQL in
-    migration_v19 and calibration.claim_key ever disagree, corrections stop
-    binding and nothing else fails."""
-    from app.db.postgres import fetchval
+async def test_the_generated_key_matches_python(db, demo_user_id):
+    """The cross-language invariant, through real rows. Postgres generates
+    claim_key; Python computes it to match rows in memory. If the two ever
+    disagree, corrections stop binding and nothing else fails."""
+    from app.db.postgres import fetch
 
-    for rule, label in CLAIMS + [("Odd Rule ", "  Mixed CASE Label")]:
-        from_sql = await fetchval(
-            "SELECT md5(lower(btrim(coalesce($1::text, ''))) || '|' || "
-            "lower(btrim(coalesce($2::text, ''))))",
-            rule, label,
+    await _regenerate(demo_user_id)
+    rows = await fetch(
+        "SELECT rule_name, label, claim_key FROM inferences WHERE user_id = $1",
+        demo_user_id,
+    )
+    assert rows, "nothing to compare"
+    for row in rows:
+        assert row["claim_key"] == cal.claim_key(row["rule_name"], row["label"]), (
+            f"drift for {row['rule_name']!r}/{row['label']!r}"
         )
-        assert from_sql == cal.claim_key(rule, label), f"drift for {rule!r}/{label!r}"
+
+
+@pytest.mark.db
+@pytest.mark.asyncio
+async def test_claim_key_cannot_be_omitted_by_an_insert(db, demo_user_id):
+    """The failure migration_v20 exists to prevent: a row inserted without a
+    claim_key is silently invisible to the ledger - never offered for review,
+    no error raised. A generated column makes that impossible."""
+    from app.db.postgres import execute, fetchval
+
+    await execute(
+        """INSERT INTO inferences (inference_id, user_id, inference_type, label,
+               description, confidence, rule_name, inferred_at, valid_from)
+           VALUES ($1,$2,'interest',$3,$4,0.5,$5,NOW(),NOW())""",
+        f"inference_nokey_{uuid.uuid4().hex[:8]}", demo_user_id,
+        "Claim with no explicit key", "d", "SomeRule",
+    )
+    key = await fetchval(
+        "SELECT claim_key FROM inferences WHERE user_id = $1 AND rule_name = $2",
+        demo_user_id, "SomeRule",
+    )
+    assert key == cal.claim_key("SomeRule", "Claim with no explicit key")
 
 
 @pytest.mark.db
@@ -292,11 +321,11 @@ async def test_one_logical_claim_is_asked_once_despite_duplicate_rows(db, demo_u
     rule, label = CLAIMS[0]
     await execute(
         """INSERT INTO inferences (inference_id, user_id, inference_type, label,
-               description, confidence, rule_name, context_id, claim_key,
+               description, confidence, rule_name, context_id,
                inferred_at, valid_from)
-           VALUES ($1,$2,'interest',$3,$4,0.9,$5,$6,$7,NOW(),NOW())""",
+           VALUES ($1,$2,'interest',$3,$4,0.9,$5,$6,NOW(),NOW())""",
         f"inference_dup_{uuid.uuid4().hex[:8]}", demo_user_id, label, "dup", rule,
-        "ctx_dup", cal.claim_key(rule, label),
+        "ctx_dup",
     )
 
     open_claims = (await client.get(f"/calibration/open?user_id={demo_user_id}")).json()

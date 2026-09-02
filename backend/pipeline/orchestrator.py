@@ -8,7 +8,6 @@ No redesign. No new abstractions. Integration only.
 """
 import json
 
-from app.services import calibration
 import os
 import uuid
 import logging
@@ -630,10 +629,14 @@ class V3Pipeline:
                     affected_topics, affected_creators, affected_behaviors,
                     recommendation_seed, suggested_actions,
                     inferred_at, valid_from, valid_until,
-                    rule_name, context_id, metadata, claim_key
+                    rule_name, context_id, metadata
+                    -- claim_key is a GENERATED column (migration_v20): Postgres
+                    -- derives it from rule_name + label, so it can never be
+                    -- omitted or drift from the definition used to match
+                    -- corrections. Do not add it here.
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,
                     $11::jsonb,$12::jsonb,$13::jsonb,$14,$15::jsonb,
-                    $16,$17,$18,$19,$20,$21::jsonb,$22)
+                    $16,$17,$18,$19,$20,$21::jsonb)
                 ON CONFLICT (inference_id) DO NOTHING
                 """,
                 inf.inference_id, user_id, inf.inference_type,
@@ -649,10 +652,6 @@ class V3Pipeline:
                 inf.inferred_at, inf.valid_from, inf.valid_until,
                 inf.rule_name, inf.context_id,
                 json.dumps(inf.metadata),
-                # A stable identity for this claim. inference_id embeds a
-                # timestamp and the whole set is regenerated every ingest, so
-                # without this a user's correction is orphaned on the next run.
-                calibration.claim_key(inf.rule_name, inf.label),
             )
         except Exception as e:
             logger.error(f"Error inserting inference: {str(e)}", exc_info=True)
