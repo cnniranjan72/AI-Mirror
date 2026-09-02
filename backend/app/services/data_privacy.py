@@ -40,6 +40,10 @@ USER_DATA_TABLES: List[str] = [
     "memories", "chat_messages", "pipeline_traces", "cognitive_metrics",
     "runtime_metrics", "guardian_alerts", "platform_profile_claims",
     "search_signals",
+    # The user's own verdicts on what the system claimed about them. Their
+    # answers, so they go when they ask to be erased — even though losing
+    # them makes the calibration report worse.
+    "claim_verdicts",
     # Operational telemetry, but it carries user_id plus the request path and
     # message that produced it, which makes it personal data. Losing some
     # diagnostics is the correct trade when someone asks to be erased.

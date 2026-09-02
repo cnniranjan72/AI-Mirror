@@ -35,6 +35,7 @@ const InsightsPage = lazy(() => import('../../pages/insights/InsightsPage'))
 const ReportPage = lazy(() => import('../../pages/report/ReportPage'))
 const MirrorPage = lazy(() => import('../../pages/mirror/MirrorPage'))
 const ProvenancePage = lazy(() => import('../../pages/provenance/ProvenancePage'))
+const CalibrationPage = lazy(() => import('../../pages/calibration/CalibrationPage'))
 const PipelinePage = lazy(() => import('../../pages/pipeline/PipelinePage'))
 const TracePage = lazy(() => import('../../pages/trace/TracePage'))
 const AnalyticsPage = lazy(() => import('../../pages/analytics/AnalyticsPage'))
@@ -207,6 +208,7 @@ export default function AppShell() {
                 <Route path="/report" element={<ReportPage />} />
                 <Route path="/mirror" element={<MirrorPage />} />
                 <Route path="/provenance" element={<ProvenancePage />} />
+                <Route path="/calibration" element={<CalibrationPage />} />
                 <Route path="/pipeline" element={<PipelinePage />} />
                 <Route path="/trace/:traceId" element={<TracePage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />

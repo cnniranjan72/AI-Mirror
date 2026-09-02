@@ -271,6 +271,24 @@ export const api = {
     return data;
   },
 
+  // === Accuracy ledger ===
+  // The system's own scorecard: what it claimed about you, and whether you
+  // said it was right. See backend/app/services/calibration.py.
+  getCalibrationReport: async (userId = activeUser()) => {
+    const { data } = await client.get('/calibration/report', { params: { user_id: userId } });
+    return data;
+  },
+  getOpenClaims: async (userId = activeUser(), limit = 20) => {
+    const { data } = await client.get('/calibration/open', { params: { user_id: userId, limit } });
+    return data;
+  },
+  sendClaimVerdict: async (claimId, verdict, claimType = 'inference', userId = activeUser()) => {
+    const { data } = await client.post('/calibration/verdict', {
+      user_id: userId, claim_type: claimType, claim_id: claimId, verdict,
+    });
+    return data;
+  },
+
   getProvenanceReport: async (userId = activeUser()) => {
     const { data } = await client.get('/provenance/report', { params: { user_id: userId } });
     return data;

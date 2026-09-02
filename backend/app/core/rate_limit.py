@@ -179,8 +179,18 @@ SEED_LIMITER = TokenBucketLimiter(capacity=5, per_seconds=3600, name="seed")
 # how fast anyone can spend database round-trips finding that out.
 FEEDBACK_LIMITER = TokenBucketLimiter(capacity=60, per_seconds=3600, name="feedback")
 
+# Calibration verdicts look like RL feedback but are not: each one writes a
+# single indexed upsert into the caller's OWN ledger, nothing shared. Reusing
+# the 60/hour limiter above throttled the feature itself — the report needs 20
+# scored answers before it says anything and 10 per confidence band before it
+# judges one, so a user working through their claims in one sitting hit the
+# wall on legitimate use. Found by running the flow; the suite never sees it
+# because conftest disables limiting.
+VERDICT_LIMITER = TokenBucketLimiter(capacity=300, per_seconds=3600, name="verdict")
+
 import_rate_limit = RateLimit(IMPORT_LIMITER)
 ingest_rate_limit = RateLimit(INGEST_LIMITER)
 query_rate_limit = RateLimit(QUERY_LIMITER)
 seed_rate_limit = RateLimit(SEED_LIMITER)
 feedback_rate_limit = RateLimit(FEEDBACK_LIMITER)
+verdict_rate_limit = RateLimit(VERDICT_LIMITER)
