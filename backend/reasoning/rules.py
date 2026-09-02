@@ -3,6 +3,7 @@ Rule Engine
 Modular behavioral interpretation rules
 All behavioral logic must be defined here, not hardcoded in interpreters
 """
+import re
 from typing import List, Optional, Dict, Any, Callable
 from abc import ABC, abstractmethod
 import logging
@@ -192,12 +193,41 @@ class LearningMotivationRule(Rule):
                      "how to", "guide", "programming", "coding", "science", "tech"]
 
     def _educational(self, behavior_objects):
+        """Behaviour objects whose OWN topic is educational.
+
+        Two fixes over the previous version, both measured against production
+        rather than argued.
+
+        It used to search the topic PLUS its subtopics AND its keywords, so a
+        cluster was classified by the company it kept - `#cooking` and
+        `#fitness` counted as educational because neighbouring topics mentioned
+        coding. 45% of all 195 real behaviour objects qualified. Matching the
+        topic alone gives 9%, and what survives (`#coding`, `#tech`,
+        `Content by creative_coding`) is defensible.
+
+        And it matched substrings, so "tech" fired inside "biotechnology".
+        Multi-word phrases still need a substring test; single words are
+        matched whole.
+
+        Known limitation, left deliberately. This measures SUBJECT MATTER, not
+        instructional intent: `#coding` says what the content is about, never
+        whether it teaches, and watching coding memes is not studying. The
+        better signal is the caption - across 6,451 real events 24% carry
+        instructional phrasing ("React tutorial - learn hooks step by step")
+        while subject-only captions ("vim tips #vim #programming") correctly do
+        not. Moving to it changes what the system claims about every user and
+        needs a threshold calibrated on real rather than seeded data, which
+        this corpus cannot supply: most of its events are synthetic.
+        """
         out = []
         for b in behavior_objects:
-            hay = (b.topic or "").lower() + " " + " ".join(getattr(b, "subtopics", []) or []).lower() \
-                  + " " + " ".join(getattr(b, "keywords", []) or []).lower()
-            if any(k in hay for k in self._EDU_KEYWORDS):
-                out.append(b)
+            topic = (b.topic or "").lower()
+            words = set(re.findall(r"[a-z]+", topic))
+            for keyword in self._EDU_KEYWORDS:
+                matched = (keyword in topic) if " " in keyword else (keyword in words)
+                if matched:
+                    out.append(b)
+                    break
         return out
 
     def _edu_share(self, behavior_objects, educational):
