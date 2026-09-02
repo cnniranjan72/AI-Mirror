@@ -168,6 +168,7 @@ class TestExplainAPI:
         route_paths = sorted(route.path for route in router.routes)
         expected = sorted([
             "/identity/snapshot", "/identity/current", "/identity/self-model",
+            "/identity/drift",
             "/reasoning/evidence", "/reasoning/inferences", "/reasoning/reflections",
             "/reasoning/behavior-objects", "/query/traces", "/query/traces/{trace_id}",
             "/cognitive/metrics", "/cognitive/summary",

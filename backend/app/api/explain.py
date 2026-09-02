@@ -95,6 +95,21 @@ async def get_current_identity(user_id: str = Depends(resolve_user_id)):
     }
 
 
+@router.get("/identity/drift")
+async def get_identity_drift(
+    user_id: str = Depends(resolve_user_id),
+    limit: int = Query(default=12, le=50),
+):
+    """How the model of this person moved, dimension by dimension.
+
+    The architecture has always stored versioned snapshots and measured the
+    distance between them; the figure lived in a log line and was never shown
+    to the person it describes.
+    """
+    from app.services.identity_drift import build_drift
+    return await build_drift(user_id, limit)
+
+
 @router.get("/identity/self-model", response_model=Optional[dict])
 async def get_self_model(user_id: str = Depends(resolve_user_id)):
     row = await fetchrow(

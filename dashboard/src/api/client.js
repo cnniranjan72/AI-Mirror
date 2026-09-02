@@ -271,6 +271,13 @@ export const api = {
     return data;
   },
 
+  // How the seventeen identity measures moved over time. Same vector the
+  // snapshot threshold is judged against, so chart and number agree.
+  getIdentityDrift: async (userId = activeUser(), limit = 12) => {
+    const { data } = await client.get('/identity/drift', { params: { user_id: userId, limit } });
+    return data;
+  },
+
   // === Collection control ===
   // Whether the system is allowed to collect. Enforced server-side at /ingest:
   // a switch honoured only by the client would be a request, not a guarantee.
