@@ -63,11 +63,11 @@ cognitive architecture, computational identity, evidence-based reasoning, behavi
 
 \section{Introduction}
 
-The ability to construct a computational representation of user identity from observed behavior is fundamental for intelligent interactive systems. Personalization, recommendation, digital wellbeing, and human-AI collaboration depend on modeling who the user is and how their preferences evolve \cite{kobsa2001, fischer2001}. Despite decades of research in user modeling, systematically transforming raw behavioral observations into an inspectable representation of computational identity remains largely open.
+The ability to construct a computational representation of user identity from observed behavior is fundamental for intelligent interactive systems. Personalization, recommendation, digital wellbeing, and human-AI collaboration depend on modeling who the user is and how their preferences evolve \cite{kobsa2001}. Despite decades of research in user modeling, systematically transforming raw behavioral observations into an inspectable representation of computational identity remains largely open.
 
-Existing approaches suffer from three interrelated limitations. First, user modeling relies on static features or matrix factorizations updated in batch, lacking identity tracking at the level of individual behavioral episodes \cite{adomavicius2005, koren2009}. Second, reasoning from behavioral signals to identity conclusions remains opaque inside neural network weights \cite{lipton2016, guidotti2018}. Third, platform-centric optimization maximizes engagement without providing insight into how behavioral data is interpreted \cite{resnick1997, milano2020}.
+Existing approaches suffer from three interrelated limitations. First, user modeling relies on static features or matrix factorizations updated in batch, lacking identity tracking at the level of individual behavioral episodes \cite{koren2009}. Second, reasoning from behavioral signals to identity conclusions remains opaque inside neural network weights \cite{lipton2016}. Third, platform-centric optimization maximizes engagement without providing insight into how behavioral data is interpreted \cite{resnick1997}.
 
-Recent progress in retrieval-augmented generation \cite{lewis2020} and large language models has renewed interest in memory-augmented systems. However, these approaches typically treat the language model as the central reasoning engine, delegating planning and decision-making to a stochastic process that is difficult to verify or reproduce \cite{bommasani2021, ji2023}, producing fluent but epistemically ungrounded outputs.
+Recent progress in retrieval-augmented generation \cite{lewis2020} and large language models has renewed interest in memory-augmented systems. However, these approaches typically treat the language model as the central reasoning engine, delegating planning and decision-making to a stochastic process that is difficult to verify or reproduce \cite{ji2023}, producing fluent but epistemically ungrounded outputs.
 
 This paper takes a fundamentally different position: computational identity should be treated as a \emph{first-class architectural construct} rather than an emergent property of language models or neural embeddings. AIMirror operationalizes this through a layered architecture in which evidence accumulation, identity evolution, cognitive planning, and language generation are explicitly separated. The language model appears exactly once, at the terminal stage, as a verbalizer of structured plans---never reasoning, deciding, planning, retrieving, or inferring.
 
@@ -89,11 +89,11 @@ The remainder of this paper is organized as follows. Section~\ref{sec:related} r
 \section{Related Work}
 \label{sec:related}
 
-Cognitive architectures such as SOAR \cite{soar1999}, ACT-R \cite{anderson2004} and Sigma \cite{sigma2015} model human cognition through production-rule memory and layered deliberative processing. AIMirror borrows their separation of memory tiers, but its object of study is different: it constructs a representation of one person from observed behaviour rather than a general model of cognition. User modeling has moved from stereotypes \cite{kobsa2001} through collaborative filtering \cite{resnick1997} and matrix factorization \cite{koren2009} to neural methods \cite{he2017}, distinguishing static profiles from dynamic and task-specific models \cite{fischer2001}. Digital twin research applies similar ideas in manufacturing \cite{tao2019}, healthcare \cite{okegbile2023} and HCI \cite{barricelli2022}, though for simulation rather than identity; work on computational identity \cite{floridi2011, turkle1995} has explored the philosophical dimension without an implementable architecture.
+Cognitive architectures such as SOAR \cite{soar1999} and ACT-R \cite{anderson2004} model human cognition through production-rule memory and layered deliberative processing. AIMirror borrows their separation of memory tiers, but its object of study is different: it constructs a representation of one person from observed behaviour rather than a general model of cognition. User modeling has moved from stereotypes \cite{kobsa2001} through collaborative filtering \cite{resnick1997} and matrix factorization \cite{koren2009} to neural methods \cite{he2017}. Digital twin research applies similar ideas across manufacturing, healthcare and HCI \cite{tao2019}, though for simulation rather than identity; work on computational identity \cite{floridi2011} has explored the philosophical dimension without an implementable architecture.
 
-Two further threads bear directly on the design. The explainable AI literature separates intrinsic interpretability from post-hoc explanation \cite{lipton2016, guidotti2018}, and argues that consequential decisions warrant models that are interpretable by construction \cite{rudin2019}; that argument motivates our decision to keep every inference inspectable rather than explaining it afterwards. Memory-augmented systems---retrieval-augmented generation \cite{lewis2020}, memory networks \cite{grave2016, weston2014}, and recent persistent-memory agents \cite{park2023, wang2023memgpt, zhong2023memorybank}---inherit the episodic, semantic and procedural distinction from cognitive science \cite{tulving1972, squire1992}. AIMirror uses five memory types and, unlike these systems, selects among them with a planner that never calls a language model.
+Two further threads bear directly on the design. The explainable AI literature separates intrinsic interpretability from post-hoc explanation \cite{lipton2016}, and argues that consequential decisions warrant models that are interpretable by construction \cite{rudin2019}; that argument motivates our decision to keep every inference inspectable rather than explaining it afterwards. Memory-augmented systems---retrieval-augmented generation \cite{lewis2020} and recent persistent-memory agents \cite{park2023}---inherit the episodic, semantic and procedural distinction from cognitive science \cite{tulving1972}. AIMirror uses five memory types and, unlike these systems, selects among them with a planner that never calls a language model.
 
-The closest contrast is with agent frameworks that place a language model at the centre of control. ReAct \cite{yao2023} interleaves reasoning and action as generations; AutoGPT \cite{autogpt2023}, LangChain \cite{langchain2023}, CAMEL \cite{li2023camel} and Voyager \cite{wang2023voyager} extend this to autonomous multi-step execution. The flexibility is real, and so is the cost: nondeterministic behaviour, opaque reasoning paths, and fabricated intermediate steps \cite{ji2023}. AIMirror takes the opposite position, and the rest of this paper is largely an account of what that costs and what it buys.
+The closest contrast is with agent frameworks that place a language model at the centre of control. ReAct \cite{yao2023} interleaves reasoning and action as generations; AutoGPT \cite{autogpt2023} and LangChain \cite{langchain2023} extend this to autonomous multi-step execution. The flexibility is real, and so is the cost: nondeterministic behaviour, opaque reasoning paths, and fabricated intermediate steps \cite{ji2023}. AIMirror takes the opposite position, and the rest of this paper is largely an account of what that costs and what it buys.
 
 \subsection{Comparative Analysis}
 Table~\ref{table:comparison} compares AIMirror against representative systems across six architectural dimensions. No existing system simultaneously provides identity evolution, intrinsic explainability, multi-memory architecture, evidence tracking with counter-evidence, LLM-free reasoning, and immutable identity snapshots.
@@ -554,32 +554,17 @@ Evaluation demonstrates deterministic pipeline behavior (100/100 identical outpu
 \bibitem{kobsa2001}
 A. Kobsa, ``Generic user modeling systems,'' \emph{User Model. User-Adapt. Interact.}, vol. 11, no. 1--2, pp. 49--63, 2001.
 
-\bibitem{fischer2001}
-G. Fischer, ``User modeling in human--computer interaction,'' \emph{User Model. User-Adapt. Interact.}, vol. 11, no. 1--2, pp. 65--86, 2001.
-
-\bibitem{adomavicius2005}
-G. Adomavicius and A. Tuzhilin, ``Toward the next generation of recommender systems: A survey of the state-of-the-art and possible extensions,'' \emph{IEEE Trans. Knowl. Data Eng.}, vol. 17, no. 6, pp. 734--749, 2005.
-
 \bibitem{koren2009}
 Y. Koren, R. Bell, and C. Volinsky, ``Matrix factorization techniques for recommender systems,'' \emph{Computer}, vol. 42, no. 8, pp. 30--37, 2009.
 
 \bibitem{lipton2016}
 Z. C. Lipton, ``The mythos of model interpretability,'' \emph{Queue}, vol. 16, no. 3, pp. 31--57, 2018.
 
-\bibitem{guidotti2018}
-R. Guidotti \emph{et al.}, ``A survey of methods for explaining black box models,'' \emph{ACM Comput. Surv.}, vol. 51, no. 5, pp. 1--42, 2018.
-
 \bibitem{resnick1997}
 P. Resnick and H. R. Varian, ``Recommender systems,'' \emph{Commun. ACM}, vol. 40, no. 3, pp. 56--58, 1997.
 
-\bibitem{milano2020}
-S. Milano, M. Taddeo, and L. Floridi, ``Recommender systems and their ethical challenges,'' \emph{AI \& Society}, vol. 35, no. 4, pp. 957--967, 2020.
-
 \bibitem{lewis2020}
 P. Lewis \emph{et al.}, ``Retrieval-augmented generation for knowledge-intensive NLP tasks,'' in \emph{Adv. Neural Inf. Process. Syst.}, vol. 33, pp. 9459--9474, 2020.
-
-\bibitem{bommasani2021}
-R. Bommasani \emph{et al.}, ``On the opportunities and risks of foundation models,'' arXiv:2108.07258, 2021.
 
 \bibitem{ji2023}
 Z. Ji \emph{et al.}, ``Survey of hallucination in natural language generation,'' \emph{ACM Comput. Surv.}, vol. 55, no. 12, pp. 1--38, 2023.
@@ -590,41 +575,20 @@ J. E. Laird, A. Newell, and P. S. Rosenbloom, ``SOAR: An architecture for genera
 \bibitem{anderson2004}
 J. R. Anderson \emph{et al.}, ``An integrated theory of the mind,'' \emph{Psychol. Rev.}, vol. 111, no. 4, pp. 1036--1060, 2004.
 
-\bibitem{sigma2015}
-P. S. Rosenbloom, A. Dey, and A. G. Olteanu, ``The Sigma cognitive architecture and system,'' in \emph{Proc. Annu. Conf. Cogn. Sci. Soc.}, 2015, pp. 2022--2027.
-
 \bibitem{he2017}
 X. He \emph{et al.}, ``Neural collaborative filtering,'' in \emph{Proc. WWW}, 2017, pp. 173--182.
 
 \bibitem{rudin2019}
 C. Rudin, ``Stop explaining black box machine learning models for high stakes decisions and use interpretable models instead,'' \emph{Nat. Mach. Intell.}, vol. 1, no. 5, pp. 206--215, 2019.
 
-\bibitem{grave2016}
-E. Grave, A. Joulin, and N. Usunier, ``Improving neural language models with a continuous cache,'' in \emph{Proc. ICLR}, 2017.
-
-\bibitem{weston2014}
-J. Weston, S. Chopra, and A. Bordes, ``Memory networks,'' in \emph{Proc. ICLR}, 2015.
-
 \bibitem{tulving1972}
 E. Tulving, ``Episodic and semantic memory,'' in \emph{Organization of Memory}, E. Tulving and W. Donaldson, Eds. New York, NY, USA: Academic Press, 1972, pp. 381--403.
-
-\bibitem{squire1992}
-L. R. Squire, ``Memory and the hippocampus: A synthesis from findings with rats, monkeys, and humans,'' \emph{Psychol. Rev.}, vol. 99, no. 2, pp. 195--231, 1992.
 
 \bibitem{tao2019}
 F. Tao \emph{et al.}, ``Digital twin in industry: State-of-the-art,'' \emph{IEEE Trans. Ind. Informat.}, vol. 15, no. 4, pp. 2405--2415, 2019.
 
-\bibitem{okegbile2023}
-S. D. Okegbile, J. Cai, D. Niyato, and C. Yi, ``Human digital twin for personalized healthcare: Vision, architecture and future directions,'' \emph{IEEE Netw.}, vol. 37, no. 2, pp. 56--63, 2023.
-
-\bibitem{barricelli2022}
-B. R. Barricelli and D. Fogli, ``Digital twins in human-computer interaction: A systematic review,'' \emph{Int. J. Hum.-Comput. Interact.}, vol. 39, no. 7, pp. 1--18, 2022.
-
 \bibitem{floridi2011}
 L. Floridi, ``The informational nature of personal identity,'' \emph{Minds Mach.}, vol. 21, no. 4, pp. 549--566, 2011.
-
-\bibitem{turkle1995}
-S. Turkle, \emph{Life on the Screen: Identity in the Age of the Internet}. New York, NY, USA: Simon \& Schuster, 1995.
 
 \bibitem{schulman2017}
 J. Schulman \emph{et al.}, ``Proximal policy optimization algorithms,'' arXiv:1707.06347, 2017.
@@ -635,12 +599,6 @@ N. Reimers and I. Gurevych, ``Sentence-BERT: Sentence embeddings using Siamese B
 \bibitem{park2023}
 J. S. Park \emph{et al.}, ``Generative agents: Interactive simulacra of human behavior,'' in \emph{Proc. UIST}, 2023, pp. 1--22.
 
-\bibitem{wang2023memgpt}
-C. Wang \emph{et al.}, ``MemGPT: Towards LLMs as operating systems,'' arXiv:2310.08560, 2023.
-
-\bibitem{zhong2023memorybank}
-W. Zhong \emph{et al.}, ``MemoryBank: Enhancing large language models with long-term memory,'' in \emph{Proc. AAAI}, 2023, pp. 123--131.
-
 \bibitem{yao2023}
 S. Yao \emph{et al.}, ``ReAct: Synergizing reasoning and acting in language models,'' in \emph{Proc. ICLR}, 2023.
 
@@ -649,12 +607,6 @@ AutoGPT, ``AutoGPT: An autonomous GPT-4 experiment,'' GitHub repository, 2023. [
 
 \bibitem{langchain2023}
 H. Chase, ``LangChain: Building applications with LLMs through composability,'' GitHub repository, 2023. [Online]. Available: https://github.com/langchain-ai/langchain
-
-\bibitem{li2023camel}
-G. Li \emph{et al.}, ``CAMEL: Communicative agents for mind exploration of large scale language model society,'' in \emph{Proc. NeurIPS}, 2023.
-
-\bibitem{wang2023voyager}
-G. Wang \emph{et al.}, ``Voyager: An open-ended embodied agent with large language models,'' in \emph{Proc. NeurIPS}, 2023.
 
 \bibitem{dwork2014}
 C. Dwork and A. Roth, ``The algorithmic foundations of differential privacy,'' \emph{Found. Trends Theor. Comput. Sci.}, vol. 9, no. 3--4, pp. 211--407, 2014.
