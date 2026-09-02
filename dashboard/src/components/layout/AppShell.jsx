@@ -41,6 +41,7 @@ const DriftPage = lazy(() => import('../../pages/drift/DriftPage'))
 const XrayPage = lazy(() => import('../../pages/xray/XrayPage'))
 const CounterfactualPage = lazy(() => import('../../pages/counterfactual/CounterfactualPage'))
 const SpacePage = lazy(() => import('../../pages/space/SpacePage'))
+const ContestedPage = lazy(() => import('../../pages/contested/ContestedPage'))
 const PipelinePage = lazy(() => import('../../pages/pipeline/PipelinePage'))
 const TracePage = lazy(() => import('../../pages/trace/TracePage'))
 const AnalyticsPage = lazy(() => import('../../pages/analytics/AnalyticsPage'))
@@ -223,6 +224,7 @@ export default function AppShell() {
                 <Route path="/xray" element={<XrayPage />} />
                 <Route path="/counterfactual" element={<CounterfactualPage />} />
                 <Route path="/space" element={<SpacePage />} />
+                <Route path="/contested" element={<ContestedPage />} />
                 <Route path="/pipeline" element={<PipelinePage />} />
                 <Route path="/trace/:traceId" element={<TracePage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />

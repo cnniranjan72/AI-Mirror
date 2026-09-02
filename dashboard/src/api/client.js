@@ -294,6 +294,11 @@ export const api = {
 
   // The stored embeddings projected to 3D. PCA, so the same history always
   // draws the same shape; the response carries how much structure survives.
+  getContestedClaims: async (userId = activeUser(), limit = 40) => {
+    const { data } = await client.get('/reasoning/contested', { params: { user_id: userId, limit } });
+    return data;
+  },
+
   getBehaviourSpace: async (userId = activeUser(), limit = 600) => {
     const { data } = await client.get('/identity/space', { params: { user_id: userId, limit } });
     return data;

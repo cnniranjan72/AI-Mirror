@@ -290,6 +290,28 @@ class InferenceEngine:
             affected_creators = list(subjects.get("creators", []))
             affected_behaviors = list(subjects.get("behaviors", []))
             
+            # An inference used to cite every piece of evidence in the context.
+            # That made the citation say nothing: a claim about creator
+            # dependence listed cooking-topic evidence among its support, and
+            # once evidence started carrying its own contradictions every
+            # belief inherited every other belief's counter-evidence, so all of
+            # them reported the same net strength to three decimal places.
+            # Rules declare their subjects, so the evidence bearing on the
+            # claim can be picked out instead.
+            relevant_evidence = self._evidence_for_subjects(
+                context.evidence, affected_topics, affected_creators
+            )
+            if relevant_evidence:
+                supporting_evidence = [e.evidence_id for e in relevant_evidence]
+                evidence_basis = "subjects"
+            else:
+                # The structural rules - about the shape of a history rather
+                # than any topic in it - declare no subjects and genuinely do
+                # rest on the whole context. They say so rather than appearing
+                # to have made a selection they did not make.
+                supporting_evidence = [e.evidence_id for e in context.evidence]
+                evidence_basis = "all"
+
             # Generate recommendation seed
             recommendation_seed = self._generate_recommendation_seed(
                 rule_name,
@@ -306,8 +328,8 @@ class InferenceEngine:
                 confidence=confidence,
                 importance=importance,
                 strength=strength,
-                supporting_evidence=[e.evidence_id for e in context.evidence],
-                evidence_summary=f"{len(context.evidence)} pieces of evidence with {context.overall_confidence:.1%} confidence",
+                supporting_evidence=supporting_evidence,
+                evidence_summary=f"{len(supporting_evidence)} pieces of evidence with {context.overall_confidence:.1%} confidence",
                 affected_topics=list(set(affected_topics))[:5],
                 affected_creators=list(set(affected_creators))[:5],
                 affected_behaviors=affected_behaviors,
@@ -328,6 +350,11 @@ class InferenceEngine:
                     # Inferences are regenerated wholesale on every ingest, so
                     # old rows age out on their own.
                     "basis_version": 2,
+                    # "subjects" means the cited evidence was selected by what
+                    # this rule says its claim is about; "all" means the rule
+                    # declared no subjects and the whole context is cited. A
+                    # reader cannot tell the two apart from the list alone.
+                    "evidence_basis": evidence_basis,
                     "subjects_declared": bool(
                         affected_topics or affected_creators or affected_behaviors
                     ),
@@ -400,6 +427,32 @@ class InferenceEngine:
             logger.error(f"Error calculating importance: {str(e)}", exc_info=True)
             return 0.5
     
+    @staticmethod
+    def _evidence_for_subjects(evidence, topics, creators):
+        """The evidence bearing on a rule's declared subjects.
+
+        Matching is on the metadata the collectors write - topic for topical
+        evidence, creator for creator evidence - so temporal and interaction
+        evidence, which is about no particular subject, is never selected here
+        and reaches only the rules that declare nothing.
+
+        Returns an empty list when nothing matches, which the caller reads as
+        "this rule made no selection" rather than "this rule has no evidence".
+        """
+        wanted_topics = {str(t).lower().lstrip("#") for t in topics if t}
+        wanted_creators = {str(c).lower() for c in creators if c}
+        if not wanted_topics and not wanted_creators:
+            return []
+
+        picked = []
+        for ev in evidence:
+            meta = ev.metadata or {}
+            topic = str(meta.get("topic", "")).lower().lstrip("#")
+            creator = str(meta.get("creator", "")).lower()
+            if (topic and topic in wanted_topics) or (creator and creator in wanted_creators):
+                picked.append(ev)
+        return picked
+
     def _generate_recommendation_seed(
         self,
         rule_name: str,

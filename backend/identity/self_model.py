@@ -17,6 +17,13 @@ from .identity_snapshot import IdentitySnapshot
 logger = logging.getLogger(__name__)
 
 
+# One observation in three arguing the other way makes a belief contested.
+# Stated as a share rather than a count so it does not drift with how much
+# the account has been used: net strength is (support - counter) / total, so
+# a third of observations dissenting lands exactly here.
+CONTESTED_NET_STRENGTH = 1.0 / 3.0
+
+
 class BeliefType(str, Enum):
     """Type of belief"""
     MOTIVATION = "motivation"
@@ -92,12 +99,32 @@ class Belief(BaseModel):
             self.update_version()
     
     def is_strong(self, threshold: float = 0.7) -> bool:
-        """Check if belief is strong"""
-        return self.strength >= threshold
+        """Strong when the belief is well supported AND not contested.
+
+        The second half matters: without it STRONG and UNCERTAIN were
+        independent predicates and a belief could be both at once, which is
+        not a classification.
+
+        The bar is deliberately not "no counter-evidence at all". Measured on
+        real histories almost every claim accumulates some skipped
+        observations, so a zero-counter requirement would make STRONG
+        unreachable and collapse the distinction it exists to draw.
+        """
+        return self.strength >= threshold and not self.is_uncertain()
     
     def is_uncertain(self, threshold: float = 0.5) -> bool:
-        """Check if belief is uncertain"""
-        return self.uncertainty >= threshold
+        """Uncertain when the inference behind it was weak, or when the
+        observations underneath it are close to evenly split.
+
+        The second half is the part that was missing. Uncertainty was
+        1 - confidence and nothing else, so a belief resting on evidence that
+        contradicted itself as often as it supported it was still reported as
+        settled. A third of the observations pointing the other way is enough
+        to say the question is open.
+        """
+        if self.uncertainty >= threshold:
+            return True
+        return self.net_evidence_strength <= CONTESTED_NET_STRENGTH
 
 
 class UncertaintyMap(BaseModel):
@@ -408,17 +435,44 @@ class SelfModelEngine:
                 # Get supporting evidence
                 supporting_evidence_ids = inference.supporting_evidence
                 
-                # Check for counter evidence
+                # Counter-evidence reaches a belief two ways: another piece of
+                # evidence conflicting with a supporting one, and the single
+                # observations a supporting piece recorded as contradicting
+                # itself. The second is what the collectors actually produce -
+                # a skipped reel is not its own Evidence object - so a belief
+                # reading only the first went on reporting none of either.
                 counter_evidence_ids = []
+                support_observations = 0
+                matched_evidence = 0
                 for evidence_id in supporting_evidence_ids:
                     for ev in evidence:
-                        if ev.evidence_id == evidence_id and ev.counter_evidence_ids:
-                            counter_evidence_ids.extend(ev.counter_evidence_ids)
-                
-                # Calculate net evidence strength
+                        if ev.evidence_id != evidence_id:
+                            continue
+                        matched_evidence += 1
+                        support_observations += len(ev.supporting_events)
+                        counter_evidence_ids.extend(ev.counter_evidence_ids)
+                        counter_evidence_ids.extend(ev.conflicting_observations)
+
                 evidence_count = len(supporting_evidence_ids)
                 counter_count = len(counter_evidence_ids)
-                net_strength = (evidence_count - counter_count) / max(1, evidence_count + counter_count)
+
+                # Both sides of the ratio have to be in the same unit. The
+                # supporting side is a count of evidence objects and the
+                # contradicting side is a count of individual observations, so
+                # comparing them directly would let three pieces of evidence
+                # carrying thirty skips between them read as -0.82 and bury a
+                # belief that is merely mixed. Where the evidence objects are
+                # in hand their own observations are counted instead; where
+                # they are not, nothing is known to contradict and the old
+                # object-level count still applies.
+                if matched_evidence:
+                    support_side = support_observations
+                else:
+                    support_side = evidence_count
+                net_strength = (
+                    (support_side - counter_count) / max(1, support_side + counter_count)
+                )
+                net_strength = max(-1.0, min(1.0, net_strength))
                 
                 belief = Belief(
                     belief_id=f"belief_{inference.inference_id}_{uuid.uuid4().hex[:6]}",

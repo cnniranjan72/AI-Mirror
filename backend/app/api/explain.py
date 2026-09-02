@@ -36,6 +36,11 @@ from pydantic import BaseModel
 from app.db.postgres import fetch, fetchrow, fetchval
 
 logger = logging.getLogger(__name__)
+# A popular topic can accumulate hundreds of skips. The count is reported in
+# full; only the resolved rows are capped, so the number a reader sees is never
+# the truncated one.
+MAX_CONFLICTS_RETURNED = 50
+
 router = APIRouter()
 
 
@@ -150,6 +155,28 @@ async def get_behaviour_space(
     """
     from app.services.behaviour_space import build_space
     return await build_space(user_id, limit)
+
+
+@router.get("/reasoning/contested")
+async def get_contested_claims(
+    user_id: str = Depends(resolve_user_id),
+    limit: int = Query(default=40, le=100),
+):
+    """The claims this system's own evidence argues against.
+
+    Every piece of evidence records the observations that contradict it as well
+    as the ones that support it. Four layers computed, stored, indexed and read
+    those contradictions back, and no surface ever showed them to the person
+    they were about.
+
+    Sorted by how contested a claim is rather than how confident, because a
+    confident claim with a third of its evidence pointing the other way is the
+    one worth a reader's attention, and every other view here already sorts by
+    confidence.
+    """
+    from app.services.contested import build_contested
+
+    return await build_contested(user_id, limit=limit)
 
 
 @router.get("/identity/drift")
@@ -490,7 +517,10 @@ async def explain_evidence_detail(evidence_id: str, authorization: Optional[str]
     ev = await fetchrow("SELECT * FROM evidence WHERE evidence_id = $1", evidence_id)
     if not ev:
         return {"error": "Evidence not found"}
-    ev = _parse_json_fields(dict(ev), ["supporting_behavior_objects", "supporting_evidence_ids", "metadata"])
+    ev = _parse_json_fields(dict(ev), [
+        "supporting_events", "supporting_behavior_objects", "metadata",
+        "counter_evidence_ids", "conflicting_observations",
+    ])
     user_id = ev["user_id"]
     enforce_user_match(authorization, user_id)
 
@@ -514,14 +544,40 @@ async def explain_evidence_detail(evidence_id: str, authorization: Optional[str]
     )
     identity_traits = _parse_json_fields(dict(snapshot), ["dominant_topics"]) if snapshot else {}
 
-    supporting_ids = ev.get("supporting_evidence_ids", [])
+    # This block used to read ev["supporting_evidence_ids"] - a column the
+    # evidence table does not have - so "counter_evidence" was permanently [],
+    # and it would have been the wrong content anyway: it looked up supporting
+    # evidence and returned it under the name of its opposite.
+    counter_ids = ev.get("counter_evidence_ids") or []
     counter_evidence = []
-    if isinstance(supporting_ids, list) and supporting_ids:
-        placeholders = ", ".join(f"${i+1}" for i in range(len(supporting_ids)))
+    if isinstance(counter_ids, list) and counter_ids:
+        placeholders = ", ".join(f"${i+1}" for i in range(len(counter_ids)))
         counter_evidence = [
             dict(r) for r in await fetch(
                 f"SELECT evidence_id, evidence_type, confidence, explanation FROM evidence WHERE evidence_id IN ({placeholders})",
-                *supporting_ids
+                *counter_ids
+            )
+        ]
+
+    # The observations that argue against this evidence are events, not other
+    # evidence, so they are resolved here rather than left as bare ids. Showing
+    # someone the reels they scrolled past is the whole point of recording them.
+    conflicting_ids = []
+    for raw in (ev.get("conflicting_observations") or []):
+        try:
+            conflicting_ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+
+    conflicting_observations = []
+    if conflicting_ids:
+        capped = conflicting_ids[:MAX_CONFLICTS_RETURNED]
+        placeholders = ", ".join(f"${i+2}" for i in range(len(capped)))
+        conflicting_observations = [
+            dict(r) for r in await fetch(
+                f"SELECT id, caption, username, watch_time, timestamp FROM events "
+                f"WHERE user_id = $1 AND id IN ({placeholders}) ORDER BY watch_time ASC",
+                user_id, *capped
             )
         ]
 
@@ -531,6 +587,10 @@ async def explain_evidence_detail(evidence_id: str, authorization: Optional[str]
         "inferences": [dict(r) for r in inferences],
         "identity_traits": identity_traits,
         "counter_evidence": counter_evidence,
+        "conflicting_observations": conflicting_observations,
+        "conflicting_total": len(conflicting_ids),
+        "conflict_resolution": ev.get("conflict_resolution"),
+        "net_confidence": ev.get("net_confidence"),
     }
 
 

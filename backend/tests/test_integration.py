@@ -173,6 +173,7 @@ class TestExplainAPI:
             "/identity/counterfactual",
             "/query/traces/{trace_id}/xray",
             "/reasoning/evidence", "/reasoning/inferences", "/reasoning/reflections",
+            "/reasoning/contested",
             "/reasoning/behavior-objects", "/query/traces", "/query/traces/{trace_id}",
             "/cognitive/metrics", "/cognitive/summary",
             "/explain/{trace_id}", "/explain/evidence/{evidence_id}", "/explain/identity/{identity_id}",
