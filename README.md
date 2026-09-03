@@ -560,10 +560,34 @@ on phrasing it was not written from. So roughly half of naturally-worded
 questions were being answered from the wrong stores, confidently, with nothing
 in the interface admitting it.
 
-Every answer in Chat now carries the reading it was given — *Read as: Who I am* —
-marked **unsure** when the classifier's own confidence is below 0.5. Clicking it
-offers the other readings; picking one re-asks the same question that way and
-replaces the answer in place, because a correction is not a new question.
+Every answer in Chat carries the reading it was given — *Read as: Who I am*.
+Clicking it offers the other readings; picking one re-asks the same question
+that way and replaces the answer in place, because a correction is not a new
+question.
+
+When no pattern matched the question at all, the chip says so — *Couldn't tell
+what you were asking* — and the picker opens by default, because at that point
+the alternatives are the useful thing on screen. The reading is a default
+rather than a conclusion, but the planner still builds a retrieval plan from
+it, so without this the answer looks like every other answer.
+
+That marker used to be driven by a confidence threshold: below 0.5. It fired on
+**56 of 65** real production queries and 33 of 36 held-out ones, and a warning
+that appears on nearly everything tells the reader nothing. Grouping the
+held-out set by whether anything matched instead:
+
+| | Queries | Correct |
+|---|---|---|
+| matched nothing | 11 | **9.1%** |
+| matched something | 25 | 76.0% |
+
+Ambiguity — several classes matching, one winning on score or priority — looked
+like a second signal and is not. Separated from the unmatched cases it scores
+75.0% against 76.2% held out, and 89.7% against 93.9% on the 596-query set, so
+it sits with the confident readings rather than against them; flagging it would
+put the noise straight back. What is flagged now is a state the classifier
+already computes, not a tuned threshold. The held-out set has already been
+examined, so these figures establish the direction and not the magnitude.
 
 `PlannerOrchestrator.build_plan` had accepted an `override_intent` since it was
 written, and nothing had ever passed one. The work was in making the override

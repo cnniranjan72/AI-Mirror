@@ -89,6 +89,9 @@ export const api = {
       pipeline_time_ms: data.pipeline_time_ms,
       intent: data.intent || null,
       intent_confidence: data.intent_confidence ?? null,
+      // Defaults true so an older backend, which sends no such field, is
+      // treated as having understood rather than as having failed.
+      intent_understood: data.intent_understood !== false,
       intent_options: data.intent_options || [],
       intent_overridden: !!data.intent_overridden,
     };

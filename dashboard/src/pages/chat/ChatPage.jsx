@@ -17,29 +17,37 @@ const CONVERSATION_ID = `conv_${USER_ID}`
 // wrong without saying so.
 function ReadingControl({ msg, open, busy, onToggle, onPick }) {
   const label = msg.intentOptions?.find(o => o.value === msg.intent)?.label || msg.intent
-  // A low classifier confidence is the signal that the reading is worth
-  // checking. An override has no confidence to show: the user said what they
-  // meant, so the number would be theatre.
-  const unsure = !msg.intentOverridden && msg.intentConfidence != null && msg.intentConfidence < 0.5
+  // Nothing in the question matched any pattern, so the reading is a default
+  // and the answer was assembled from whatever that default retrieves. On the
+  // held-out set those readings are 9% correct against 76% for the rest.
+  //
+  // This replaces a confidence threshold. Warning below 0.5 fired on 56 of 65
+  // real queries and 33 of 36 held-out ones, which is a warning nobody can act
+  // on. An override is understood by construction: the user said what they
+  // meant.
+  const unread = !msg.intentOverridden && msg.intentUnderstood === false
 
   return (
     <div style={{ marginTop: 8 }}>
       <button
         onClick={onToggle}
         disabled={busy}
-        title="How this question was read. Click to read it a different way."
+        title={unread
+          ? "Nothing in this question matched a known shape, so the answer was assembled from a default. Pick what you meant."
+          : "How this question was read. Click to read it a different way."}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 5,
           padding: '3px 9px', borderRadius: 100, cursor: busy ? 'wait' : 'pointer',
-          background: unsure ? 'rgba(251,191,36,0.10)' : 'rgba(148,163,184,0.10)',
-          border: '1px solid ' + (unsure ? 'rgba(251,191,36,0.28)' : 'var(--border-subtle)'),
-          color: unsure ? '#fbbf24' : 'var(--text-muted)',
+          background: unread ? 'rgba(251,191,36,0.10)' : 'rgba(148,163,184,0.10)',
+          border: '1px solid ' + (unread ? 'rgba(251,191,36,0.28)' : 'var(--border-subtle)'),
+          color: unread ? '#fbbf24' : 'var(--text-muted)',
           fontSize: 10.5, fontWeight: 600,
         }}
       >
-        {busy ? 'Re-reading...' : 'Read as: ' + label}
+        {busy ? 'Re-reading...'
+          : unread ? "Couldn't tell what you were asking"
+          : 'Read as: ' + label}
         {msg.intentOverridden && !busy && <span style={{ opacity: 0.75 }}>· yours</span>}
-        {unsure && !busy && <span style={{ opacity: 0.75 }}>· unsure</span>}
         <span style={{ opacity: 0.6 }}>{open ? '\u25be' : '\u25b8'}</span>
       </button>
 
@@ -52,7 +60,7 @@ function ReadingControl({ msg, open, busy, onToggle, onPick }) {
       {open && (
         <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(148,163,184,0.12)' }}>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            Read it as something else
+            {unread ? 'What were you asking?' : 'Read it as something else'}
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {msg.intentOptions.filter(o => o.value !== msg.intent).map(o => (
@@ -132,6 +140,7 @@ export default function ChatPage() {
         intentConfidence: res?.intent_confidence ?? null,
         intentOptions: res?.intent_options || [],
         intentOverridden: !!res?.intent_overridden,
+        intentUnderstood: res?.intent_understood !== false,
       }])
     } catch (err) {
       setStreamingMsg('')
@@ -166,6 +175,7 @@ export default function ChatPage() {
         intentConfidence: res?.intent_confidence ?? null,
         intentOptions: res?.intent_options || m.intentOptions,
         intentOverridden: !!res?.intent_overridden,
+        intentUnderstood: res?.intent_understood !== false,
         rereadError: null,
       }))
     } catch (err) {
@@ -307,9 +317,15 @@ export default function ChatPage() {
                   {msg.intent && (
                     <ReadingControl
                       msg={msg}
-                      open={correcting === msg.id}
+                      open={correcting === msg.id || (msg.intentUnderstood === false && correcting !== -msg.id)}
                       busy={rereadingId === msg.id}
-                      onToggle={() => setCorrecting(correcting === msg.id ? null : msg.id)}
+                      // When the question was not understood the picker starts
+                      // open, so closing it has to be expressible too: -id is
+                      // the explicit "closed" state for that message.
+                      onToggle={() => {
+                        const isOpen = correcting === msg.id || (msg.intentUnderstood === false && correcting !== -msg.id)
+                        setCorrecting(isOpen ? -msg.id : msg.id)
+                      }}
                       onPick={intent => reread(msg, intent)}
                     />
                   )}

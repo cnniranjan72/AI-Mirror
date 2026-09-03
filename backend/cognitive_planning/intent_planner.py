@@ -30,6 +30,37 @@ _INTENT_PRIORITY: Dict[UserIntentType, int] = {
 _MAX_CONFIDENCE_MATCHES = 3
 
 
+def matched_nothing(plan) -> bool:
+    """True when no pattern in any class matched the query.
+
+    The reading is then a default rather than a conclusion, and the planner
+    still builds a retrieval plan from it, so the answer looks like every other
+    answer. This is the one signal worth showing a reader.
+
+    The interface previously warned below an intent_confidence of 0.5. That
+    fired on 56 of 65 real production queries and 33 of 36 held-out ones; a
+    warning that appears on nearly everything says nothing. Grouping the
+    held-out set by state instead (36 queries, overall accuracy 55.6%):
+
+        matched nothing     11 queries    9.1% correct
+        matched something   25 queries   76.0% correct
+
+    Ambiguity - several classes matching, one winning on score or priority -
+    looked like a second signal and is not. Separated from the unmatched cases
+    it scores 75.0% against 76.2% on the held-out set and 89.7% against 93.9%
+    on the 596-query synthetic set, so it sits with the confident readings
+    rather than against them, and flagging it would restore the noise this
+    replaces. The synthetic set agrees on the distinction that does hold:
+    74.6% unmatched against 92.4% matched.
+
+    This is a state the classifier already computes, not a tuned threshold.
+    The held-out set has already been examined (see
+    tests/test_intent_generalisation.py), so these figures establish the
+    direction and not the magnitude.
+    """
+    return plan.intent_type == UserIntentType.UNKNOWN
+
+
 def requirements_for(intent_type: UserIntentType) -> Dict[str, bool]:
     """What a reading requires, which is what the retrieval planner acts on.
 

@@ -253,3 +253,73 @@ def test_options_offered_are_the_real_enum_minus_unknown():
     assert len(offered) == len(set(offered))
     for option in INTENT_OPTIONS:
         assert option["label"] and option["label"] != option["value"], option
+
+
+# ---------------------------------------------------------------------------
+# When the classifier matched nothing at all.
+#
+# The interface used to warn below an intent_confidence of 0.5. Measured
+# against real traces that fired on 56 of 65 queries, and on the held-out set
+# 33 of 36 - a warning on nearly everything carries no information. Grouping
+# the held-out set by whether anything matched instead:
+#
+#     matched nothing     11 queries    9.1% correct
+#     matched something   25 queries   76.0% correct
+#
+# Ambiguity looked like a second signal and is not: separated from the
+# unmatched cases it scores 75.0% against 76.2% held out, and 89.7% against
+# 93.9% on the 596-query set. It belongs with the confident readings.
+
+def test_a_query_that_matches_nothing_is_reported_as_such():
+    from cognitive_planning.intent_planner import matched_nothing
+
+    p = _planner()
+    assert matched_nothing(p.classify("hello")) is True
+    assert matched_nothing(p.classify("")) is True
+    assert matched_nothing(p.classify("who am i")) is False
+
+
+def test_ambiguity_alone_is_not_a_warning():
+    """Ambiguity sits with the confident readings, not against them.
+
+    Flagging it would put the noise back: on the held-out set it scores 75.0%
+    against 76.2% for unambiguous readings. A query that matched several
+    classes still matched something, which is the distinction that carries.
+    """
+    from cognitive_planning.intent_planner import matched_nothing
+
+    p = _planner()
+    ambiguous = p.classify("tell me about my character")
+    assert ambiguous.ambiguity_score > 0, "this query stopped being ambiguous"
+    assert ambiguous.intent_type != UserIntentType.UNKNOWN
+    assert matched_nothing(ambiguous) is False
+
+
+def test_an_override_is_always_understood():
+    """The user said what they meant, so there is nothing to warn about."""
+    from cognitive_planning.intent_planner import matched_nothing
+
+    for name in ("identity_question", "coaching", "memory_question"):
+        assert matched_nothing(_planner().plan_for("hello", name)) is False
+
+
+def test_the_api_reports_whether_the_question_was_read():
+    """The flag must be derived from the plan, like the reading itself.
+
+    A client cannot compute this: it would need the classifier's internals.
+    Sending a confidence number instead is what produced a warning on 86% of
+    real queries.
+    """
+    import inspect
+    import textwrap
+
+    from app.api import query as qmod
+
+    src = textwrap.dedent(inspect.getsource(qmod.query_insights))
+    assert "intent_understood=" in src
+    assert "matched_nothing(intent_plan)" in src, (
+        "intent_understood is not derived from the plan the pipeline built")
+    assert "intent_understood" in qmod.QueryResponse.model_fields
+    # Defaulting to True keeps a fallback answer, which has no plan, from
+    # reading as a failure to understand.
+    assert qmod.QueryResponse.model_fields["intent_understood"].default is True

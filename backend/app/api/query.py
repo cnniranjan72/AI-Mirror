@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app.api.deps import enforce_write_match, resolve_user_id
 from app.services import rag, persona as persona_svc, chat_memory
 from backend.cognitive_pipeline.pipeline import get_cognitive_pipeline
+from backend.cognitive_planning.intent_planner import matched_nothing
 from backend.cognitive_planning.planner_models import UserIntentType
 from backend.verbalizer.followups import generate_follow_ups
 from app.core.rate_limit import query_rate_limit
@@ -73,6 +74,12 @@ class QueryResponse(BaseModel):
     # wrong sources should at least say which sources it thought to use.
     intent: Optional[str] = None
     intent_confidence: Optional[float] = None
+    # False when no pattern matched the question at all, so the reading is a
+    # default rather than a conclusion. This replaces a confidence threshold
+    # the client used to apply: below 0.5 fired on 56 of 65 real queries, while
+    # this fires on the 11 of 36 held-out queries that are 9% correct against
+    # 76% for the rest. See intent_planner.matched_nothing.
+    intent_understood: bool = True
     # Present so a client can offer the alternatives without hardcoding a list
     # that would drift from the enum.
     intent_options: list = []
@@ -149,6 +156,7 @@ async def query_insights(req: QueryRequest, authorization: Optional[str] = Heade
                 pipeline_time_ms=p_result.total_time_ms,
                 intent=used_intent,
                 intent_confidence=intent_plan.intent_confidence if intent_plan else None,
+                intent_understood=not matched_nothing(intent_plan) if intent_plan else True,
                 intent_options=INTENT_OPTIONS,
                 intent_overridden=bool(req.intent) and req.intent == used_intent,
             )
