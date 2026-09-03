@@ -294,6 +294,19 @@ export const api = {
 
   // The stored embeddings projected to 3D. PCA, so the same history always
   // draws the same shape; the response carries how much structure survives.
+  getRestorePoints: async (userId = activeUser()) => {
+    const { data } = await client.get('/identity/restore-points', { params: { user_id: userId } });
+    return data;
+  },
+
+  // snapshotId null means unpin.
+  setRestorePoint: async (snapshotId, reason, userId = activeUser()) => {
+    const { data } = await client.post('/identity/restore', {
+      user_id: userId, snapshot_id: snapshotId, reason: reason || null,
+    });
+    return data;
+  },
+
   getLifecycle: async (userId = activeUser()) => {
     const { data } = await client.get('/reasoning/lifecycle', { params: { user_id: userId } });
     return data;

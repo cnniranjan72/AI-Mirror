@@ -153,6 +153,11 @@ async def record_cognitive_metrics(user_id: str, v3_result):
 async def cleanup_old_snapshots(user_id: str, keep_count: int = 20):
     try:
         from app.db.postgres import execute as db_execute
+        # A pinned snapshot is exempt. Someone who has gone back to an earlier
+        # version of their model is standing on exactly the row this would
+        # otherwise delete once twenty newer ones exist, and the pin would then
+        # dangle - reads falling back to the newest, which is the opposite of
+        # what they asked for.
         await db_execute(
             """
             DELETE FROM identity_snapshots
@@ -161,6 +166,9 @@ async def cleanup_old_snapshots(user_id: str, keep_count: int = 20):
                 WHERE user_id = $1
                 ORDER BY snapshot_timestamp DESC
                 LIMIT $2
+            )
+            AND snapshot_id NOT IN (
+                SELECT snapshot_id FROM identity_pins WHERE user_id = $1
             )
             """,
             user_id, keep_count,

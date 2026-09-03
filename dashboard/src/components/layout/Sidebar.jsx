@@ -32,6 +32,7 @@ const navSections = [
     label: 'Your twin',
     items: [
       { path: '/identity', label: 'Identity', icon: IdentityIcon },
+      { path: '/restore', label: 'Restore Points', icon: ClockIcon },
       { path: '/character', label: 'Character', icon: CpuIcon },
       { path: '/behavior', label: 'Behavior', icon: BehaviorIcon },
       { path: '/moved-on', label: 'Moved On', icon: ClockIcon },

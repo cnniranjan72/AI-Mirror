@@ -170,6 +170,8 @@ class TestExplainAPI:
             "/identity/snapshot", "/identity/current", "/identity/self-model",
             "/identity/drift",
             "/identity/blind-spots",
+            "/identity/restore-points",
+            "/identity/restore",
             "/identity/space",
             "/identity/counterfactual",
             "/query/traces/{trace_id}/xray",
@@ -198,6 +200,7 @@ class TestExplainAPI:
             # in test_auth_coverage.py (_body_identified_routes), which is
             # where this route is covered.
             "/identity/counterfactual",
+            "/identity/restore",
         }
         for r in router.routes:
             sig = inspect.signature(r.endpoint)

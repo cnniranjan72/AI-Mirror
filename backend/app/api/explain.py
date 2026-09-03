@@ -82,21 +82,34 @@ async def get_identity_snapshots(
 
 @router.get("/identity/current", response_model=Optional[dict])
 async def get_current_identity(user_id: str = Depends(resolve_user_id)):
+    """The identity as the user should see it, honouring a restore pin.
+
+    Architectural invariant 2 is that user-facing reads come from a frozen
+    snapshot rather than the live identity, so which snapshot is frozen is a
+    real answer to "the model has drifted somewhere I do not recognise". The
+    live identity row is returned alongside and is never rewritten - a restore
+    that edited it would be undone by the next ingest, since every sub-profile
+    is recomputed from the behaviour objects each time.
+    """
+    from app.services.identity_restore import active_snapshot
+
     identity = await fetchrow(
         "SELECT * FROM identities WHERE user_id = $1", user_id
     )
     if not identity:
         return None
-    snapshot = await fetchrow(
-        """
-        SELECT * FROM identity_snapshots
-        WHERE user_id = $1 ORDER BY snapshot_timestamp DESC LIMIT 1
-        """,
-        user_id,
-    )
+
+    snapshot = await active_snapshot(user_id)
+    pinned = bool(snapshot and snapshot.pop("_pinned", False))
+    pin_reason = snapshot.pop("_pin_reason", None) if snapshot else None
+    pin_broken = snapshot.pop("_pin_broken", None) if snapshot else None
+
     return {
         "identity": dict(identity),
         "latest_snapshot": dict(snapshot) if snapshot else None,
+        "pinned": pinned,
+        "pin_reason": pin_reason,
+        "pin_broken": pin_broken,
     }
 
 
@@ -155,6 +168,49 @@ async def get_behaviour_space(
     """
     from app.services.behaviour_space import build_space
     return await build_space(user_id, limit)
+
+
+class RestoreRequest(BaseModel):
+    user_id: str
+    # Absent means unpin. A separate DELETE would need the id in the path or
+    # query string, and a snapshot id is user data.
+    snapshot_id: Optional[str] = None
+    reason: Optional[str] = None
+
+
+@router.get("/identity/restore-points")
+async def get_restore_points(
+    user_id: str = Depends(resolve_user_id),
+    limit: int = Query(default=25, le=25),
+):
+    """Snapshots this account could go back to, and what each would change.
+
+    The paper has claimed rollback since the first draft. The method existed,
+    logged "Rolled back to snapshot X", returned None, and was called by
+    nothing.
+    """
+    from app.services.identity_restore import list_restore_points
+
+    return await list_restore_points(user_id, limit=limit)
+
+
+@router.post("/identity/restore")
+async def post_restore(
+    body: RestoreRequest,
+    authorization: Optional[str] = Header(default=None),
+):
+    """Pin reads to an earlier snapshot, or unpin by omitting snapshot_id.
+
+    Reversible and non-destructive: no event, behaviour or snapshot is altered
+    or removed, and the live identity carries on evolving underneath.
+    """
+    from app.services.identity_restore import clear_pin, set_pin
+
+    enforce_user_match(authorization, body.user_id)
+
+    if not body.snapshot_id:
+        return await clear_pin(body.user_id)
+    return await set_pin(body.user_id, body.snapshot_id, body.reason)
 
 
 @router.get("/reasoning/lifecycle")

@@ -507,8 +507,18 @@ class V3Pipeline:
             persisted_snapshot_id = None
             if result.snapshot:
                 if result.snapshot.metadata.get("snapshot_threshold_exceeded", True):
-                    await self._insert_snapshot(result.snapshot)
-                    persisted_snapshot_id = result.snapshot.snapshot_id
+                    if await self._insert_snapshot(result.snapshot):
+                        persisted_snapshot_id = result.snapshot.snapshot_id
+                    else:
+                        # The insert did not land. Pointing the self model at
+                        # this id anyway would violate its foreign key, so fall
+                        # back to whatever snapshot is actually stored.
+                        row = await fetchrow(
+                            "SELECT snapshot_id FROM identity_snapshots "
+                            "WHERE identity_id = $1 ORDER BY created_at DESC LIMIT 1",
+                            result.snapshot.identity_id,
+                        )
+                        persisted_snapshot_id = row["snapshot_id"] if row else None
                 else:
                     row = await fetchrow(
                         "SELECT snapshot_id FROM identity_snapshots "
@@ -869,8 +879,15 @@ class V3Pipeline:
             logger.warning("Could not load baseline snapshot for %s: %s", identity_id, e)
             return None, None
 
-    async def _insert_snapshot(self, snapshot: IdentitySnapshot):
-        """Insert snapshot into database"""
+    async def _insert_snapshot(self, snapshot: IdentitySnapshot) -> bool:
+        """Insert snapshot into database. True only if the row is now there.
+
+        The caller sets self_model.identity_snapshot_id from this snapshot, and
+        that column has a foreign key. Reporting success unconditionally meant a
+        swallowed failure here produced a foreign-key violation one statement
+        later, which was itself swallowed, so the self model silently stopped
+        being written. Observed in a live run.
+        """
         try:
             await execute(
                 """
@@ -898,8 +915,16 @@ class V3Pipeline:
                 snapshot.valid_until,
                 snapshot.snapshot_timestamp
             )
+            # ON CONFLICT DO NOTHING above means a row with this id may have
+            # existed already, which is equally fine for the caller: what it
+            # needs to know is whether the id is now present.
+            return bool(await fetchrow(
+                "SELECT 1 FROM identity_snapshots WHERE snapshot_id = $1",
+                snapshot.snapshot_id,
+            ))
         except Exception as e:
             logger.error(f"Error inserting snapshot: {str(e)}", exc_info=True)
+            return False
     
     async def _upsert_self_model(self, self_model: SelfModel):
         """Insert or update self model (one per user_id)"""

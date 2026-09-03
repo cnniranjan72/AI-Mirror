@@ -523,6 +523,32 @@ Captures temporal snapshots of identity, persisted only when behavioral shift cr
 |---|---|---|
 | Identity | Shift detection → Snapshot serialization | `IdentitySnapshot` with dominant_topics, emerging_topics, overall_confidence, completeness |
 
+#### Restore points
+
+A snapshot is written whenever identity shift crosses the threshold. Any of them
+can be made the active one:
+
+| | |
+|---|---|
+| **What it changes** | Which snapshot user-facing reads resolve to |
+| **What it doesn't** | Nothing is deleted or rewritten — events, behaviour objects and every snapshot stay as they are |
+| **Reversible** | Unpin at any time to return to the newest |
+
+The pin is *not* implemented by writing the snapshot back over the `identities`
+row. Identity construction runs from scratch on every ingest — `existing_identity`
+supplies only the id and version counter, and all nine sub-profiles are recomputed
+from behaviour objects — so a restored row would survive only until the next event
+arrived. The control would appear to work and then quietly undo itself.
+
+It works instead by choosing which frozen snapshot reads resolve to, which is the
+mechanism architectural invariant 2 already relies on.
+
+Two guards make it honest. `cleanup_old_snapshots` keeps the twenty most recent
+and **excludes the pinned one**, so a person cannot be standing on a row that gets
+pruned away. And a pin whose snapshot has gone falls back to the newest *and says
+so* (`pin_broken`) — a rollback that silently stops applying is the same lie as one
+that never applied.
+
 ### Stage 8: Self-Model
 
 Constructs a self-awareness model with explicit belief representation.
@@ -1123,6 +1149,7 @@ flowchart TB
 | **Contested Claims** | `/contested` | Claims the system's own evidence argues against, ranked by how contested rather than how confident, naming the specific content behind each disagreement |
 | **Blind Spots** | `/blind-spots` | What the system doesn't know about you, separating "no opinion at all" from measured uncertainty |
 | **Moved On** | `/moved-on` | What's still current, what's tailing off, and what you've set aside — with the reason for each |
+| **Restore Points** | `/restore` | Send the model back to an earlier snapshot when it has drifted somewhere you don't recognise |
 | **Behavior** | `/behavior` | Behavior objects by topic/creator, lifecycle state distribution, Filter Bubble Score |
 | **Planning** | `/planning` | Pipeline planning breakdown, per-stage timing |
 | **Decision** | `/decision` | Decision traces, tree visualization, explainability panel |
@@ -1548,6 +1575,8 @@ flowchart TB
 | `GET` | `/reasoning/evidence` | Evidence items (filterable by type) |
 | `GET` | `/reasoning/contested` | Claims whose own evidence contradicts them, most contested first |
 | `GET` | `/reasoning/lifecycle` | Behaviours grouped into current, fading and set aside |
+| `GET` | `/identity/restore-points` | Snapshots this account can go back to, and what each would change |
+| `POST` | `/identity/restore` | Pin reads to an earlier snapshot (omit `snapshot_id` to unpin) |
 | `GET` | `/reasoning/inferences` | Rule-based inferences |
 | `GET` | `/reasoning/reflections` | System reflections |
 | `GET` | `/reasoning/behavior-objects` | Behavior objects |
