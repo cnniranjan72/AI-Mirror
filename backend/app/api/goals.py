@@ -51,18 +51,36 @@ def _compute_alignment(goal_type: str, matching: List[dict]):
     avg_importance = sum(m["importance_score"] or 0 for m in matching) / len(matching)
     growing = sum(1 for m in matching if m["lifecycle_state"] in GROWING_STATES)
     declining = sum(1 for m in matching if m["lifecycle_state"] in DECLINING_STATES)
-    trend_ratio = growing / max(1, growing + declining)
+
+    # A stable behaviour is in neither set, which is correct: it is not moving
+    # in either direction. But max(1, 0 + 0) then made a wholly stable match
+    # score 0 - the same as one that is entirely declining - so a steady
+    # interest read as a collapsing one, and a "decrease" goal was credited for
+    # a habit that had not budged.
+    #
+    # This never surfaced before because every behaviour was labelled growing,
+    # so the denominator was never zero. Making the lifecycle real is what
+    # exposed it. With nothing moving either way the trend is unknown, and the
+    # neutral 0.5 says so rather than asserting decline.
+    if growing + declining:
+        trend_ratio = growing / (growing + declining)
+    else:
+        trend_ratio = 0.5
+
+    steady = growing + declining == 0
 
     if goal_type == "decrease":
         score = 0.5 * (1 - avg_importance) + 0.5 * (1 - trend_ratio)
-        direction = "declining" if trend_ratio < 0.5 else "still growing"
+        direction = ("holding steady" if steady
+                     else "declining" if trend_ratio < 0.5 else "still growing")
         explanation = f"Matched topics are {direction}, averaging {round(avg_importance * 100)}% importance in your identity."
     elif goal_type == "maintain":
         score = avg_importance
         explanation = f"Matched topics average {round(avg_importance * 100)}% importance — {'holding steady' if score > 0.3 else 'fading, may need attention'}."
     else:  # increase
         score = 0.5 * avg_importance + 0.5 * trend_ratio
-        direction = "growing" if trend_ratio >= 0.5 else "not yet trending up"
+        direction = ("holding steady" if steady
+                     else "growing" if trend_ratio > 0.5 else "not yet trending up")
         explanation = f"Matched topics are {direction}, averaging {round(avg_importance * 100)}% importance in your identity."
 
     supporting = [
@@ -74,12 +92,47 @@ def _compute_alignment(goal_type: str, matching: List[dict]):
 
 async def _score_goal(user_id: str, goal_type: str, keywords: List[str]):
     rows = await fetch(
-        "SELECT topic, keywords, importance_score, lifecycle_state FROM behavior_objects WHERE user_id = $1",
+        "SELECT topic, keywords, importance_score, lifecycle_state, "
+        "temporal_statistics, trend_information FROM behavior_objects "
+        "WHERE user_id = $1",
         user_id,
     )
-    objs = [dict(r) for r in rows]
+
+    objs = []
+    for row in rows:
+        obj = dict(row)
+        obj["lifecycle_state"] = _current_lifecycle(obj)
+        objs.append(obj)
+
     matching = [o for o in objs if _matches(o, keywords)]
     return _compute_alignment(goal_type, matching)
+
+
+def _current_lifecycle(obj: dict) -> str:
+    """Evaluate the state now rather than trusting the stored column.
+
+    lifecycle_state is written by the ingest sweep, so it is only as fresh as
+    the last time the account sent anything. Every one of the 226 behaviour
+    objects on the deployed instance disagreed with a fresh evaluation: the
+    column still said "growing" for 217 of them while the behaviours had in
+    fact gone dormant or been abandoned entirely.
+
+    That matters here specifically. Half of an alignment score is the balance
+    of growing against declining matches, so scoring from the stored column
+    gives every goal the trend of an account frozen at its last ingest - which
+    for an abandoned interest is the opposite of the truth.
+    """
+    try:
+        from backend.reasoning.lifecycle import evaluate_lifecycle
+
+        state, _reason = evaluate_lifecycle(
+            _parse_json(obj.get("temporal_statistics")) or {},
+            _parse_json(obj.get("trend_information")) or {},
+        )
+        return state
+    except Exception as e:
+        logger.warning("Could not re-evaluate lifecycle, using stored: %s", e)
+        return obj.get("lifecycle_state") or "emerging"
 
 
 class GoalCreate(BaseModel):

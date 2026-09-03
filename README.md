@@ -417,6 +417,19 @@ equally absent after a fortnight. The test is
 The absolute floor stops a burst of activity from looking abandoned two days
 later.
 
+A stored `lifecycle_state` is only as fresh as the last ingest, so the two
+consumers that matter — the Moved On page and goal alignment — evaluate the
+state when asked rather than trusting the column. `refresh_lifecycles.py`
+brings the column itself up to date for anything else reading it (dry run by
+default, `--apply` to write); it recomputes from statistics already stored, so
+it destroys nothing and running it twice changes nothing the second time.
+
+Goal alignment weighs growing matches against declining ones. `stable` counts
+as neither, which is correct — but the ratio previously divided by
+`max(1, growing + declining)`, so a wholly stable match scored the same as a
+wholly declining one, and a "spend less time on X" goal was credited for a habit
+that had not moved. With nothing going either way the trend is now neutral.
+
 The sweep runs over **all** of a user's behaviours on every ingest, not just
 those in the batch. This is the part that matters: a topic someone abandoned
 never appears in a batch again, so a state written only at consolidation time
