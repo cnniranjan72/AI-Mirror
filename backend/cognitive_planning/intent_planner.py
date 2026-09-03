@@ -66,6 +66,31 @@ class IntentPlanner:
                 re.compile(r"\b(describe me|my profile|my identity|who I am)\b", re.I),
                 re.compile(r"\bwhat sort of\b", re.I),
                 re.compile(r"\b(what are my (core |main |primary )?(interests|traits|characteristics))\b", re.I),
+
+                # An identity question is one whose SUBJECT is the person,
+                # whatever frame it arrives in. The patterns above nearly all
+                # match a frame - "what kind of X am I" - so "describe my
+                # values" and "tell me about my strengths" were read as generic
+                # information requests: the frame is informational and the
+                # subject was not being looked at. These match the subject.
+                re.compile(
+                    r"\bmy (core |main |primary |real |actual |general )?"
+                    r"(values?|strengths?|weakness(es)?|character|temperament|"
+                    r"priorities|motivations?|tendencies|tendency|blind spots?|"
+                    r"style|approach|mindset|outlook|nature|side)\b", re.I),
+
+                # Asking what someone amounts to, rather than for a fact.
+                re.compile(r"\b(what defines (me|my)|sum me up|summar(y|ise|ize) me)\b", re.I),
+                re.compile(r"\b(am I (the )?(sort|kind|type) of)\b", re.I),
+
+                # "my <adjective> side/style" - creative side, learning style,
+                # analytical approach. The noun carries the identity claim.
+                re.compile(r"\bmy \w+ (side|style|streak|habits?|patterns?)\b", re.I),
+
+                # Second person about the first: what the system makes of them.
+                re.compile(
+                    r"\b(what (do|would) you (think|say|make) (of|about) me|"
+                    r"worked out about me|how would you describe (me|my))\b", re.I),
             ],
             UserIntentType.BEHAVIORAL_QUESTION: [
                 re.compile(r"\b(how (much|often|frequently|long) (do I|have I|did I|am I))\b", re.I),

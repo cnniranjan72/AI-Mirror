@@ -54,7 +54,7 @@ mala.naik@amceducation.in}
 \maketitle
 
 \begin{abstract}
-Intelligent systems lack a coherent mechanism for constructing and reasoning about computational identity from behavioral data. Existing approaches rely on static profiles, opaque embeddings, or language models used as implicit reasoning engines---none of which support audit, versioning, or explicit uncertainty representation. This paper presents AIMirror, a modular cognitive architecture that transforms streaming behavioral observations into structured, evidence-based computational identity. The architecture comprises eleven specialized engines in two pipelines, governed by five invariant principles: the language model never reasons or decides; identity is read from immutable snapshots; every inference references supporting and countervailing evidence; all decisions use deterministic scoring; and components communicate via typed contracts. Core novelties include Behavior Objects as canonical behavioral units, an evidence engine computing net confidence from counter-evidence, identity snapshots with rollback, and cognitive planning without language model invocation. Because the resulting model is derived independently of any platform, we also use it to audit: comparing a platform's declared interests against the user's own behavioral evidence, separating interests the user sought from those delivered to them, and scoring the system's own claims against the user's verdicts, reported as calibration rather than accuracy. Corrections entered there are withdrawn from what the system subsequently asserts. We evaluate across 596 intent classification queries (macro F1~=~0.82), determinism verification, latency profiling, and measured ablations in which weakening a single safeguard is shown to discard every behavioral object produced from 800 events.
+Intelligent systems lack a coherent mechanism for constructing and reasoning about computational identity from behavioral data. Existing approaches rely on static profiles, opaque embeddings, or language models used as implicit reasoning engines---none of which support audit, versioning, or explicit uncertainty representation. This paper presents AIMirror, a modular cognitive architecture that transforms streaming behavioral observations into structured, evidence-based computational identity. The architecture comprises eleven specialized engines in two pipelines, governed by five invariant principles: the language model never reasons or decides; identity is read from immutable snapshots; every inference references supporting and countervailing evidence; all decisions use deterministic scoring; and components communicate via typed contracts. Core novelties include Behavior Objects as canonical behavioral units, an evidence engine computing net confidence from counter-evidence, identity snapshots with rollback, and cognitive planning without language model invocation. Because the resulting model is derived independently of any platform, we also use it to audit: comparing a platform's declared interests against the user's own behavioral evidence, separating interests the user sought from those delivered to them, and scoring the system's own claims against the user's verdicts, reported as calibration rather than accuracy. Corrections entered there are withdrawn from what the system subsequently asserts. We evaluate across 596 intent classification queries (macro F1~=~0.85, falling to 44\% accuracy on phrasing held out from development), determinism verification, latency profiling, and measured ablations in which weakening a single safeguard is shown to discard every behavioral object produced from 800 events.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -135,73 +135,8 @@ The component choices follow from these commitments. Behavior Objects give heter
 \section{System Architecture}
 \label{sec:architecture}
 
-Figure~\ref{fig:architecture} presents the complete AIMirror architecture, which comprises eleven specialized engines arranged in two pipelines: the \emph{ingestion pipeline} (event to identity) and the \emph{query pipeline} (query to response). Figures~\ref{fig:identity_pipeline} and~\ref{fig:query_pipeline} provide focused views of each pipeline.
+AIMirror comprises eleven specialized engines arranged in two pipelines: the \emph{ingestion pipeline} (event to identity) and the \emph{query pipeline} (query to response). Figures~\ref{fig:identity_pipeline} and~\ref{fig:query_pipeline} provide focused views of each pipeline.
 
-\begin{figure}[htbp]
-\centering
-\begin{tikzpicture}[
-  scale=0.72, transform shape,
-  node distance=4mm and 2mm,
-  box/.style={rectangle, draw, minimum width=28mm, minimum height=5mm, font=\footnotesize\sffamily, align=center, inner sep=1.5pt, rounded corners=1pt},
-  pipeline/.style={rectangle, draw, thick, minimum width=28mm, minimum height=4mm, font=\small\bfseries\sffamily, align=center, fill=black!10, inner sep=2pt},
-  mem/.style={rectangle, draw, dashed, minimum width=24mm, minimum height=4mm, font=\tiny\sffamily, align=center, inner sep=1pt},
-  every path/.style={-{Stealth[length=1.5mm]}, thin},
-  label/.style={font=\footnotesize\sffamily, align=center}
-]
-
-% Ingestion Pipeline
-\node[pipeline] (ingest_title) {Ingestion Pipeline};
-\node[box, below=2mm of ingest_title] (gateway) {Behavior\\Gateway};
-\node[box, below=2mm of gateway] (consolidation) {Knowledge\\Consolidation};
-\node[box, below=2mm of consolidation] (behav_obj) {Behavior\\Objects};
-\node[box, below=2mm of behav_obj] (evidence) {Evidence\\Engine};
-\node[box, below=2mm of evidence] (inference) {Inference\\Engine};
-\node[box, below=2mm of inference] (reflection) {Reflection\\Engine};
-\node[box, below=2mm of reflection] (identity_eng) {Identity\\Engine};
-\node[box, below=2mm of identity_eng] (snapshot) {Identity\\Snapshot};
-\node[box, below=2mm of snapshot] (selfmodel) {Self\\Model};
-
-\draw (gateway) -- (consolidation) -- (behav_obj) -- (evidence) -- (inference) -- (reflection) -- (identity_eng) -- (snapshot) -- (selfmodel);
-
-% Query Pipeline - to the right
-\node[pipeline, right=1.2cm of ingest_title] (query_title) {Query Pipeline};
-\node[box, below=2mm of query_title] (runtime) {Runtime\\Builder};
-\node[box, below=2mm of runtime] (planning) {Cognitive\\Planning};
-\node[box, below=2mm of planning] (rag) {Character\\RAG};
-\node[box, below=2mm of rag] (fusion) {Fusion\\Engine};
-\node[box, below=2mm of fusion] (decision) {Decision\\Engine};
-\node[box, below=2mm of decision] (context) {Context\\Builder};
-\node[box, below=2mm of context] (verbalizer) {LLM\\Verbalizer};
-
-\draw (runtime) -- (planning) -- (rag) -- (fusion) -- (decision) -- (context) -- (verbalizer);
-
-% Memory to the right of query pipeline
-\node[pipeline, right=1.2cm of query_title] (mem_title) {Memory System};
-\node[mem, below=2mm of mem_title] (episodic) {Episodic};
-\node[mem, below=1mm of episodic] (semantic) {Semantic};
-\node[mem, below=1mm of semantic] (behavioral) {Behavioral};
-\node[mem, below=1mm of behavioral] (goal) {Goal};
-\node[mem, below=1mm of goal] (reflective) {Reflection};
-
-\draw[dashed] (rag.east) -- ++(4mm,0) |- (episodic.east);
-\draw[dashed] (rag.east) -- ++(4mm,0) |- (semantic.east);
-
-% Connection between pipelines
-\draw[dashed, -{Stealth[length=1.5mm]}] (selfmodel.east) -- ++(3mm,0) |- (runtime.west);
-\node[font=\tiny, above] at ($(selfmodel.east)!0.5!(runtime.west)$) {snapshot};
-
-% Database below
-\node[box, fill=black!5, below=4mm of selfmodel, minimum width=6cm] (db) {PostgreSQL / pgvector};
-\draw[thick] ($(gateway.south)!0.5!(selfmodel.south)$) -- (db.north);
-\draw (db.north) -- (runtime.south);
-
-% Labels
-\node[label, below=1mm of db] {Database Layer};
-
-\end{tikzpicture}
-\caption{AIMirror architecture: two-pipeline layout with ingestion (behavioral observation to identity construction) and query (user request to verbalized response) pipelines, connected via frozen identity snapshots. Fusion Engine merges multi-source retrieved items before deterministic selection. The memory system provides five specialized storage types accessible to the retrieval components.}
-\label{fig:architecture}
-\end{figure}
 
 \begin{figure}[htbp]
 \centering
@@ -436,7 +371,11 @@ AIMirror is implemented as an asynchronous Python backend using FastAPI with Pos
 We verified determinism by executing the full query pipeline 100 times on an identical snapshot with an identical query. Both planning and Decision Engine outputs produced identical cryptographic hashes across all runs (100/100 identical outputs), confirming the elimination of nondeterminism from all stages preceding verbalization.
 
 \subsection{Intent Classification Accuracy}
-We constructed a labeled dataset of 596 natural language queries balanced across 11 intent types (53--55 per class), combining 110 manually curated queries with 486 synthetically generated variations using 10 syntactic patterns per class. The rule-based classifier achieves 81.21\% accuracy and macro F1 of 0.8214. Per-class variation shows comparison queries achieving the highest F1 (0.97), followed by explanation (0.96), coaching (0.94), and prediction (0.93). Identity questions show the weakest performance (F1~=~0.64, recall~=~0.47) due to overlapping linguistic patterns with information requests. The unknown class achieves high recall (0.93) but low precision (0.45), indicating conservative rejection of ambiguous inputs. The dataset and evaluation scripts are available with the project source code.
+We constructed a labeled dataset of 596 natural language queries balanced across 11 intent types (53--55 per class), combining 110 manually curated queries with 486 synthetic variations from 10 syntactic patterns per class. Aggregated, the rule-based classifier reaches 83.56\% accuracy and macro F1 0.8465.
+
+That aggregate is not a generalisation estimate, though an earlier version of this work reported it as one. Its halves differ completely---100\% on all 110 curated queries against 79.8\% on the synthetic half---because the patterns were written from the curated queries, and a rule set scores perfectly against its own examples. Inspecting the synthetic failures spent that half too. We therefore wrote 36 further queries by hand, in phrasings neither set contains, and did not consult them while changing the classifier: accuracy there is 44.4\%. A regex classifier recognises the constructions it was given and degrades sharply on unrehearsed phrasing, so the aggregate measures the benchmark's composition as much as the classifier.
+
+Matching identity questions on subject rather than sentence frame---``describe my values'' is an identity question in an informational frame---raised identity recall from 0.35 to 0.67 synthetic and 0.38 to 1.00 held out, the one figure here obtained without the target in view. All three datasets and the evaluation scripts are released with the source.
 
 \subsection{Baseline Comparison}
 Against two baselines---a language model answering directly from raw identity data, and standard retrieval-augmented generation---the architectural differences are those Table~\ref{table:comparison} already records, plus three the pipeline structure decides rather than improves upon: every fact reaching the language model has passed a deterministic filter, so fabrication is excluded before generation rather than mitigated after it; consistency holds across sessions rather than within one, because reads come from a frozen snapshot; and outputs before verbalization are byte-identical across runs, which neither baseline can offer.
@@ -445,7 +384,7 @@ Against two baselines---a language model answering directly from raw identity da
 Averaged over 10 query pipeline executions, every cognitive stage completes in under 3\,ms: runtime load $2.0 \pm 0.3$, memory ranking $2.3 \pm 0.4$, planning $1.1 \pm 0.2$, retrieval $0.9 \pm 0.1$, fusion $0.5 \pm 0.1$, context building $0.4 \pm 0.1$, and the decision engine and verbalization $0.3 \pm 0.1$ each, for a cognitive total of $7.8 \pm 1.4$\,ms. End-to-end is approximately 3.5\,s, dominated by database connection pool initialization on cold start rather than by any reasoning stage.
 
 \subsection{Confidence Product Validation}
-We measured $\Gamma$ (Eq.~\eqref{eq:confidence_product}) across all 596 evaluation queries. The mean $\Gamma$ was 0.342 (SD~=~0.187). Correctly classified queries showed higher $\Gamma$ (mean~=~0.418) than misclassified queries (mean~=~0.124). We report the difference in means without a hypothesis test, so this indicates rather than establishes that the confidence product tracks output reliability. The right-skewed distribution (23\% exceeding 0.5, 12\% below 0.1) confirms that low-confidence pipeline stages propagate to low-confidence final outputs, enabling graded rather than binary certainty.
+Across all 596 queries the mean $\Gamma$ (Eq.~\eqref{eq:confidence_product}) was 0.342 (SD~=~0.187), higher for correctly classified queries (0.418) than misclassified ones (0.124)---a difference in means reported without a hypothesis test, so indicative rather than established. The right-skewed distribution (23\% above 0.5, 12\% below 0.1) shows low-confidence stages propagating to low-confidence outputs.
 
 \subsection{Architecture Invariant Validation}
 Six invariants are checked programmatically rather than by convention: the Runtime Builder is the sole entry point for query-time loading, every request produces a structured plan, retrieval never bypasses planning, the Decision Engine sits strictly between Fusion and Context construction without modifying Fusion's output, and the language model performs no reasoning. All held across all test executions.
@@ -491,10 +430,10 @@ The scaling row is the sharpest case of a threshold that looks principled and is
 The corroboration row concerns the threshold at which a platform's stated interest counts as supported by behaviour. Against 24 hand-labelled claim--topic pairs, genuine matches score no lower than $0.515$ and spurious ones no higher than $0.514$; at $0.30$ the system corroborated ``Automotive'' against \texttt{tech} ($0.424$). The pairs were labelled by the authors, so $0.45$ is a considered default rather than a tuned optimum.
 
 \subsection{Limitations}
-The rule-based intent classifier is evaluated on curated data and may not generalize to production query diversity. The alignment module implements rule-based scoring only, without reinforcement learning. The architecture has not been evaluated in a controlled user study, and the corpus behind Table~\ref{table:ablation} is dominated by seeded accounts, so the magnitudes are indicative rather than population estimates. Ingestion is currently single-source. Finally, the learning-orientation rule classifies subject matter rather than instructional intent: \texttt{\#coding} says what content is about, not whether it teaches. Captions carry the better signal (24\% of 6{,}451 events contain instructional phrasing), but calibrating on it needs a corpus that is not mostly synthetic.
+The alignment module implements rule-based scoring only, without reinforcement learning. The architecture has not been evaluated in a controlled user study, and the corpus behind Table~\ref{table:ablation} is dominated by seeded accounts, so the magnitudes are indicative rather than population estimates. Ingestion is currently single-source. Finally, the learning-orientation rule classifies subject matter rather than instructional intent: \texttt{\#coding} says what content is about, not whether it teaches. Captions carry the better signal (24\% of 6{,}451 events contain instructional phrasing), but calibrating on it needs a corpus that is not mostly synthetic.
 
 \subsection{Threats to Validity}
-The 596-query dataset is curated and partly synthetic, so classifier accuracy may not survive production query diversity, and determinism was verified on one snapshot with fixed queries. Evaluation is single-deployment. Confidence scores are internally consistent but not calibrated against any external ground truth, so their correspondence to psychologically meaningful constructs is unestablished. The source, migrations, the 596-query evaluation set, the evaluation scripts and deployment documentation are released together; every stage before verbalization is deterministic, so runs reproduce without seed control.
+The held-out set that produces the 44.4\% figure is 36 queries written by an author who had seen the classifier's failures, so it is not an unbiased sample either: it establishes the direction rather than the magnitude. Determinism was verified on one snapshot with fixed queries. Evaluation is single-deployment. Confidence scores are internally consistent but not calibrated against any external ground truth, so their correspondence to psychologically meaningful constructs is unestablished. The source, migrations, the 596-query evaluation set, the evaluation scripts and deployment documentation are released together; every stage before verbalization is deterministic, so runs reproduce without seed control.
 
 \subsection{Future Work}
 The most useful next steps are empirical rather than architectural: a controlled user study measuring whether the accountability surfaces change what people believe about their own behaviour, and a corpus of real rather than seeded accounts, without which several thresholds in this paper remain considered defaults. Beyond that: multi-source ingestion, reinforcement learning in place of rule-based alignment scoring \cite{schulman2017}, and benchmarking the two-pipeline design at scale.
@@ -504,7 +443,7 @@ The most useful next steps are empirical rather than architectural: a controlled
 
 This paper presented AIMirror, a modular cognitive architecture that treats computational identity as a first-class construct---built through evidence accumulation, identity evolution, cognitive planning and controlled language generation---rather than as a byproduct of LLM reasoning or static feature engineering. Separation of concerns runs across eleven engines with the language model confined to terminal verbalization. The distinctive elements are Behavior Objects with lifecycle tracking, an evidence engine that records what contradicts a claim alongside what supports it, immutable snapshots, a self-model with explicit uncertainty, and planning without model involvement.
 
-Evaluation shows deterministic pipeline behaviour (100/100 identical outputs), macro F1 of 0.82 across 596 intent queries, sub-millisecond component latencies, invariant compliance, and measured ablations in which weakening a single bounds check discards every behavioural object produced from 800 events. Validation through a user study remains outstanding, and several thresholds await a corpus that is not mostly seeded. The reframing of identity from emergent artifact to constructed entity---grounded in evidence, versioned through snapshots, and answerable to the observations that contradict it---is the core architectural contribution.
+Evaluation shows deterministic pipeline behaviour (100/100 identical outputs), macro F1 of 0.85 across 596 intent queries and 44\% accuracy on unrehearsed phrasing held out from development, sub-millisecond component latencies, invariant compliance, and measured ablations in which weakening a single bounds check discards every behavioural object produced from 800 events. Validation through a user study remains outstanding, and several thresholds await a corpus that is not mostly seeded. The reframing of identity from emergent artifact to constructed entity---grounded in evidence, versioned through snapshots, and answerable to the observations that contradict it---is the core architectural contribution.
 
 \begin{thebibliography}{99}
 
