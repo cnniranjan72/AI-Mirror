@@ -94,7 +94,7 @@ class IdentitySnapshot(BaseModel):
     def from_identity(
         cls,
         identity: Identity,
-        validity_hours: int = 1
+        validity_hours: Optional[int] = None
     ) -> "IdentitySnapshot":
         """
         Create snapshot from Identity
@@ -131,7 +131,15 @@ class IdentitySnapshot(BaseModel):
                 long_term_preferences=identity.long_term_preferences.copy(),
                 overall_confidence=identity.overall_confidence,
                 identity_completeness=identity.identity_completeness,
-                valid_until=now + timedelta(hours=validity_hours),
+                # A behavioural identity does not go stale on a clock. It is
+                # superseded when the next one is written, which is what
+                # is_active records. Stamping an hour here made 36 of 38 stored
+                # snapshots claim to have expired - including every one being
+                # served, since nothing on the read path consults the column.
+                # None is what is_valid() already reads as "does not expire",
+                # so this is the field finally saying what was always true.
+                valid_until=(now + timedelta(hours=validity_hours)
+                             if validity_hours else None),
                 is_active=True,
                 metadata={
                     "source_identity_created_at": identity.created_at.isoformat(),
@@ -239,7 +247,12 @@ class SnapshotManager:
             config: Manager configuration
         """
         self.config = config or {}
-        self.default_validity_hours = self.config.get("default_validity_hours", 1)
+        # None, not an hour. A snapshot is superseded by the next one rather
+        # than expiring on a clock, and nothing on the read path has ever
+        # consulted valid_until - so the hour was a claim the system made about
+        # itself and then ignored. Configurable for a caller that genuinely
+        # wants a time-boxed snapshot.
+        self.default_validity_hours = self.config.get("default_validity_hours", None)
         self.max_active_snapshots = self.config.get("max_active_snapshots", 10)
         
         # In-memory snapshot cache
@@ -263,7 +276,7 @@ class SnapshotManager:
             IdentitySnapshot
         """
         try:
-            validity = validity_hours or self.default_validity_hours
+            validity = validity_hours if validity_hours is not None else self.default_validity_hours
             snapshot = IdentitySnapshot.from_identity(identity, validity)
             
             # Cache snapshot

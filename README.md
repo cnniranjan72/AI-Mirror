@@ -655,6 +655,34 @@ echoed back from the request, so an unrecognised name — an older client agains
 a newer enum — falls back to the classifier and says so rather than reporting a
 correction that did not take.
 
+#### What a snapshot's own columns say about it
+
+Two columns on `identity_snapshots` were written on every snapshot and read by
+nothing, and both said something untrue.
+
+`valid_until` was stamped at **one hour**. Nothing on the read path has ever
+consulted it — the query pipeline takes the newest snapshot, or the pinned one —
+so **36 of 38** stored snapshots claimed to have expired, including every
+snapshot actually being served. Had anything enforced it, each account would
+have gone dark an hour after its last ingest. A behavioural identity does not
+go stale on a clock; it is superseded when the next one is written. The column
+is now `NULL`, which `is_valid()` already read as *"does not expire"* — the
+field finally agreeing with the method. A caller that genuinely wants a
+time-boxed snapshot can still pass `validity_hours`.
+
+`is_active` was written `TRUE` and never cleared: all 38 rows were active at
+once, and one account held **fifteen** of them — a column naming the live
+identity that named every identity the account had ever had.
+(`app/services/identity_restore.py` records the same finding, which is why
+restore pins a snapshot rather than trusting this column.) Writing a snapshot
+now retires the account's earlier ones, so an account corrects itself on its
+next ingest and there is nothing to run by hand.
+
+Reads are unaffected either way — the query path consults neither column. The
+point is what the data says: the schema and its contents are released with the
+paper, and a reader of that dataset would otherwise conclude that every
+identity had expired and that every version of it was live simultaneously.
+
 ### Stage 5: Reflection
 
 Periodic summarization that synthesizes patterns and detected changes across all cognitive state.

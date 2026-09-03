@@ -982,6 +982,22 @@ class V3Pipeline:
                 snapshot.valid_until,
                 snapshot.snapshot_timestamp
             )
+            # "The active snapshot" has to be one thing. is_active was
+            # written TRUE and never cleared, so all 38 stored snapshots were
+            # active at once and one account had fifteen of them - a column
+            # naming the live identity that named every identity the account
+            # had ever had. Retiring the others here rather than in a migration
+            # means an account corrects itself on its next ingest, with nothing
+            # to run by hand.
+            #
+            # Reads are unaffected either way: the query path takes the newest
+            # snapshot, or the pinned one, and consults neither column.
+            await execute(
+                "UPDATE identity_snapshots SET is_active = FALSE "
+                "WHERE user_id = $1 AND snapshot_id <> $2 AND is_active",
+                snapshot.user_id, snapshot.snapshot_id,
+            )
+
             # ON CONFLICT DO NOTHING above means a row with this id may have
             # existed already, which is equally fine for the caller: what it
             # needs to know is whether the id is now present.
