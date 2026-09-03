@@ -307,6 +307,13 @@ export const api = {
     return data;
   },
 
+  getMemories: async (userId = activeUser(), limit = 25, memoryType = '') => {
+    const { data } = await client.get('/reasoning/memories', {
+      params: { user_id: userId, limit, memory_type: memoryType || undefined },
+    });
+    return data;
+  },
+
   getLifecycle: async (userId = activeUser()) => {
     const { data } = await client.get('/reasoning/lifecycle', { params: { user_id: userId } });
     return data;

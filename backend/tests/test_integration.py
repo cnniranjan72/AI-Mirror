@@ -178,6 +178,7 @@ class TestExplainAPI:
             "/reasoning/evidence", "/reasoning/inferences", "/reasoning/reflections",
             "/reasoning/contested",
             "/reasoning/lifecycle",
+            "/reasoning/memories",
             "/reasoning/behavior-objects", "/query/traces", "/query/traces/{trace_id}",
             "/cognitive/metrics", "/cognitive/summary",
             "/explain/{trace_id}", "/explain/evidence/{evidence_id}", "/explain/identity/{identity_id}",

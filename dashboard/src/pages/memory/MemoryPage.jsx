@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { useReflections, useInferences, useBehaviorObjects } from '../../hooks/useApi'
+import { useReflections, useInferences, useBehaviorObjects, useMemories } from '../../hooks/useApi'
 import GlassCard from '../../components/ui/GlassCard'
 import Badge from '../../components/ui/Badge'
 import AsyncState from '../../components/ui/AsyncState'
@@ -28,12 +28,18 @@ export default function MemoryPage() {
   const { data: reflections, loading: refLoading, error: refError, refetch: refetchRefs } = useReflections(undefined, { pollMs: MEMORY_POLL_MS })
   const { data: inferences, loading: infLoading, error: infError, refetch: refetchInfs } = useInferences(undefined, { pollMs: MEMORY_POLL_MS })
   const { data: behaviorObjects, loading: patLoading, error: patError, refetch: refetchBos } = useBehaviorObjects(undefined, { pollMs: MEMORY_POLL_MS })
+  const { data: memories, loading: memLoading, error: memError, refetch: refetchMems } = useMemories(undefined, { pollMs: MEMORY_POLL_MS })
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('all')
 
   const refs = Array.isArray(reflections) ? reflections : (reflections?.reflections || [])
   const infs = Array.isArray(inferences) ? inferences : (inferences?.inferences || [])
   const bos = Array.isArray(behaviorObjects) ? behaviorObjects : (behaviorObjects?.objects || [])
+  // The recall index: a curated subset carrying importance and how often each
+  // entry has actually been recalled, which none of the other stores tracks.
+  // The table existed from the first schema with no writer, so this list was
+  // empty for the product's whole history.
+  const mems = Array.isArray(memories) ? memories : (memories?.memories || [])
   const patterns = bos
     .filter(b => PATTERN_STATES.has(b.lifecycle_state))
     .sort((a, b) => (b.importance_score || 0) - (a.importance_score || 0))
@@ -49,20 +55,24 @@ export default function MemoryPage() {
     return items.filter(i => JSON.stringify(i).toLowerCase().includes(q))
   }
 
+  const filteredMems = filterItems(mems)
   const filteredRefs = filterItems(refs)
   const filteredInfs = filterItems(infs)
   const filteredPatterns = filterItems(patterns)
 
   const tabs = [
-    { id: 'all', label: 'All Memory', count: refs.length + infs.length + patterns.length },
+    { id: 'all', label: 'All Memory', count: mems.length + refs.length + infs.length + patterns.length },
     { id: 'reflections', label: 'Reflections', count: refs.length },
     { id: 'inferences', label: 'Inferences', count: infs.length },
     { id: 'patterns', label: 'Patterns', count: patterns.length },
   ]
 
-  const memoryLoading = refLoading || infLoading || patLoading
-  const memoryError = refError || infError || patError
-  const retryAll = useCallback(() => { refetchRefs(); refetchInfs(); refetchBos() }, [refetchRefs, refetchInfs, refetchBos])
+  const memoryLoading = refLoading || infLoading || patLoading || memLoading
+  const memoryError = refError || infError || patError || memError
+  const retryAll = useCallback(
+    () => { refetchRefs(); refetchInfs(); refetchBos(); refetchMems() },
+    [refetchRefs, refetchInfs, refetchBos, refetchMems],
+  )
   const avgPatternConfidence = patterns.length
     ? patterns.reduce((s, p) => s + (p.confidence || 0), 0) / patterns.length
     : 0.3
@@ -134,6 +144,52 @@ export default function MemoryPage() {
           <Badge variant="indigo">{refs.length + infs.length + patterns.length} entries</Badge>
         </div>
         <MemoryTree reflections={refs} inferences={infs} patterns={patterns} height={420} />
+      </GlassCard>
+
+      {/* The recall index. Reflections, inferences and patterns below are the
+          whole of each store; this is a selection out of them, carrying the two
+          things none of the others records: how much each stands out, and how
+          often it has actually been recalled. The table it reads existed from
+          the first schema with no writer, so this was empty until now. */}
+      <GlassCard gradient style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Recall Index</h3>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {filteredMems.length} of {mems.length} shown
+          </span>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '0 0 14px', maxWidth: 680, lineHeight: 1.6 }}>
+          What stands out, rather than everything that happened. Opening this page
+          counts as a recall, which is how the system distinguishes something it
+          keeps returning to from something it has never used.
+        </p>
+        {filteredMems.length === 0 ? (
+          <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            Nothing recorded yet — the index fills on your next ingest.
+          </div>
+        ) : (
+          <div style={{ maxHeight: 300, overflow: 'auto' }}>
+            {filteredMems.map((m, i) => (
+              <div key={m.memory_id || i} style={{
+                display: 'flex', alignItems: 'baseline', gap: 10,
+                padding: '9px 0', borderBottom: '1px solid var(--border-subtle)',
+              }}>
+                <span style={{
+                  padding: '2px 8px', borderRadius: 999, fontSize: 10, fontWeight: 600,
+                  background: 'rgba(148,163,184,0.12)', color: 'var(--text-tertiary)',
+                  whiteSpace: 'nowrap',
+                }}>{m.memory_type}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, minWidth: 0 }}>
+                  {m.content}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  {Math.round((m.importance || 0) * 100)}%
+                  {m.recalled_before > 0 && ` · recalled ${m.recalled_before}x`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </GlassCard>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>

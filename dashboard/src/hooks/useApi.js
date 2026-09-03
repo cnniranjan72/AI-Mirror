@@ -67,6 +67,10 @@ export function useReflections(userId, options) {
   return useApi(() => api.getReflections(userId, 20), [userId], options)
 }
 
+export function useMemories(userId, options) {
+  return useApi(() => api.getMemories(userId, 25), [userId], options)
+}
+
 export function useBehaviorObjects(userId, options) {
   return useApi(() => api.getBehaviorObjects(userId, 50), [userId], options)
 }

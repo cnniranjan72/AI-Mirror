@@ -213,6 +213,24 @@ async def post_restore(
     return await set_pin(body.user_id, body.snapshot_id, body.reason)
 
 
+@router.get("/reasoning/memories")
+async def get_memories(
+    user_id: str = Depends(resolve_user_id),
+    limit: int = Query(default=25, le=100),
+    memory_type: Optional[str] = Query(default=None),
+):
+    """The recall index: what stands out, and how often it has been recalled.
+
+    Reading is not free of consequence here - recall increments the access
+    count, which is the only way the system can tell a memory it keeps
+    returning to from one it has never used.
+    """
+    from app.services.memory_store import recall
+
+    types = [memory_type] if memory_type else None
+    return await recall(user_id, limit=limit, memory_types=types)
+
+
 @router.get("/reasoning/lifecycle")
 async def get_lifecycle(user_id: str = Depends(resolve_user_id)):
     """What is still current, what is fading, and what has been set aside.

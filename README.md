@@ -462,7 +462,14 @@ recalled.
 
 Writes are idempotent: a memory's id is derived from what it is *about*, so
 re-ingesting the same history reinforces one row rather than appending a
-duplicate per batch. Recall records itself, incrementing `access_count`.
+duplicate per batch. Recall records itself, incrementing `access_count` — which
+is why reading the Memory page counts as a recall.
+
+This replaced `backend/memory/`, six modules declaring five memory types that
+each stored to a per-process dictionary under the comment *"In-memory storage
+(in production, use database)"*. None of the five classes was referenced outside
+its own singleton getter. It has been removed rather than left beside a working
+store, since having both invites the question of which one is real.
 
 #### Retrieval targets
 
@@ -1671,6 +1678,7 @@ flowchart TB
 | `GET` | `/reasoning/evidence` | Evidence items (filterable by type) |
 | `GET` | `/reasoning/contested` | Claims whose own evidence contradicts them, most contested first |
 | `GET` | `/reasoning/lifecycle` | Behaviours grouped into current, fading and set aside |
+| `GET` | `/reasoning/memories` | The recall index, most important first (reading counts as a recall) |
 | `GET` | `/identity/restore-points` | Snapshots this account can go back to, and what each would change |
 | `POST` | `/identity/restore` | Pin reads to an earlier snapshot (omit `snapshot_id` to unpin) |
 | `GET` | `/reasoning/inferences` | Rule-based inferences |
