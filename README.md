@@ -350,6 +350,44 @@ Clusters normalized events into hierarchically-organized behavior objects by top
 |---|---|---|
 | `List[BehaviorEvent]` | Topic extraction → Creator aggregation → Temporal clustering → Importance scoring | `List[BehaviorObject]` with topics, keywords, creators, importance_score, confidence, lifecycle_state, temporal trends |
 
+#### What consolidation is allowed to see
+
+A cluster needs three events sharing a topic or a creator. That is a reasonable
+bar, but it used to be applied to *one request's* events in isolation —
+consolidation was called per ingest with `existing_clusters=[]` and a comment
+saying "In production, load from DB". The extension sends batches of ten
+(`chrome-extension/content.js` `BATCH_SIZE`), so a creator whose videos were
+spread across batches never reached three inside any single one, and never
+became a behavior object at all. There was no later rescue either: the
+orchestrator merges into behavior objects that already exist, so a topic that
+never formed once never formed.
+
+Measured on stored accounts, comparing the topics that form in batches of ten
+against the topics that form when the same events are consolidated together:
+
+| Account | Events | Topics in batches of 10 | Never form |
+|---|---|---|---|
+| `demo_ddz4smtf` | 800 | 25 of 31 | 19% |
+| `demo_tx4m2pae` | 800 | 20 of 31 | 35% |
+| `demo_vf35lyxj` | 159 | 15 of 26 | 50% |
+
+Nearly all of the loss is creator clusters — a creator needs three of their own
+videos inside a ten-event window, while a topic can be carried by hashtags
+several creators share.
+
+Consolidation now runs over a window of the account's recent stored events
+(`pipeline/stored_events.py`, 500 by default) merged with the incoming batch,
+rather than the batch alone. The size is a measurement rather than a
+preference: on an 800-event account, 100 events already yield 24 of 31 topics
+and 400 yield 30. Reading them back is one query; consolidating 800 of them
+takes 15 ms, so the cost is the query and not the work.
+
+Re-consolidating events already seen is safe by construction — clusters merge
+into existing behavior objects by topic, `supporting_event_ids` is a union, and
+`occurrence_count` derives from that deduplicated set. Within the merge, an
+event is identified by content id *and* timestamp, so a genuine re-watch still
+counts as a second viewing.
+
 ### Stage 3: Evidence Collection
 
 Collects evidence across 5 dimensions:

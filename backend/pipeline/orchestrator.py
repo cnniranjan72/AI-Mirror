@@ -28,6 +28,7 @@ from backend.identity.identity_snapshot import IdentitySnapshot, SnapshotManager
 from backend.identity.self_model import SelfModelEngine, SelfModel
 
 from app.db.postgres import fetch, fetchrow, execute
+from pipeline import stored_events
 
 logger = logging.getLogger(__name__)
 
@@ -206,11 +207,29 @@ class V3Pipeline:
             # Load existing behavior objects from database
             existing_behavior_ids = await self._load_behavior_object_ids(user_id)
             existing_behavior_objects = await self._load_behavior_objects(user_id)
-            
-            # Run knowledge consolidation
+
+            # Consolidate over a window of the account's recent events, not
+            # only the ones in this request. A cluster needs three events
+            # sharing a topic or creator; applied per request, that meant a
+            # creator whose videos were spread across the extension's
+            # ten-event batches never reached three in any one of them and
+            # never became anything. Measured against the same events
+            # consolidated together, batches of ten lose 19-50% of an
+            # account's topics, nearly all of them creators.
+            #
+            # The window is read back from storage rather than kept in memory
+            # because the process that saw the earlier batches is long gone.
+            stored = await stored_events.load_recent(user_id)
+            to_consolidate = stored_events.merge(stored, events)
+            if len(to_consolidate) > len(events):
+                logger.info(
+                    "Consolidating %d events (%d from this batch, %d from history)",
+                    len(to_consolidate), len(events), len(to_consolidate) - len(events),
+                )
+
             clusters, unclustered = self.knowledge_engine.consolidate_events(
-                events=events,
-                existing_clusters=[]  # In production, load from DB
+                events=to_consolidate,
+                existing_clusters=[],
             )
             
             # Convert clusters to behavior objects

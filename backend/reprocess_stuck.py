@@ -33,7 +33,6 @@ next time a request dies for some other reason.
 """
 import argparse
 import asyncio
-import json
 import os
 import sys
 
@@ -45,8 +44,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.db.postgres import close_pool, fetch, init_pool  # noqa: E402
-from backend.core.behavior_gateway import get_behavior_gateway  # noqa: E402
-from backend.shared.contracts import EventSource  # noqa: E402
+from pipeline import stored_events  # noqa: E402
 
 # Below this there is nothing to consolidate: the engine needs three events
 # sharing a topic or a creator before it will form anything, so an account with
@@ -72,61 +70,12 @@ async def stuck_accounts(user: str = None):
     return rows
 
 
-async def _normalized_events(user_id: str):
-    """The user's stored events, in the shape the pipeline expects.
-
-    Read back from the events table rather than from a request body, because
-    the request that carried them is long gone. event_id is set to the real row
-    id for the same reason ingest does it: the Timeline page's reverse index
-    walks supporting_event_ids back to specific rows.
-    """
-    raw = await fetch(
-        "SELECT id, reel_id, username, caption, hashtags, audio, watch_time, "
-        "timestamp, session_id, liked, saved, shared, commented, following, "
-        "platform, surface FROM events WHERE user_id = $1 ORDER BY timestamp",
-        user_id,
-    )
-    payload = {"events": []}
-    for r in raw:
-        hashtags = r["hashtags"]
-        if isinstance(hashtags, str):
-            try:
-                hashtags = json.loads(hashtags)
-            except (ValueError, TypeError):
-                hashtags = []
-        payload["events"].append({
-            "reel_id": r["reel_id"],
-            "username": r["username"],
-            "caption": r["caption"],
-            "hashtags": hashtags or [],
-            "audio_info": r["audio"],
-            "watch_time": r["watch_time"],
-            "timestamp": r["timestamp"].isoformat(),
-            "session_id": r["session_id"],
-            "liked": r["liked"],
-            "saved": r["saved"],
-            "shared": r["shared"],
-            "commented": r["commented"],
-            "following": r["following"],
-            "platform": r["platform"],
-            "surface": r["surface"],
-            "source_url": "",
-        })
-
-    by_content = {r["reel_id"]: r["id"] for r in raw}
-    gateway = get_behavior_gateway()
-    normalized = gateway.process_batch(payload, EventSource.CHROME_EXTENSION)
-    for bev in normalized:
-        db_id = by_content.get(bev.content_id)
-        if db_id is not None:
-            bev.event_id = str(db_id)
-    return normalized
-
-
 async def rebuild(user_id: str):
     from pipeline.orchestrator import V3Pipeline
 
-    normalized = await _normalized_events(user_id)
+    # No limit: a repair should consider everything the account ever sent,
+    # where an ingest only looks at a recent window to keep the read bounded.
+    normalized = await stored_events.load_recent(user_id, limit=None)
     if not normalized:
         return None
     pipeline = V3Pipeline()
