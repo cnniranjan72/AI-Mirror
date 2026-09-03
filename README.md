@@ -471,21 +471,21 @@ The retrieval context serves 10 of them:
 
 | Target | Source |
 |---|---|
-| , ,  | their own tables |
-| , , ,  | their own tables |
-|  | the recall index, importance-ranked |
-|  | raw events — what was watched, and when |
-|  | per-creator aggregates |
+| `behavior_objects`, `evidence`, `inferences` | their own tables |
+| `identity_snapshot`, `self_model`, `goals`, `reflections` | their own tables |
+| `memory` | the recall index, importance-ranked |
+| `behavior_history` | raw events — what was watched, and when |
+| `creator_history` | per-creator aggregates |
 
-A directive whose key is absent returns nothing and logs at debug level; when
-it is marked **required**, the retrieval step records a failure and the query
+A directive whose key is absent returns nothing and logs at debug level; when it
+is marked **required**, the retrieval step records a failure and the query
 proceeds with less than it planned for. Two intents were in that position on
-every request —  required  and 
-required , and neither key existed.
+every request — `memory_question` required `memory` and `behavioral_question`
+required `behavior_history`, and neither key existed.
 
- is requested by every intent, optionally at priority 0.2, and is
+`runtime_state` is requested by every intent, optionally at priority 0.2, and is
 deliberately not served: what it would carry already reaches the later stages
-through .  and  are declared on the
+through `character_core`. `interest_history` and `journal` are declared on the
 enum and requested by no intent.
 
 ### Stage 5: Reflection
