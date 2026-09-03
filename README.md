@@ -1500,6 +1500,34 @@ curl -X POST http://localhost:8000/seed
 
 Or click "Load Demo Data" on the landing page.
 
+The 800 inserts are one statement, not 800. They used to be a loop of
+single-row `INSERT`s, each its own round trip — about 330 s of pure latency
+against the managed database, measured, in a request that still had to run the
+whole pipeline afterwards. Roughly half of those requests died first, and the
+damage was not a failed seed but a *half* seed: events committed, nothing
+derived from them, and nothing that ever revisits stored events. Of 15 demo
+accounts on the deployed instance, 7 were in that state — four of them holding
+all 800 events, so the inserts had finished and only consolidation was lost.
+Such an account looks populated and answers nothing: the dashboard shows an
+event count and every question returns *"No behavioral data found yet."*
+
+Batched, the same 800 rows insert in 2.3 s.
+
+For accounts already stranded that way — and for the next request that dies
+for some other reason — rebuild the derived state from the events already
+stored:
+
+```bash
+python backend/reprocess_stuck.py           # report what would be rebuilt
+python backend/reprocess_stuck.py --apply   # rebuild it
+```
+
+It selects only accounts that have events and nothing derived from them, so an
+account that is merely new is left alone, and one that is already fine is never
+touched. Behaviour objects are derived from events; this derives them again
+from events already in the database, so nothing is destroyed and a second run
+changes nothing.
+
 ### Getting Started by Persona
 
 The landing page (`/`) has a dedicated entry point for each of these — the steps below are what those buttons actually do, if you'd rather drive it directly against the API.

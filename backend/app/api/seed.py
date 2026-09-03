@@ -11,7 +11,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends
 
-from app.db.postgres import execute, fetch, fetchrow
+from app.db.postgres import execute, fetch
 from backend.shared.contracts import EventSource
 from app.core.rate_limit import seed_rate_limit
 
@@ -110,6 +110,50 @@ def _generate_events(user_id: str, count: int = 800) -> List[dict]:
         })
     events.sort(key=lambda e: e["timestamp"])
     return events
+
+
+async def _store_events(user_id: str, events: List[dict]):
+    """Insert the whole batch in one statement, and return the row ids.
+
+    This was 800 single-row INSERTs, each its own round trip. Measured against
+    the managed database that is around 100-350 s of pure latency, in a request
+    that still has to run the entire pipeline afterwards - and roughly half of
+    them never got that far. Of 15 demo accounts, 7 hold events and no
+    behaviour objects, four of those with all 800 events stored: the inserts
+    finished and the request died before consolidation. Such an account is
+    permanently unanswerable, since nothing ever revisits stored events, and
+    every question it is asked returns "No behavioral data found yet".
+
+    unnest makes it one round trip. RETURNING hands back the ids the pipeline
+    needs to link behaviour objects to the events behind them; the mapping is
+    keyed by content id, so the order rows come back in does not matter.
+
+    A malformed row now fails the whole seed rather than being logged and
+    skipped. That is deliberate: a seed that half-succeeds is the defect being
+    fixed here, and an error the caller can see beats an account that looks
+    real and answers nothing.
+    """
+    rows = await fetch(
+        """
+        INSERT INTO events (user_id, reel_id, username, caption, hashtags,
+                            audio, watch_time, timestamp, session_id)
+        SELECT $1, r, u, c, h::jsonb, a, w, t, s
+        FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::text[],
+                    $7::double precision[], $8::timestamptz[], $9::text[])
+             AS e(r, u, c, h, a, w, t, s)
+        RETURNING id, reel_id
+        """,
+        user_id,
+        [e["reel_id"] for e in events],
+        [e["username"] for e in events],
+        [e["caption"] for e in events],
+        [json.dumps(e["hashtags"]) for e in events],
+        [e["audio"] for e in events],
+        [float(e["watch_time"]) for e in events],
+        [datetime.fromisoformat(e["timestamp"]) for e in events],
+        [e["session_id"] for e in events],
+    )
+    return len(rows), {r["reel_id"]: r["id"] for r in rows}
 
 
 async def _run_pipeline(user_id: str, events: List[dict], reel_id_to_db_id: dict):
@@ -230,22 +274,7 @@ async def seed_demo_data():
     user_id = _random_user_id()
     events = _generate_events(user_id, 800)
 
-    stored = 0
-    reel_id_to_db_id = {}
-    for event in events:
-        try:
-            row = await fetchrow(
-                """INSERT INTO events (user_id, reel_id, username, caption, hashtags, audio, watch_time, timestamp, session_id)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                   RETURNING id""",
-                user_id, event["reel_id"], event["username"], event["caption"],
-                json.dumps(event["hashtags"]), event["audio"], event["watch_time"],
-                datetime.fromisoformat(event["timestamp"]), event["session_id"],
-            )
-            reel_id_to_db_id[event["reel_id"]] = row["id"]
-            stored += 1
-        except Exception as e:
-            logger.warning(f"Failed to store event {event['reel_id']}: {e}")
+    stored, reel_id_to_db_id = await _store_events(user_id, events)
 
     result = await _run_pipeline(user_id, events, reel_id_to_db_id)
     platform_side = await _seed_platform_side(user_id)
