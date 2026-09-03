@@ -267,7 +267,7 @@ Figure~\ref{fig:identity_pipeline} shows the path from raw behavioural events to
 
 The Evidence Engine then collects evidence across five dimensions---topical, temporal, creator, interaction and cross-platform---recording countervailing observations alongside supporting ones and computing a net confidence that a single accumulation counter cannot express. The Inference Engine applies rule-based condition--action pairs in priority order to derive higher-level conclusions, each recording its type, quality metrics, supporting evidence and suggested actions. The Reflection Engine synthesises daily, weekly and monthly journals for longitudinal analysis.
 
-The Identity Engine assembles nine sub-profiles---behaviour, interest graph, creator graph, learning style, attention, exploration, consistency, habit and motivation---each with an independently computed confidence, aggregated by evidence volume and recency. The Snapshot Manager watches the active identity for shifts exceeding an $L_2$ distance of $0.30$ and, when one occurs, writes an immutable versioned snapshot. Since invariant 2 already routes user-facing reads through a frozen snapshot, rollback is the choice of \emph{which} one is frozen: a person who does not recognise where the model has drifted sends reads to an earlier snapshot, and nothing is deleted or rewritten. Overwriting the live identity instead would not survive, since construction is from scratch on each ingest, so the control would appear to work while quietly undoing itself. All seventeen dimensions are scaled to $[0,1]$ before the distance is taken; sixteen are already bounded scores, while mean attention span is a duration and is divided by a 300-second cap. Mixing an unbounded term into the norm makes the threshold meaningless, as Section~\ref{sec:discussion} reports. Distinct from all of this is the Self Model, which holds what the system \emph{believes} rather than what the data shows: each belief carries a type, a confidence, an uncertainty counter and references to both supporting and countervailing evidence, and is classified STRONG only when it is both well supported and not contested by its own observations, UNCERTAIN otherwise (Eq.~\eqref{eq:belief_status}). That distinction is what lets the verbalizer hedge honestly instead of asserting everything with equal force.
+The Identity Engine assembles nine sub-profiles---behaviour, interest graph, creator graph, learning style, attention, exploration, consistency, habit and motivation---each with a confidence computed from the evidence that profile alone rests on---the interest graph from topic behaviours, the creator graph from those naming a creator, attention from those carrying watch statistics, motivation from inferences---as $\min(0.95,\ v \cdot r)$, for volume $v$ saturating at twenty observations and recency $r$ halving every thirty days from the newest support. Multiplied rather than averaged, since abundant year-old observations describe not a half-confident profile but a person who may no longer exist; the ceiling sits below one because these say how much was seen and how lately, not whether it was right. The identity-wide figure renormalises over the components that exist rather than substituting a neutral value for absent ones, and is capped by $v$. The Snapshot Manager watches the active identity for shifts exceeding an $L_2$ distance of $0.30$ and, when one occurs, writes an immutable versioned snapshot. Since invariant 2 already routes user-facing reads through a frozen snapshot, rollback is the choice of \emph{which} one is frozen: a person who does not recognise where the model has drifted sends reads to an earlier snapshot, and nothing is deleted or rewritten. Overwriting the live identity instead would not survive, since construction is from scratch on each ingest, so the control would appear to work while quietly undoing itself. All seventeen dimensions are scaled to $[0,1]$ before the distance is taken; sixteen are already bounded scores, while mean attention span is a duration and is divided by a 300-second cap. Mixing an unbounded term into the norm makes the threshold meaningless, as Section~\ref{sec:discussion} reports. Distinct from all of this is the Self Model, which holds what the system \emph{believes} rather than what the data shows: each belief carries a type, a confidence, an uncertainty counter and references to both supporting and countervailing evidence, and is classified STRONG only when it is both well supported and not contested by its own observations, UNCERTAIN otherwise (Eq.~\eqref{eq:belief_status}). That distinction is what lets the verbalizer hedge honestly instead of asserting everything with equal force.
 
 \subsection{Query: from question to answer}
 Figure~\ref{fig:query_pipeline} shows the query path. The Runtime Builder assembles a working context from the active snapshot; the Cognitive Planning Layer then classifies intent, plans retrieval, selects a reasoning mode and fixes the response structure---all through deterministic rules, with no language model involved. Character RAG retrieves across the five memory types (episodic, semantic, behavioural, goal and reflection), each with its own storage and retrieval strategy, with the planner deciding which to query. The Decision Engine scores candidate content on six weighted dimensions, caps how many facts any one topic may contribute, and selects what may be said, so low-confidence or contradictory material never reaches the generator. Only then does the Context Builder assemble a structured plan for the LLM Verbalizer, whose sole task is to render that plan as fluent prose.
@@ -464,31 +464,7 @@ Conversational consistency & Per-turn only & Session-limited & Cross-session gua
 \end{table}
 
 \subsection{Component Latency Profile}
-Table~\ref{table:latency} presents per-component latencies averaged over 10 query pipeline executions. All cognitive planning and decision-making components complete in under 3 milliseconds. The dominant latency contributor is database connection pool initialization on cold start; steady-state queries complete in approximately 3.5 seconds with sub-millisecond cognitive processing.
-
-\begin{table}[htbp]
-\centering
-\caption{Per-component latency of the query pipeline (averaged over 10 runs).}
-\label{table:latency}
-\footnotesize
-\begin{tabular}{lr}
-\toprule
-\textbf{Component} & \textbf{Latency (ms)} \\
-\midrule
-Runtime load & $2.0 \pm 0.3$ \\
-Planning & $1.1 \pm 0.2$ \\
-Retrieval & $0.9 \pm 0.1$ \\
-Memory Ranking & $2.3 \pm 0.4$ \\
-Fusion & $0.5 \pm 0.1$ \\
-Decision Engine & $0.3 \pm 0.1$ \\
-Context Building & $0.4 \pm 0.1$ \\
-Verbalization & $0.3 \pm 0.1$ \\
-\midrule
-\textbf{Cognitive total} & \textbf{7.8 $\pm$ 1.4} \\
-\textbf{End-to-end (incl. DB)} & \textbf{$\sim$3500} \\
-\bottomrule
-\end{tabular}
-\end{table}
+Averaged over 10 query pipeline executions, every cognitive stage completes in under 3\,ms: runtime load $2.0 \pm 0.3$, memory ranking $2.3 \pm 0.4$, planning $1.1 \pm 0.2$, retrieval $0.9 \pm 0.1$, fusion $0.5 \pm 0.1$, context building $0.4 \pm 0.1$, and the decision engine and verbalization $0.3 \pm 0.1$ each, for a cognitive total of $7.8 \pm 1.4$\,ms. End-to-end is approximately 3.5\,s, dominated by database connection pool initialization on cold start rather than by any reasoning stage.
 
 \subsection{Confidence Product Validation}
 We measured $\Gamma$ (Eq.~\eqref{eq:confidence_product}) across all 596 evaluation queries. The mean $\Gamma$ was 0.342 (SD~=~0.187). Correctly classified queries showed higher $\Gamma$ (mean~=~0.418) than misclassified queries (mean~=~0.124). We report the difference in means without a hypothesis test, so this indicates rather than establishes that the confidence product tracks output reliability. The right-skewed distribution (23\% exceeding 0.5, 12\% below 0.1) confirms that low-confidence pipeline stages propagate to low-confidence final outputs, enabling graded rather than binary certainty.

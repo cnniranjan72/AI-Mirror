@@ -515,6 +515,36 @@ flowchart TB
 |---|---|---|
 | Inferences + Evidence + Behavior Objects + existing identity | Sub-profile scoring → Confidence amalgamation → Version increment | `Identity` with 9 sub-profiles, overall_confidence, identity_completeness, version |
 
+#### Per-profile confidence
+
+Each of the nine sub-profiles carries its own confidence, computed from the
+evidence **that profile** rests on:
+
+| Sub-profile | Supported by |
+|---|---|
+| `behavior_profile` | all behaviour objects |
+| `interest_graph` | topic behaviours only (creator clusters excluded) |
+| `creator_graph` | behaviours naming at least one creator |
+| `learning_style` / `attention_profile` | behaviours carrying watch statistics |
+| `consistency_profile` / `habit_profile` | behaviours seen more than once |
+| `exploration_profile` | distinct topics (saturates at 10, since it is a claim about breadth) |
+| `motivation_signals` | inferences (saturates at 5) |
+
+`confidence = min(0.95, volume × recency)` where `volume = observations / 20`
+(capped at 1) and `recency` halves every 30 days from the newest supporting
+observation. Volume and recency are **multiplied, not averaged**: plenty of
+year-old observations don't make a half-confident profile, they describe someone
+who may no longer exist. The ceiling is below 1.0 because volume and recency say
+how much was seen and how lately, not whether the reading was right — that's the
+Accuracy Ledger's question.
+
+Every figure ships with `confidence_basis`, the counts and ages that produced it,
+so a number is never shown without what it rests on.
+
+Overall identity confidence drops absent components and renormalises rather than
+substituting a flat 0.5 for each, and is capped at `volume`: two behaviour objects
+cannot yield a confident identity however sure the engine is about each one.
+
 ### Stage 7: Snapshot
 
 Captures temporal snapshots of identity, persisted only when behavioral shift crosses a configurable threshold.

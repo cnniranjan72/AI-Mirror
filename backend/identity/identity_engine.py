@@ -38,6 +38,13 @@ class InterestGraph(BaseModel):
     stable_interests: List[InterestNode] = Field(default_factory=list, description="Stable long-term interests")
     total_topics: int = Field(default=0, description="Total unique topics")
     diversity_score: float = Field(..., ge=0.0, le=1.0, description="Interest diversity")
+    # How well this profile's own evidence supports it. Seven of the nine
+    # sub-profiles had nowhere to record this, and the two that did used a
+    # binary constant, so the architecture's "independently computed
+    # confidence" was neither independent nor computed. See
+    # identity/profile_confidence.py.
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence in this profile")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
 
 
 class CreatorNode(BaseModel):
@@ -58,12 +65,20 @@ class CreatorGraph(BaseModel):
     creator_diversity_score: float = Field(..., ge=0.0, le=1.0, description="Creator diversity")
     dependence_score: float = Field(..., ge=0.0, le=1.0, description="Dependence on few creators")
     total_creators: int = Field(default=0, description="Total unique creators")
+    # How well this profile's own evidence supports it. Seven of the nine
+    # sub-profiles had nowhere to record this, and the two that did used a
+    # binary constant, so the architecture's "independently computed
+    # confidence" was neither independent nor computed. See
+    # identity/profile_confidence.py.
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence in this profile")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
 
 
 class LearningStyle(BaseModel):
     """Learning style profile"""
     style_type: str = Field(..., description="Primary learning style (visual/analytical/practical/theoretical)")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in style classification")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
     completion_rate: float = Field(..., ge=0.0, le=1.0, description="Content completion rate")
     depth_preference: str = Field(..., description="Depth preference (quick/moderate/deep)")
     pace_preference: str = Field(..., description="Pace preference (fast/moderate/slow)")
@@ -79,6 +94,13 @@ class AttentionProfile(BaseModel):
     peak_attention_hours: List[int] = Field(default_factory=list, description="Peak attention hours")
     distraction_resistance: float = Field(..., ge=0.0, le=1.0, description="Resistance to distraction")
     focus_quality: float = Field(..., ge=0.0, le=1.0, description="Quality of focus")
+    # How well this profile's own evidence supports it. Seven of the nine
+    # sub-profiles had nowhere to record this, and the two that did used a
+    # binary constant, so the architecture's "independently computed
+    # confidence" was neither independent nor computed. See
+    # identity/profile_confidence.py.
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence in this profile")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
 
 
 class ExplorationProfile(BaseModel):
@@ -88,6 +110,13 @@ class ExplorationProfile(BaseModel):
     exploitation_rate: float = Field(..., ge=0.0, le=1.0, description="Rate of deepening existing interests")
     topic_switching_frequency: float = Field(..., description="How often topics switch")
     comfort_zone_ratio: float = Field(..., ge=0.0, le=1.0, description="Time in comfort zone vs exploration")
+    # How well this profile's own evidence supports it. Seven of the nine
+    # sub-profiles had nowhere to record this, and the two that did used a
+    # binary constant, so the architecture's "independently computed
+    # confidence" was neither independent nor computed. See
+    # identity/profile_confidence.py.
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence in this profile")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
 
 
 class ConsistencyProfile(BaseModel):
@@ -97,6 +126,13 @@ class ConsistencyProfile(BaseModel):
     temporal_consistency: float = Field(..., ge=0.0, le=1.0, description="Temporal pattern consistency")
     engagement_consistency: float = Field(..., ge=0.0, le=1.0, description="Engagement consistency")
     volatility_score: float = Field(..., ge=0.0, le=1.0, description="Behavioral volatility")
+    # How well this profile's own evidence supports it. Seven of the nine
+    # sub-profiles had nowhere to record this, and the two that did used a
+    # binary constant, so the architecture's "independently computed
+    # confidence" was neither independent nor computed. See
+    # identity/profile_confidence.py.
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence in this profile")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
 
 
 class HabitProfile(BaseModel):
@@ -107,6 +143,13 @@ class HabitProfile(BaseModel):
     peak_usage_days: List[str] = Field(default_factory=list, description="Peak usage days")
     session_regularity: float = Field(..., ge=0.0, le=1.0, description="Session regularity")
     habit_stability: float = Field(..., ge=0.0, le=1.0, description="Habit stability over time")
+    # How well this profile's own evidence supports it. Seven of the nine
+    # sub-profiles had nowhere to record this, and the two that did used a
+    # binary constant, so the architecture's "independently computed
+    # confidence" was neither independent nor computed. See
+    # identity/profile_confidence.py.
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence in this profile")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
 
 
 class MotivationSignals(BaseModel):
@@ -118,6 +161,7 @@ class MotivationSignals(BaseModel):
     goal_orientation: float = Field(..., ge=0.0, le=1.0, description="Goal orientation strength")
     intrinsic_motivation: float = Field(..., ge=0.0, le=1.0, description="Intrinsic motivation")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in motivation assessment")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
 
 
 class BehaviorProfile(BaseModel):
@@ -126,6 +170,13 @@ class BehaviorProfile(BaseModel):
     total_behaviors: int = Field(default=0, description="Total behavior objects")
     active_behaviors: int = Field(default=0, description="Currently active behaviors")
     avg_engagement_rate: float = Field(..., ge=0.0, le=1.0, description="Average engagement rate")
+    # How well this profile's own evidence supports it. Seven of the nine
+    # sub-profiles had nowhere to record this, and the two that did used a
+    # binary constant, so the architecture's "independently computed
+    # confidence" was neither independent nor computed. See
+    # identity/profile_confidence.py.
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0, description="Confidence in this profile")
+    confidence_basis: Dict[str, Any] = Field(default_factory=dict, description="What produced the confidence")
     avg_watch_time: float = Field(..., description="Average watch time")
     behavior_diversity: float = Field(..., ge=0.0, le=1.0, description="Behavioral diversity")
     behavior_stability: float = Field(..., ge=0.0, le=1.0, description="Behavioral stability")
@@ -291,6 +342,25 @@ class IdentityEngine:
             sorted_behaviors = sorted(behavior_objects, key=_safe_sort_key)
             behavior_timeline = [b.unique_id for b in sorted_behaviors]
             
+            # Each profile's confidence comes from the evidence that profile
+            # in particular rests on, which is the only thing that makes nine
+            # figures worth having rather than one repeated nine times.
+            self._attach_profile_confidences(
+                behaviors=behavior_objects,
+                inferences=inferences,
+                profiles={
+                    "behavior_profile": behavior_profile,
+                    "interest_graph": interest_graph,
+                    "creator_graph": creator_graph,
+                    "learning_style": learning_style,
+                    "attention_profile": attention_profile,
+                    "exploration_profile": exploration_profile,
+                    "consistency_profile": consistency_profile,
+                    "habit_profile": habit_profile,
+                    "motivation_signals": motivation_signals,
+                },
+            )
+
             # Calculate confidence
             overall_confidence = self._calculate_identity_confidence(
                 behavior_objects,
@@ -614,7 +684,11 @@ class IdentityEngine:
             # Style type (simplified)
             style = "analytical" if learning_inferences else "practical"
             
-            confidence = 0.7 if learning_inferences else 0.5
+            # Set by _attach_profile_confidences from this profile's own
+            # supporting observations and their recency. It was
+            # "0.7 if <something> else 0.5" here, a flag for whether any
+            # input existed rather than a measure of how much.
+            confidence = 0.0
             
             return LearningStyle(
                 style_type=style,
@@ -830,7 +904,11 @@ class IdentityEngine:
             else:
                 intrinsic = 0.0
             
-            confidence = 0.7 if inferences else 0.5
+            # Set by _attach_profile_confidences from this profile's own
+            # supporting observations and their recency. It was
+            # "0.7 if <something> else 0.5" here, a flag for whether any
+            # input existed rather than a measure of how much.
+            confidence = 0.0
             
             return MotivationSignals(
                 learning_motivation=learning_motivation,
@@ -846,6 +924,71 @@ class IdentityEngine:
             logger.error(f"Error extracting motivation signals: {str(e)}", exc_info=True)
             raise
     
+    def _attach_profile_confidences(self, behaviors, inferences, profiles) -> None:
+        """Give each sub-profile a confidence drawn from its own supporting data.
+
+        The counts differ because the inputs differ: an account can carry
+        hundreds of topic observations and almost no timing data, in which case
+        the interest graph is well supported and the habit profile is a guess.
+        One identity-wide number cannot say that, and nine copies of it say it
+        nine times over.
+        """
+        from backend.identity.profile_confidence import newest, profile_confidence
+
+        def when(subset):
+            return newest([
+                getattr(b.temporal_statistics, "last_seen", None) for b in subset
+            ])
+
+        def has_creator(b):
+            return bool(getattr(b, "creators", None))
+
+        def watched(b):
+            return getattr(b.watch_statistics, "avg_watch_time", 0) > 0
+
+        def repeated(b):
+            return getattr(b.temporal_statistics, "occurrence_count", 0) > 1
+
+        # Creator clusters are labelled "Content by <creator>" and are
+        # affinities, not subjects, so they support the creator graph and
+        # not the interest graph.
+        from backend.reasoning.behavior_object import is_creator_behavior
+        topics = [b for b in behaviors if not is_creator_behavior(b)]
+
+        creators = [b for b in behaviors if has_creator(b)]
+        attended = [b for b in behaviors if watched(b)]
+        habitual = [b for b in behaviors if repeated(b)]
+        distinct_topics = {b.topic for b in topics}
+
+        # (subset used for recency, observation count, saturation)
+        inputs = {
+            "behavior_profile": (behaviors, len(behaviors), None),
+            "interest_graph": (topics, len(topics), None),
+            "creator_graph": (creators, len(creators), None),
+            "learning_style": (attended, len(attended), None),
+            "attention_profile": (attended, len(attended), None),
+            # Exploration is a claim about breadth, so it saturates on the
+            # number of distinct topics rather than on observation count.
+            "exploration_profile": (topics, len(distinct_topics), 10.0),
+            "consistency_profile": (habitual, len(habitual), None),
+            "habit_profile": (habitual, len(habitual), None),
+            "motivation_signals": (behaviors, len(inferences or []), 5.0),
+        }
+
+        for name, profile in profiles.items():
+            if profile is None or name not in inputs:
+                continue
+            subset, count, saturation = inputs[name]
+            kwargs = {"observations": count, "last_seen": when(subset)}
+            if saturation is not None:
+                kwargs["saturation"] = saturation
+            result = profile_confidence(**kwargs)
+            try:
+                profile.confidence = result["confidence"]
+                profile.confidence_basis = result
+            except (AttributeError, ValueError) as e:
+                logger.warning("Could not set confidence on %s: %s", name, e)
+
     def _calculate_identity_confidence(
         self,
         behaviors: List[BehaviorObject],
@@ -859,24 +1002,39 @@ class IdentityEngine:
             
             # Confidence from data volume
             data_volume_confidence = min(1.0, len(behaviors) / 20.0)
-            
+
             # Confidence from behavior confidence
             behavior_confidence = sum(b.confidence_score for b in behaviors) / len(behaviors)
-            
-            # Confidence from evidence
-            evidence_confidence = sum(e.confidence for e in evidence) / len(evidence) if evidence else 0.5
-            
-            # Confidence from inferences
-            inference_confidence = sum(i.confidence for i in inferences) / len(inferences) if inferences else 0.5
-            
-            # Weighted average
-            overall = (
-                data_volume_confidence * 0.3 +
-                behavior_confidence * 0.3 +
-                evidence_confidence * 0.2 +
-                inference_confidence * 0.2
-            )
-            
+
+            # Absent components used to contribute a flat 0.5 apiece, which is
+            # not a neutral filler: it is 40% of the weight asserting moderate
+            # confidence about evidence and inferences that do not exist. An
+            # account with two behaviour objects and nothing else reported an
+            # overall confidence of 0.700 while every one of its nine
+            # sub-profiles independently reported about 0.10.
+            #
+            # A component with nothing behind it is dropped and the remaining
+            # weights renormalised, so the figure describes what was actually
+            # measured rather than what was assumed in its absence.
+            parts = [
+                (data_volume_confidence, 0.3),
+                (behavior_confidence, 0.3),
+            ]
+            if evidence:
+                parts.append((sum(e.confidence for e in evidence) / len(evidence), 0.2))
+            if inferences:
+                parts.append((sum(i.confidence for i in inferences) / len(inferences), 0.2))
+
+            total_weight = sum(w for _v, w in parts)
+            overall = sum(v * w for v, w in parts) / total_weight
+
+            # The identity cannot be better supported than the amount of data
+            # beneath it. Volume is what every other component is computed
+            # from, so it caps the claim rather than merely contributing
+            # three tenths of it: two behaviour objects cannot yield a
+            # confident identity however sure the engine is about each one.
+            overall = min(overall, data_volume_confidence)
+
             return round(overall, 3)
             
         except Exception as e:

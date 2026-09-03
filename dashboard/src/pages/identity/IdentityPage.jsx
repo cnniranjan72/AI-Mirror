@@ -180,20 +180,58 @@ export default function IdentityPage() {
         </GlassCard>
       </div>
 
-      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Sub-Profile Details</h3>
+      <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>Sub-Profile Details</h3>
+      {/* Each figure is computed from the evidence that profile in particular
+          rests on, so they differ: an account can carry plenty of topic
+          observations and almost no timing data, in which case the interest
+          graph is well supported and the habit profile is a guess. Seven of
+          these nine had no confidence at all, and the two that did were a flag
+          for "some inference exists" rather than a measure of how much. */}
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginBottom: 16, maxWidth: 720, lineHeight: 1.6 }}>
+        Each profile carries its own confidence, drawn from how much evidence supports
+        that profile and how recent it is — not one number repeated nine times.
+      </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16, marginBottom: 32 }}>
         {subProfiles.map(sp => {
           const sub = parseJSON(identity?.[sp.key])
           if (!sub || Object.keys(sub).length === 0) return null
           return (
             <GlassCard key={sp.key}>
-              <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: 'var(--text-secondary)' }}>{sp.label}</h4>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+                <h4 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--text-secondary)' }}>{sp.label}</h4>
+                {typeof sub.confidence === 'number' && (
+                  <span
+                    title={sub.confidence_basis?.basis || ''}
+                    style={{
+                      marginLeft: 'auto', fontSize: 12, fontWeight: 700,
+                      color: sub.confidence >= 0.6 ? '#34d399'
+                        : sub.confidence >= 0.3 ? '#fbbf24' : '#fb7185',
+                    }}
+                  >
+                    {Math.round(sub.confidence * 100)}%
+                  </span>
+                )}
+              </div>
+              {typeof sub.confidence === 'number' && (
+                <div style={{ height: 4, borderRadius: 999, marginBottom: 10, background: 'rgba(148,163,184,0.14)', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${Math.max(2, sub.confidence * 100)}%`, height: '100%',
+                    background: sub.confidence >= 0.6 ? '#34d399'
+                      : sub.confidence >= 0.3 ? '#fbbf24' : '#fb7185',
+                  }} />
+                </div>
+              )}
               {sp.fields.map(f => (
                 <div key={f} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border-subtle)', fontSize: 13 }}>
                   <span style={{ color: 'var(--text-muted)', textTransform: 'capitalize' }}>{f.replace(/_/g, ' ')}</span>
                   <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>{sub[f] !== undefined ? Math.round(sub[f] * 100) / 100 : '--'}</span>
                 </div>
               ))}
+              {sub.confidence_basis?.basis && (
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+                  {sub.confidence_basis.basis}
+                </p>
+              )}
             </GlassCard>
           )
         })}
