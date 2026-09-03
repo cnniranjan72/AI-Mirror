@@ -546,6 +546,54 @@ deliberately not served: what it would carry already reaches the later stages
 through `character_core`. `interest_history` and `journal` are declared on the
 enum and requested by no intent.
 
+#### When there is nothing to answer from
+
+User-facing reads come from a frozen identity snapshot, so an account without
+one cannot be answered about at all — the pipeline stops with *"No identity
+snapshot available"* before it plans anything. That part is correct. What
+happened next was not: the request fell through to the simple retrieval path,
+which found nothing and rendered the default template around it.
+
+> Here's what I found relevant to your query:
+>
+> No behavioral data found yet.
+>
+> This is based on 0 behavioral data points.
+
+It claims to have looked and reports nothing in the same breath, says nothing
+about why, and is the first thing a new account sees — asking a question is the
+first thing anyone does. The same sentence also answered accounts whose
+pipeline had genuinely broken, so neither the person asking nor anyone reading
+the logs could tell the two apart.
+
+The account's state is now established before falling back, and each state says
+what is there, what is missing, and the one thing that changes it:
+
+| State | Meaning | What it says |
+|---|---|---|
+| `no_events` | nothing has been collected | how to start collecting |
+| `not_consolidated` (few events) | too early for a pattern | a topic needs 3 occurrences; keep browsing |
+| `not_consolidated` (many events) | should have consolidated by now | a processing gap on our side, events are safe |
+| `no_identity` | patterns exist, no identity built | the pipeline stopped partway |
+| `ready` | answerable | *nothing* — see below |
+
+The threshold between the two `not_consolidated` messages is measured rather
+than picked. Taking the smallest prefix of each real account's history that
+produces a first cluster: 10, 4, 7, 5 and 12 events across five accounts. A
+first pattern therefore arrives inside a dozen events, and the boundary sits at
+25 — twice the worst case, leaving room for a narrower interest mix. Telling an
+account with 159 stored events that it needs more history would be blaming the
+user for our own gap, which is exactly what those accounts were: interrupted
+seeds.
+
+**A `ready` account gets no explanation at all.** That is the load-bearing part:
+if a soothing message were returned when a snapshot exists, every real breakage
+would read to the user as "no data yet" and to the operator as normal.
+
+Every answering path now persists the turn. Only the successful one used to, so
+a new account's first conversation — the one explaining why its history is
+empty — was returned and then dropped on reload.
+
 #### Correcting how a question was read
 
 Which of those targets get requested follows entirely from how the question was

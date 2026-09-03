@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from app.api.deps import enforce_write_match, resolve_user_id
-from app.services import rag, persona as persona_svc, chat_memory
+from app.services import rag, persona as persona_svc, chat_memory, readiness
 from backend.cognitive_pipeline.pipeline import get_cognitive_pipeline
 from backend.cognitive_planning.intent_planner import matched_nothing
 from backend.cognitive_planning.planner_models import UserIntentType
@@ -86,6 +86,32 @@ class QueryResponse(BaseModel):
     # True when the reading came from the caller rather than the classifier.
     intent_overridden: bool = False
 
+    # Why an account could not be answered about, when that is the reason.
+    # None on a normal answer. Present so a client can tell an empty account
+    # from a broken one - the fallback used to render both identically.
+    data_state: Optional[str] = None
+
+
+async def _remember(user_id: str, conversation_id: str, question: str,
+                    answer: str, trace_id: Optional[str] = None) -> None:
+    """Save both halves of a turn, and never fail a request over it.
+
+    Only the successful path used to do this. Every other path - a new account
+    asking its first question, an account whose pipeline broke - returned an
+    answer and stored nothing, so the conversation a person had while the
+    system had nothing to say vanished on reload. That is exactly the
+    conversation worth keeping: it is the one that explains the empty history
+    they are looking at.
+    """
+    if not answer:
+        return
+    try:
+        await chat_memory.save_message(user_id, conversation_id, "user", question)
+        await chat_memory.save_message(
+            user_id, conversation_id, "assistant", answer, trace_id=trace_id)
+    except Exception:
+        logger.warning("Could not persist chat turn", exc_info=True)
+
 
 @router.post("/query", response_model=QueryResponse, dependencies=[Depends(query_rate_limit)])
 async def query_insights(req: QueryRequest, authorization: Optional[str] = Header(default=None)):
@@ -115,11 +141,8 @@ async def query_insights(req: QueryRequest, authorization: Optional[str] = Heade
         if p_result.success and p_result.verbalizer_response:
             answer = p_result.verbalizer_response.content
             # Persist this turn (user + assistant) for future continuity.
-            try:
-                await chat_memory.save_message(req.user_id, conversation_id, "user", req.query)
-                await chat_memory.save_message(req.user_id, conversation_id, "assistant", answer, trace_id=p_result.pipeline_id)
-            except Exception:
-                logger.warning("Could not persist chat turn", exc_info=True)
+            await _remember(req.user_id, conversation_id, req.query, answer,
+                            trace_id=p_result.pipeline_id)
             sources = []
             if p_result.fused_evidence:
                 for fact in p_result.fused_evidence.facts[:5]:
@@ -161,7 +184,28 @@ async def query_insights(req: QueryRequest, authorization: Optional[str] = Heade
                 intent_overridden=bool(req.intent) and req.intent == used_intent,
             )
 
-        logger.warning("Cognitive pipeline failed, falling back to simple RAG")
+        # The pipeline stops before planning when there is no snapshot to read
+        # from, which for a new account is every question they ask. Falling
+        # through to retrieval then produced "Here's what I found relevant to
+        # your query: No behavioral data found yet" - a claim to have searched,
+        # and a report of nothing, in one breath.
+        state = await readiness.account_state(req.user_id)
+        message = readiness.explain(state)
+        if message:
+            await _remember(req.user_id, conversation_id, req.query, message)
+            return QueryResponse(
+                answer=message,
+                sources=[],
+                query=req.query,
+                template_used="account_state",
+                docs_retrieved=0,
+                data_state=state["state"],
+            )
+
+        logger.warning(
+            "Cognitive pipeline failed for %s with a snapshot present; "
+            "falling back to simple RAG", req.user_id,
+        )
         persona_data = await persona_svc.get_latest_persona(req.user_id)
         result = await rag.query(
             user_id=req.user_id,
@@ -170,6 +214,7 @@ async def query_insights(req: QueryRequest, authorization: Optional[str] = Heade
             persona_data=persona_data,
         )
 
+        await _remember(req.user_id, conversation_id, req.query, result.get("answer", ""))
         return QueryResponse(**result)
 
     except Exception as e:
