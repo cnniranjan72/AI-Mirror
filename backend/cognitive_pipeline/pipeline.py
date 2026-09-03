@@ -75,6 +75,22 @@ class CognitivePipelineResult:
         )
 
 
+def _intent_override(planner, query: str, name):
+    """An IntentPlan for a reading the caller supplied, or None.
+
+    An unrecognised name is ignored rather than raised on. A client running
+    against an older enum should get the classifier's own reading - the
+    behaviour without this feature - rather than a failed query.
+    """
+    if not name:
+        return None
+    try:
+        return planner.intent_planner.plan_for(query, name)
+    except ValueError:
+        logger.warning("Unknown intent override %r; using the classifier", name)
+        return None
+
+
 class CognitivePipeline:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
@@ -166,6 +182,7 @@ class CognitivePipeline:
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
+        override_intent: Optional[str] = None,
     ) -> CognitivePipelineResult:
         start = time.perf_counter()
         trace = PipelineTrace(user_id=user_id, query=query)
@@ -176,7 +193,7 @@ class CognitivePipeline:
         try:
             import asyncio
             result = await asyncio.wait_for(
-                self._execute_pipeline(user_id, query, conversation_id, session_id, request_id, result, trace, errors, start, conversation_history),
+                self._execute_pipeline(user_id, query, conversation_id, session_id, request_id, result, trace, errors, start, conversation_history, override_intent),
                 timeout=self.pipeline_timeout
             )
             await self._persist_trace(result)
@@ -216,6 +233,7 @@ class CognitivePipeline:
         errors: List[str],
         start: float,
         conversation_history: Optional[List[Dict[str, Any]]] = None,
+        override_intent: Optional[str] = None,
     ) -> CognitivePipelineResult:
         try:
             # ── Stage 1: Pre-load identity snapshot + inferences from DB ──
@@ -273,7 +291,16 @@ class CognitivePipeline:
 
             # ── Stage 3: Planner ─────────────────────────────────────────
             t0 = time.perf_counter()
-            plan = self.planner.build_plan(user_id=user_id, query=query)
+            # The planner has always accepted an override and nothing ever
+            # passed one. It matters because the reading picks the retrieval
+            # plan, and the classifier is right about 56% of the time on
+            # phrasing it was not built from - so when someone says their
+            # question was misread, the system needs a way to take their word
+            # for it rather than argue.
+            plan = self.planner.build_plan(
+                user_id=user_id, query=query,
+                override_intent=_intent_override(self.planner, query, override_intent),
+            )
             trace.planning_ms = (time.perf_counter() - t0) * 1000
             trace.intent_type = plan.intent_plan.intent_type.value
             trace.intent_confidence = plan.intent_plan.intent_confidence

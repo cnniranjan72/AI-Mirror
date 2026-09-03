@@ -508,6 +508,43 @@ deliberately not served: what it would carry already reaches the later stages
 through `character_core`. `interest_history` and `journal` are declared on the
 enum and requested by no intent.
 
+#### Correcting how a question was read
+
+Which of those targets get requested follows entirely from how the question was
+read. `identity_question` reaches the self model and the inference history;
+`memory_question` reaches the recall index; `behavioral_question` reaches raw
+event history. Read the same words the other way and the answer is assembled
+from different material.
+
+The classifier is rules, not a model, and
+[the held-out set](backend/playground/intent_holdout.py) puts it at **20 of 36**
+on phrasing it was not written from. So roughly half of naturally-worded
+questions were being answered from the wrong stores, confidently, with nothing
+in the interface admitting it.
+
+Every answer in Chat now carries the reading it was given — *Read as: Who I am* —
+marked **unsure** when the classifier's own confidence is below 0.5. Clicking it
+offers the other readings; picking one re-asks the same question that way and
+replaces the answer in place, because a correction is not a new question.
+
+`PlannerOrchestrator.build_plan` had accepted an `override_intent` since it was
+written, and nothing had ever passed one. The work was in making the override
+worth having rather than merely present:
+
+- **It has to move retrieval.** An override that leaves the directives unchanged
+  is a label, not a fix.
+- **It has to keep what the query yielded.** Topics, entities and the time
+  reference come from the words, and the words have not changed. Constructing a
+  fresh `IntentPlan` from just the type is the obvious implementation and it
+  drops all three — handing the retrieval planner *less* than the classification
+  the user was correcting. A correction that retrieves worse than the mistake is
+  not a correction.
+
+The reported reading is read off the plan the pipeline actually built, never
+echoed back from the request, so an unrecognised name — an older client against
+a newer enum — falls back to the classifier and says so rather than reporting a
+correction that did not take.
+
 ### Stage 5: Reflection
 
 Periodic summarization that synthesizes patterns and detected changes across all cognitive state.

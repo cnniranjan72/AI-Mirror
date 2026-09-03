@@ -30,6 +30,30 @@ _INTENT_PRIORITY: Dict[UserIntentType, int] = {
 _MAX_CONFIDENCE_MATCHES = 3
 
 
+def requirements_for(intent_type: UserIntentType) -> Dict[str, bool]:
+    """What a reading requires, which is what the retrieval planner acts on.
+
+    Shared by classification and by a user-supplied override so the two cannot
+    disagree - a new intent type gets its requirements in one place, and an
+    override of an existing one asks for exactly what the classifier would
+    have asked for had it read the question that way.
+    """
+    return {
+        "requires_comparison": intent_type == UserIntentType.COMPARISON,
+        "requires_temporal_analysis": intent_type in (
+            UserIntentType.PREDICTION, UserIntentType.REFLECTION),
+        "requires_identity_access": intent_type in (
+            UserIntentType.IDENTITY_QUESTION, UserIntentType.BEHAVIORAL_QUESTION,
+            UserIntentType.REFLECTION),
+        "requires_memory_access": intent_type == UserIntentType.MEMORY_QUESTION,
+        "requires_behavioral_data": intent_type in (
+            UserIntentType.BEHAVIORAL_QUESTION, UserIntentType.PREDICTION,
+            UserIntentType.COMPARISON),
+        "requires_goal_data": intent_type == UserIntentType.COACHING,
+        "requires_prediction": intent_type == UserIntentType.PREDICTION,
+    }
+
+
 class IntentPlanner:
     def __init__(self, config: Optional[dict] = None):
         self.config = config or {}
@@ -230,20 +254,39 @@ class IntentPlanner:
             key_entities=key_entities,
             key_topics=key_topics,
             time_reference=time_ref,
-            requires_comparison=best_intent == UserIntentType.COMPARISON,
-            requires_temporal_analysis=best_intent in (
-                UserIntentType.PREDICTION, UserIntentType.REFLECTION),
-            requires_identity_access=best_intent in (
-                UserIntentType.IDENTITY_QUESTION, UserIntentType.BEHAVIORAL_QUESTION,
-                UserIntentType.REFLECTION),
-            requires_memory_access=best_intent == UserIntentType.MEMORY_QUESTION,
-            requires_behavioral_data=best_intent in (
-                UserIntentType.BEHAVIORAL_QUESTION, UserIntentType.PREDICTION,
-                UserIntentType.COMPARISON),
-            requires_goal_data=best_intent == UserIntentType.COACHING,
-            requires_prediction=best_intent == UserIntentType.PREDICTION,
             alternatives=alternatives,
             ambiguity_score=round(ambiguity, 4),
+            **requirements_for(best_intent),
+        )
+
+    def plan_for(self, query: str, intent_type) -> IntentPlan:
+        """The plan for a reading the caller supplied, not one we guessed.
+
+        Everything the query itself yields - entities, topics, a time reference
+        - is kept, because those come from the words and the words have not
+        changed. Only the reading and what it requires are replaced.
+
+        Building a bare IntentPlan instead would be the obvious shortcut and it
+        would be wrong: the retrieval planner reads the extracted topics, so an
+        empty one would hand it less to work with than the classification the
+        user was correcting. A correction that retrieves worse than the mistake
+        is not a correction.
+
+        Confidence is 1.0 and ambiguity 0.0 because this is not a guess. Raises
+        ValueError if the name is not an intent type.
+        """
+        intent_type = UserIntentType(intent_type)
+        query_lower = query.strip().lower()
+        return IntentPlan(
+            intent_type=intent_type,
+            intent_confidence=1.0,
+            primary_question=query,
+            key_entities=self._extract_entities(query_lower),
+            key_topics=self._extract_topics(query_lower),
+            time_reference=self._extract_time_reference(query_lower),
+            alternatives=[],
+            ambiguity_score=0.0,
+            **requirements_for(intent_type),
         )
 
     def _normalize_score(self, match_count: int) -> float:

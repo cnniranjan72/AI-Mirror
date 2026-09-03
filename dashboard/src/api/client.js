@@ -73,9 +73,11 @@ export const api = {
   },
 
   // === Chat === (cognitive pipeline: POST /query, with persistent memory)
-  sendChatMessage: async (userId = activeUser(), query, conversationId) => {
+  // `intent` forces how the question is read. Omit it to let the classifier
+  // decide; send one to re-ask a question that was read the wrong way.
+  sendChatMessage: async (userId = activeUser(), query, conversationId, intent = null) => {
     const { data } = await client.post('/query', {
-      user_id: userId, query, conversation_id: conversationId,
+      user_id: userId, query, conversation_id: conversationId, intent,
     });
     return {
       response: data.answer,
@@ -85,6 +87,10 @@ export const api = {
       follow_ups: data.follow_ups || [],
       pipeline_stages: data.pipeline_stages,
       pipeline_time_ms: data.pipeline_time_ms,
+      intent: data.intent || null,
+      intent_confidence: data.intent_confidence ?? null,
+      intent_options: data.intent_options || [],
+      intent_overridden: !!data.intent_overridden,
     };
   },
 

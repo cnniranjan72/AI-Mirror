@@ -10,6 +10,73 @@ import CharacterCreature3D from '../../components/character/CharacterCreature3D'
 const USER_ID = DEFAULT_USER
 const CONVERSATION_ID = `conv_${USER_ID}`
 
+// The reading decides which stores an answer was drawn from, so a wrong reading
+// produces a confident answer assembled from the wrong material. The classifier
+// is right about 56% of the time on phrasing it was not built from, which makes
+// this the difference between a system that is sometimes wrong and one that is
+// wrong without saying so.
+function ReadingControl({ msg, open, busy, onToggle, onPick }) {
+  const label = msg.intentOptions?.find(o => o.value === msg.intent)?.label || msg.intent
+  // A low classifier confidence is the signal that the reading is worth
+  // checking. An override has no confidence to show: the user said what they
+  // meant, so the number would be theatre.
+  const unsure = !msg.intentOverridden && msg.intentConfidence != null && msg.intentConfidence < 0.5
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <button
+        onClick={onToggle}
+        disabled={busy}
+        title="How this question was read. Click to read it a different way."
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '3px 9px', borderRadius: 100, cursor: busy ? 'wait' : 'pointer',
+          background: unsure ? 'rgba(251,191,36,0.10)' : 'rgba(148,163,184,0.10)',
+          border: '1px solid ' + (unsure ? 'rgba(251,191,36,0.28)' : 'var(--border-subtle)'),
+          color: unsure ? '#fbbf24' : 'var(--text-muted)',
+          fontSize: 10.5, fontWeight: 600,
+        }}
+      >
+        {busy ? 'Re-reading...' : 'Read as: ' + label}
+        {msg.intentOverridden && !busy && <span style={{ opacity: 0.75 }}>· yours</span>}
+        {unsure && !busy && <span style={{ opacity: 0.75 }}>· unsure</span>}
+        <span style={{ opacity: 0.6 }}>{open ? '\u25be' : '\u25b8'}</span>
+      </button>
+
+      {msg.rereadError && (
+        <div style={{ fontSize: 10.5, color: '#f87171', marginTop: 5 }}>
+          Couldn't re-read that: {msg.rereadError}
+        </div>
+      )}
+
+      {open && (
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(148,163,184,0.12)' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Read it as something else
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {msg.intentOptions.filter(o => o.value !== msg.intent).map(o => (
+              <button
+                key={o.value}
+                onClick={() => onPick(o.value)}
+                style={{
+                  padding: '4px 10px', borderRadius: 100, cursor: 'pointer',
+                  background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+                  color: '#a5b4fc', fontSize: 11.5,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.18)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.08)' }}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ChatPage() {
   const { data: history, loading: histLoading, error: histError, refetch } = useChatHistory(USER_ID, CONVERSATION_ID)
   const [messages, setMessages] = useState([])
@@ -21,6 +88,9 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false)
   const [streamingMsg, setStreamingMsg] = useState('')
   const [explainTrace, setExplainTrace] = useState(null)
+  // Which answer currently has its reading-picker open, by message id.
+  const [correcting, setCorrecting] = useState(null)
+  const [rereadingId, setRereadingId] = useState(null)
   const messagesEndRef = useRef(null)
   const { data: charState, refetch: refetchCharState } = useCharacterState(USER_ID)
 
@@ -55,6 +125,13 @@ export default function ChatPage() {
         id: Date.now() + 1, role: 'assistant', content: typeof reply === 'string' ? reply : JSON.stringify(reply),
         timestamp: new Date().toISOString(), trace_id: res?.trace_id || res?.pipeline_id,
         followUps: res?.follow_ups || [],
+        // Kept so the answer can say how the question was read, and be re-asked
+        // a different way without the user retyping it.
+        askedQuery: text,
+        intent: res?.intent || null,
+        intentConfidence: res?.intent_confidence ?? null,
+        intentOptions: res?.intent_options || [],
+        intentOverridden: !!res?.intent_overridden,
       }])
     } catch (err) {
       setStreamingMsg('')
@@ -64,6 +141,39 @@ export default function ChatPage() {
       }])
     } finally {
       setSending(false)
+      refetchCharState()
+    }
+  }
+
+  // Re-asks the same question with the reading the user picked, and replaces
+  // the answer in place. It is a correction, not a new question - appending
+  // would leave the wrong answer sitting above the right one with nothing to
+  // say which was which.
+  const reread = async (msg, intent) => {
+    if (!msg.askedQuery || rereadingId) return
+    setCorrecting(null)
+    setRereadingId(msg.id)
+    try {
+      const res = await api.sendChatMessage(USER_ID, msg.askedQuery, CONVERSATION_ID, intent)
+      const reply = res?.response || res?.message || res?.text || ''
+      setMessages(prev => prev.map(m => m.id !== msg.id ? m : {
+        ...m,
+        content: typeof reply === 'string' ? reply : JSON.stringify(reply),
+        timestamp: new Date().toISOString(),
+        trace_id: res?.trace_id || m.trace_id,
+        followUps: res?.follow_ups || [],
+        intent: res?.intent || m.intent,
+        intentConfidence: res?.intent_confidence ?? null,
+        intentOptions: res?.intent_options || m.intentOptions,
+        intentOverridden: !!res?.intent_overridden,
+        rereadError: null,
+      }))
+    } catch (err) {
+      setMessages(prev => prev.map(m => m.id !== msg.id ? m : {
+        ...m, rereadError: err.message,
+      }))
+    } finally {
+      setRereadingId(null)
       refetchCharState()
     }
   }
@@ -194,6 +304,16 @@ export default function ChatPage() {
                       </a>
                     </div>
                   )}
+                  {msg.intent && (
+                    <ReadingControl
+                      msg={msg}
+                      open={correcting === msg.id}
+                      busy={rereadingId === msg.id}
+                      onToggle={() => setCorrecting(correcting === msg.id ? null : msg.id)}
+                      onPick={intent => reread(msg, intent)}
+                    />
+                  )}
+
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
                     {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : ''}
                   </div>

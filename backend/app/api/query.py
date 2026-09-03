@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from app.api.deps import enforce_write_match, resolve_user_id
 from app.services import rag, persona as persona_svc, chat_memory
 from backend.cognitive_pipeline.pipeline import get_cognitive_pipeline
+from backend.cognitive_planning.planner_models import UserIntentType
 from backend.verbalizer.followups import generate_follow_ups
 from app.core.rate_limit import query_rate_limit
 
@@ -14,11 +15,38 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+_INTENT_LABELS = {
+    "identity_question": "Who I am",
+    "behavioral_question": "What I do",
+    "memory_question": "Something I saw",
+    "recommendation": "What to try next",
+    "explanation": "Why that is",
+    "reflection": "How I have changed",
+    "comparison": "Comparing two things",
+    "prediction": "What I will do",
+    "coaching": "Help me change",
+    "information": "A plain fact",
+}
+
+
+# The readings a caller may ask for, in the order a person would scan them
+# rather than enum order. UNKNOWN is left out: it is what the classifier says
+# when it has nothing, never something a user means.
+INTENT_OPTIONS = [
+    {"value": t.value, "label": _INTENT_LABELS[t.value]}
+    for t in UserIntentType
+    if t is not UserIntentType.UNKNOWN
+]
+
+
 class QueryRequest(BaseModel):
     user_id: str = "default"
     query: str
     top_k: int = 5
     conversation_id: Optional[str] = None
+    # How to read the question, when the caller already knows the classifier
+    # got it wrong. Omitted on a first ask; sent on a re-ask.
+    intent: Optional[str] = None
 
 
 class SourceItem(BaseModel):
@@ -37,6 +65,19 @@ class QueryResponse(BaseModel):
     follow_ups: list = []
     pipeline_stages: Optional[dict] = None
     pipeline_time_ms: Optional[float] = None
+
+    # How the question was read, and how sure the classifier was. The reading
+    # selects the retrieval plan, so it decides which stores the answer is
+    # drawn from - and on phrasing the rules were not built from the classifier
+    # is right about 56% of the time. An answer that was assembled from the
+    # wrong sources should at least say which sources it thought to use.
+    intent: Optional[str] = None
+    intent_confidence: Optional[float] = None
+    # Present so a client can offer the alternatives without hardcoding a list
+    # that would drift from the enum.
+    intent_options: list = []
+    # True when the reading came from the caller rather than the classifier.
+    intent_overridden: bool = False
 
 
 @router.post("/query", response_model=QueryResponse, dependencies=[Depends(query_rate_limit)])
@@ -61,6 +102,7 @@ async def query_insights(req: QueryRequest, authorization: Optional[str] = Heade
             query=req.query,
             conversation_id=conversation_id,
             conversation_history=history,
+            override_intent=req.intent,
         )
 
         if p_result.success and p_result.verbalizer_response:
@@ -87,6 +129,13 @@ async def query_insights(req: QueryRequest, authorization: Optional[str] = Heade
             except Exception:
                 logger.warning("Follow-up generation failed", exc_info=True)
 
+            # Report the reading that was actually used, which is the
+            # override when one was honoured and the classifier's otherwise -
+            # read off the plan rather than echoed back from the request, so a
+            # name the pipeline rejected cannot be reported as accepted.
+            intent_plan = p_result.character_plan.intent_plan if p_result.character_plan else None
+            used_intent = intent_plan.intent_type.value if intent_plan else None
+
             return QueryResponse(
                 answer=answer,
                 sources=sources,
@@ -98,6 +147,10 @@ async def query_insights(req: QueryRequest, authorization: Optional[str] = Heade
                 follow_ups=follow_ups,
                 pipeline_stages=p_result.stages,
                 pipeline_time_ms=p_result.total_time_ms,
+                intent=used_intent,
+                intent_confidence=intent_plan.intent_confidence if intent_plan else None,
+                intent_options=INTENT_OPTIONS,
+                intent_overridden=bool(req.intent) and req.intent == used_intent,
             )
 
         logger.warning("Cognitive pipeline failed, falling back to simple RAG")
