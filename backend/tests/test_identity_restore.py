@@ -133,15 +133,44 @@ class TestSnapshotPersistenceIsCheckedBeforeItIsRelied_On:
         """_insert_snapshot swallowed its exceptions while the caller set
         self_model.identity_snapshot_id from it regardless. The foreign key then
         failed one statement later, and that failure was swallowed too, so the
-        self model silently stopped being written. Seen in a live run."""
+        self model silently stopped being written. Seen in a live run.
+
+        The return annotation is read from the signature rather than from the
+        first line of the source: an earlier version of this test asserted
+        "-> bool" was in splitlines()[0], and adding a parameter wrapped the
+        signature onto a second line and broke it in CI.
+        """
+        import typing
         from pipeline.orchestrator import V3Pipeline
 
         source = inspect.getsource(V3Pipeline._insert_snapshot)
         assert "return False" in source
-        assert "-> bool" in inspect.getsource(V3Pipeline._insert_snapshot).splitlines()[0]
+
+        hints = typing.get_type_hints(V3Pipeline._insert_snapshot)
+        assert hints.get("return") is bool
 
     def test_the_caller_checks_the_result(self):
+        """Asserted through the AST, so reformatting the call - wrapping it,
+        adding a keyword argument - does not fail the test while the property
+        still holds. Exact-string matching on this line did exactly that."""
+        import ast
+        import textwrap
         from pipeline.orchestrator import V3Pipeline
 
-        source = inspect.getsource(V3Pipeline._persist_all)
-        assert "if await self._insert_snapshot(result.snapshot):" in source
+        tree = ast.parse(textwrap.dedent(
+            inspect.getsource(V3Pipeline._persist_all)))
+
+        guarded = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.If):
+                continue
+            test = node.test
+            # `if await self._insert_snapshot(...)`, however it is wrapped.
+            if isinstance(test, ast.Await):
+                test = test.value
+            if (isinstance(test, ast.Call)
+                    and isinstance(test.func, ast.Attribute)
+                    and test.func.attr == "_insert_snapshot"):
+                guarded = True
+
+        assert guarded, "the snapshot insert result is not being checked"
