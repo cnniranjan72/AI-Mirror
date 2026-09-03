@@ -1,7 +1,7 @@
 import logging
 import uuid
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import Counter, defaultdict
 
 from backend.reasoning.evidence_engine import Evidence
@@ -47,6 +47,51 @@ class Reflection:
         self.metadata = metadata
 
 
+def _as_aware(value):
+    """Timestamps arrive both naive and tz-aware in this codebase."""
+    if value is None:
+        return None
+    if getattr(value, "tzinfo", None) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _observed_span(behavior_objects):
+    """Earliest and latest the summarised behaviours were actually seen."""
+    firsts, lasts = [], []
+    for bo in behavior_objects or []:
+        stats = getattr(bo, "temporal_statistics", None)
+        first = _as_aware(getattr(stats, "first_seen", None))
+        last = _as_aware(getattr(stats, "last_seen", None))
+        if first:
+            firsts.append(first)
+        if last:
+            lasts.append(last)
+    if not firsts or not lasts:
+        return None
+    start, end = min(firsts), max(lasts)
+    return (start, end) if end >= start else (end, start)
+
+
+def _period_label(period_start, period_end) -> str:
+    """Name the window by how long it actually is.
+
+    A reflection covering an afternoon is a daily entry and one covering six
+    weeks is a monthly one, whatever cadence produced it. Labelling by measured
+    length rather than by an assumed schedule means the label cannot claim a
+    regularity the writes do not have.
+    """
+    start, end = _as_aware(period_start), _as_aware(period_end)
+    if not start or not end:
+        return "daily"
+    days = (end - start).total_seconds() / 86400.0
+    if days <= 1.0:
+        return "daily"
+    if days <= 7.0:
+        return "weekly"
+    return "monthly"
+
+
 class ReflectionEngine:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
@@ -63,6 +108,21 @@ class ReflectionEngine:
     ) -> Optional[Reflection]:
         try:
             now = datetime.utcnow()
+
+            # Both defaulted to `now`, and no caller passed either, so every
+            # stored reflection covered a window of exactly zero seconds. All
+            # 29 rows on the deployed instance had period_start == period_end,
+            # which is why the diary endpoint aggregates from events directly
+            # and documents that using this table "would silently mislabel
+            # per-batch snapshots as 'this week'".
+            #
+            # The span is already in hand: it is the earliest and latest the
+            # summarised behaviours were seen.
+            if period_start is None or period_end is None:
+                observed = _observed_span(behavior_objects)
+                if observed:
+                    period_start = period_start or observed[0]
+                    period_end = period_end or observed[1]
             period_start = period_start or now
             period_end = period_end or now
 
@@ -138,7 +198,11 @@ class ReflectionEngine:
             reflection = Reflection(
                 reflection_id=f"ref_{uuid.uuid4().hex[:12]}",
                 user_id=user_id,
-                reflection_type="periodic",
+                # "periodic" for everything said nothing, and the
+                # architecture describes daily, weekly and monthly journals.
+                # The label now reports the length of the window actually
+                # covered rather than asserting a cadence nothing produced.
+                reflection_type=_period_label(period_start, period_end),
                 period_start=period_start,
                 period_end=period_end,
                 summary=" ".join(summary_parts),

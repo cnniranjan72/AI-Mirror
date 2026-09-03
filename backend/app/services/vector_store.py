@@ -162,9 +162,17 @@ async def hybrid_search(
 
     sql = f"""
         SELECT id, text, metadata, doc_type, created_at,
-               (1 - (embedding <-> $2::vector)) AS sim_score,
+               -- <=> is pgvector's cosine distance; <-> is L2. Both rank
+               -- identically for the unit-length vectors all-MiniLM-L6-v2
+               -- produces, so this was not reordering anything, but the two
+               -- are on different scales: 1 - L2 gives 0.553 where cosine
+               -- gives 0.90, reaches zero at cosine 0.5 and goes negative
+               -- below it. That distorts the stated 0.7/0.3 split against the
+               -- keyword term, whose scale is fixed, and lets a weak semantic
+               -- match subtract from the hybrid score.
+               (1 - (embedding <=> $2::vector)) AS sim_score,
                ts_rank(content_tsv, plainto_tsquery('english', $3)) AS kw_score,
-               (1 - (embedding <-> $2::vector)) * $4
+               (1 - (embedding <=> $2::vector)) * $4
                  + ts_rank(content_tsv, plainto_tsquery('english', $3)) * $5 AS hybrid_score
         FROM embeddings
         WHERE user_id = $1 {type_filter}

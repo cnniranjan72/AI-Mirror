@@ -450,6 +450,26 @@ Periodic summarization that synthesizes patterns and detected changes across all
 |---|---|---|
 | Inferences + Evidence + Behavior Objects | Pattern detection → Change identification → Summary generation | `List[Reflection]` with summary, key_insights, patterns_identified, recommendations |
 
+#### Reflection periods
+
+A reflection covers the span of behaviour it summarises — the earliest and
+latest its behaviour objects were seen — and is labelled by how long that span
+actually is:
+
+| Span | Type |
+|---|---|
+| ≤ 1 day | `daily` |
+| ≤ 7 days | `weekly` |
+| longer | `monthly` |
+
+Both bounds previously defaulted to `now` and no caller passed either, so every
+stored reflection had `period_start == period_end` — a window of zero seconds
+labelled `periodic`. The diary endpoint documents this in its own docstring as
+the reason it aggregates from `events` directly rather than from this table.
+
+Labelling by measured length rather than by an assumed schedule means the type
+can't claim a cadence the writes don't have.
+
 ### Stage 6: Identity Construction
 
 Builds or evolves a 9-sub-profile behavioral identity:
