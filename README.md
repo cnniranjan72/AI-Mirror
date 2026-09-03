@@ -464,6 +464,30 @@ Writes are idempotent: a memory's id is derived from what it is *about*, so
 re-ingesting the same history reinforces one row rather than appending a
 duplicate per batch. Recall records itself, incrementing `access_count`.
 
+#### Retrieval targets
+
+The planner selects among 13 typed targets, cost-bounded and without an LLM.
+The retrieval context serves 10 of them:
+
+| Target | Source |
+|---|---|
+| , ,  | their own tables |
+| , , ,  | their own tables |
+|  | the recall index, importance-ranked |
+|  | raw events — what was watched, and when |
+|  | per-creator aggregates |
+
+A directive whose key is absent returns nothing and logs at debug level; when
+it is marked **required**, the retrieval step records a failure and the query
+proceeds with less than it planned for. Two intents were in that position on
+every request —  required  and 
+required , and neither key existed.
+
+ is requested by every intent, optionally at priority 0.2, and is
+deliberately not served: what it would carry already reaches the later stages
+through .  and  are declared on the
+enum and requested by no intent.
+
 ### Stage 5: Reflection
 
 Periodic summarization that synthesizes patterns and detected changes across all cognitive state.

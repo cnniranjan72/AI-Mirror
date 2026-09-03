@@ -799,10 +799,62 @@ class CognitivePipeline:
                     elif d.get(key) is None: d[key] = [] if key not in ("metrics", "metadata") else {}
                 ctx["reflections"].append(d)
 
+            # The planner asks for thirteen retrieval targets and this
+            # context supplied seven, so six were planned and never served.
+            # A directive with no matching key returns nothing, and two intents
+            # marked their missing source required: memory_question could not
+            # read memory, and behavioral_question could not read the raw watch
+            # history. Both failed that directive on every request.
+
+            # The recall index: importance-ranked, and distinct from
+            # behavior_objects in being a selection rather than the whole set.
+            rows = await fetch(
+                "SELECT memory_id, memory_type, content, importance_score, "
+                "access_count, timestamp FROM memories WHERE user_id = $1 "
+                "ORDER BY importance_score DESC, timestamp DESC LIMIT 25",
+                user_id,
+            )
+            ctx["memory"] = [self._ensure_str_ids(dict(r)) for r in rows]
+
+            # Raw watch history. behavior_objects are consolidated clusters;
+            # this is what a question about what someone actually watched, and
+            # when, has to be answered from.
+            rows = await fetch(
+                "SELECT id, reel_id, username, caption, watch_time, timestamp "
+                "FROM events WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 50",
+                user_id,
+            )
+            ctx["behavior_history"] = [self._ensure_str_ids(dict(r)) for r in rows]
+
+            # Per-creator aggregates, which no other source carries: the
+            # creator graph lives inside the identity blob rather than as rows.
+            rows = await fetch(
+                # avg() returns numeric, which asyncpg hands back as Decimal.
+                # No other retrieval source produces one, and it serialises
+                # into the prompt as a repr rather than a number. Timestamps
+                # stay as datetimes, which is what every other source returns
+                # and what RetrievedObject validates them as.
+                "SELECT username AS creator, count(*)::int AS occurrences, "
+                "round(avg(watch_time)::numeric, 1)::float8 AS avg_watch_time, "
+                "max(timestamp) AS last_seen FROM events "
+                "WHERE user_id = $1 AND username IS NOT NULL "
+                "GROUP BY username ORDER BY occurrences DESC LIMIT 20",
+                user_id,
+            )
+            ctx["creator_history"] = [self._ensure_str_ids(dict(r)) for r in rows]
+
+            # runtime_state is deliberately not supplied. Every intent requests
+            # it at priority 0.2, optional, and the character runtime it would
+            # carry already reaches the later stages through character_core.
+            # Serving it here would duplicate that into the retrieval set and
+            # inflate the retrieved count without adding anything.
+
             logger.debug(f"Loaded retrieval context: {len(ctx.get('behavior_objects', []))} bos, "
                          f"{len(ctx.get('evidence', []))} ev, {len(ctx.get('inferences', []))} inf, "
                          f"{'snap' if 'identity_snapshot' in ctx else 'no snap'}, "
-                         f"{'sm' if 'self_model' in ctx else 'no sm'}")
+                         f"{'sm' if 'self_model' in ctx else 'no sm'}, "
+                         f"{len(ctx.get('memory', []))} mem, "
+                         f"{len(ctx.get('behavior_history', []))} hist")
         except Exception as e:
             logger.warning(f"Error loading retrieval context: {e}")
         return ctx
