@@ -45,6 +45,13 @@ class IntentPlanner:
                 re.compile(r"\b(reasons why|factors (behind|that)|led to)\b", re.I),
                 re.compile(r"\bwhy (is|are|has|have|had|would|do|does|did) .{3,40}? (chang\w*|happened?|occur\w*|stop\w*|start\w*|shift\w*)\b", re.I),
                 re.compile(r"\b(what changed|what shifted|what happened) (to|with) (my|the)\b", re.I),
+
+                # "explain my X" asks for the cause of something about the
+                # person. It is deliberately distinct from "explain X to me",
+                # which asks what X is and belongs to INFORMATION - the
+                # possessive is what separates them.
+                re.compile(r"\bexplain my\b", re.I),
+                re.compile(r"\b(what(\'s| is) behind|account for|what drives|what led)\b", re.I),
             ],
             UserIntentType.REFLECTION: [
                 re.compile(r"\b(reflect|reflecting|looking back|looking at)\b", re.I),
@@ -101,6 +108,15 @@ class IntentPlanner:
                 re.compile(r"\bwho (influences|affects|shapes) (me|my)\b", re.I),
                 re.compile(r"\b(who \S+ (influences|affects|shapes) (me|my))\b", re.I),
                 re.compile(r"\b(my (top|favorite|most) (content|topics|creators|watched|viewed))\b", re.I),
+
+                # The possessive form was covered - "my habits" - but not the
+                # interrogative one, which is how the question is usually asked:
+                # "what habits do I have", "what cooking habits influence me".
+                re.compile(r"\b(habits?|patterns?|routines?|rituals?|tendencies) "
+                           r"(do|did|does) I\b", re.I),
+                re.compile(r"\bwhat (\w+ )?(habits?|patterns?|routines?|rituals?) "
+                           r"(do I|did I|influence|shape|affect)\b", re.I),
+                re.compile(r"\bwhat are my (\w+ )?(rituals?|routines?)\b", re.I),
                 re.compile(r"\b(what are my .{1,30} (patterns|habits|behaviors|routines))\b", re.I),
                 re.compile(r"\bhow (much|many) (time|hours|days|minutes) (do I|have I|did I|am I)\b", re.I),
             ],
@@ -110,6 +126,13 @@ class IntentPlanner:
                 re.compile(r"\b(did I (watch|see|view|like|save|skip|click|read))\b", re.I),
                 re.compile(r"\b(what was I (watching|doing|learning|viewing))\b", re.I),
                 re.compile(r"\b(what (happened|did) (yesterday|last|earlier))\b", re.I),
+
+                # "do you recall" was matched but not the bare imperative, and
+                # "what happened" only before a closed list of time words.
+                re.compile(r"\brecall (what|when|which|how|my)\b", re.I),
+                re.compile(r"\bwhat happened (during|in|on|at) (my|the)\b", re.I),
+                re.compile(r"\bdid I (engage|interact|spend time) with\b", re.I),
+                re.compile(r"\b(on file|kept|stored|held) about me\b", re.I),
             ],
             UserIntentType.COMPARISON: [
                 re.compile(r"\b(compare|differen\w*|vs\.|versus)\b", re.I),
@@ -143,6 +166,19 @@ class IntentPlanner:
                 re.compile(r"\b(what (else|next)|similar (to|content))\b", re.I),
                 re.compile(r"\b(any (good|interesting|recommended|great) .{1,30} (for|about))\b", re.I),
                 re.compile(r"\b(what are (some|good|great|the best) .{1,30} (for|about))\b", re.I),
+
+                # "recommend" was matched but not the noun, and "should I" only
+                # before a closed list of four verbs.
+                # The request, not the bare noun: "how do recommendation
+                # systems work" is a question about a technology.
+                re.compile(r"\b((any|some|got any|give me|your) recommendations?|"
+                           r"recommendations? (for|on|about))\b", re.I),
+                # "focus on" and "consider" are left out deliberately:
+                # "should I focus on breadth or depth" asks for guidance,
+                # which is coaching, not for something to watch.
+                re.compile(r"\bshould I (explore|try|check out|look into|start|pick up)\b", re.I),
+                re.compile(r"\bwould I (enjoy|like|appreciate|benefit from)\b", re.I),
+                re.compile(r"\b(worth (trying|watching|reading|a look)|point me (to|towards))\b", re.I),
             ],
             UserIntentType.INFORMATION: [
                 re.compile(r"\b(tell me about|explain (what|how)|define|describe)\b", re.I),
@@ -151,6 +187,10 @@ class IntentPlanner:
                 re.compile(r"\b(meaning of|definition of|overview of|summary of)\b", re.I),
                 re.compile(r"\b(what|which) \w+ .{0,40}?\b(mean|means|show|shows|support|supports|indicate|indicates)\b", re.I),
                 re.compile(r"\b(what information|what data|what details|how does it)\b", re.I),
+
+                # "explain X to me" asks what X is; contrast "explain my X"
+                # above, which asks why the person does something.
+                re.compile(r"\bexplain .{1,40} to me\b", re.I),
             ],
         }
 

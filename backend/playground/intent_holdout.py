@@ -22,6 +22,17 @@ Rules for anything added here:
     value here is in the shapes a template would not produce.
   - Include the genuinely ambiguous ones, labelled the way a person would read
     them. A benchmark of easy cases measures nothing.
+
+Status: SPENT for tuning, as of the commit that raised holdout accuracy from
+0.3056 to 0.5556. The aggregate score was checked between the two changes in
+that commit, but no individual failure was read until afterwards and no pattern
+was written in response to one. Those failures have now been read, so the next
+change to the classifier cannot use these 36 queries as evidence that it
+generalises - write a fourth set instead.
+
+Nine of the sixteen remaining failures match no pattern at all, on idiomatic
+phrasing such as "take stock of the last fortnight" and "walk me through how my
+week went", so coverage is still the limit rather than discrimination.
 """
 
 HOLDOUT_DATASET = [
