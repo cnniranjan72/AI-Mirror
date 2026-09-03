@@ -169,6 +169,21 @@ class V3Pipeline:
             # it dormant is unreachable for exactly the behaviours that
             # need it.
             await self._refresh_lifecycles(user_id)
+
+            # The recall index. The memories table has existed since the
+            # original schema with five indexes on it and never had a writer;
+            # timeline.py has been querying it on every request and receiving
+            # nothing, and memory_question plans it as a required source.
+            try:
+                from backend.app.services.memory_store import write_from_pipeline
+                await write_from_pipeline(
+                    user_id,
+                    behavior_objects=result.behavior_objects,
+                    inferences=result.inferences,
+                    reflection=result.reflection,
+                )
+            except Exception as e:
+                logger.error("Recall index write failed for %s: %s", user_id, e)
             
             logger.info(f"V3 pipeline complete: {len(result.behavior_objects)} behaviors, "
                        f"{len(result.evidence)} evidence, {len(result.inferences)} inferences, "
@@ -498,6 +513,17 @@ class V3Pipeline:
             if result.identity:
                 await self._upsert_identity(result.identity)
 
+                # _upsert_identity adopts the stored identity_id when a row
+                # for this user already exists. The snapshot was built earlier
+                # in the run and still carries the id minted then, which is not
+                # in the table - its foreign key fails, the failure is logged
+                # and swallowed, and no snapshot is written for that ingest.
+                #
+                # IdentitySnapshot is frozen, which is the point of a snapshot,
+                # so the reconciled id is passed to the insert rather than
+                # assigned onto the model.
+                persisted_identity_id = result.identity.identity_id
+
             # Snapshots are only persisted when identity shift crosses the
             # Eq.2 threshold (paper-faithful — avoids a snapshot row per
             # ingest). self_model has a FK to identity_snapshots, so when the
@@ -507,7 +533,8 @@ class V3Pipeline:
             persisted_snapshot_id = None
             if result.snapshot:
                 if result.snapshot.metadata.get("snapshot_threshold_exceeded", True):
-                    if await self._insert_snapshot(result.snapshot):
+                    if await self._insert_snapshot(result.snapshot,
+                                                   identity_id=persisted_identity_id):
                         persisted_snapshot_id = result.snapshot.snapshot_id
                     else:
                         # The insert did not land. Pointing the self model at
@@ -516,14 +543,14 @@ class V3Pipeline:
                         row = await fetchrow(
                             "SELECT snapshot_id FROM identity_snapshots "
                             "WHERE identity_id = $1 ORDER BY created_at DESC LIMIT 1",
-                            result.snapshot.identity_id,
+                            persisted_identity_id,
                         )
                         persisted_snapshot_id = row["snapshot_id"] if row else None
                 else:
                     row = await fetchrow(
                         "SELECT snapshot_id FROM identity_snapshots "
                         "WHERE identity_id = $1 ORDER BY created_at DESC LIMIT 1",
-                        result.snapshot.identity_id,
+                        persisted_identity_id,
                     )
                     persisted_snapshot_id = row["snapshot_id"] if row else None
 
@@ -713,14 +740,30 @@ class V3Pipeline:
             logger.error(f"Error inserting inference: {str(e)}", exc_info=True)
     
     async def _upsert_identity(self, identity: Identity):
-        """Insert or update identity"""
+        """Insert or update identity.
+
+        Matched on user_id, not identity_id. The table is unique on both, one
+        row per person, and the pipeline mints a fresh identity_id whenever it
+        could not load the existing identity. Looking up by that fresh id found
+        nothing, so this fell through to an INSERT which violated
+        identities_user_id_key - and the error was swallowed here, leaving the
+        identity silently frozen at its previous contents while every later
+        snapshot failed its foreign key against an identity_id that was never
+        stored. Observed on a live second ingest.
+
+        The stored identity_id wins when a row already exists, because snapshots
+        and traces already reference it; overwriting it would strand them.
+        """
         try:
             existing = await fetchrow(
-                "SELECT id FROM identities WHERE identity_id = $1",
-                identity.identity_id
+                "SELECT id, identity_id FROM identities WHERE user_id = $1",
+                identity.user_id
             )
-            
+
             if existing:
+                # Downstream writes in this run reference this attribute, so it
+                # has to name the row that actually exists.
+                identity.identity_id = existing["identity_id"]
                 await execute(
                     """
                     UPDATE identities SET
@@ -745,7 +788,7 @@ class V3Pipeline:
                         source_evidence = $19::jsonb,
                         metadata = $20::jsonb,
                         updated_at = NOW()
-                    WHERE identity_id = $21
+                    WHERE user_id = $21
                     """,
                     json.dumps(identity.behavior_profile.dict(), default=str),
                     json.dumps(identity.interest_graph.dict(), default=str),
@@ -772,7 +815,9 @@ class V3Pipeline:
                     # the snapshot gate's behaviour was invisible until someone
                     # noticed the snapshot count had stopped moving.
                     json.dumps(identity.metadata, default=str),
-                    identity.identity_id
+                    # $21: the WHERE now matches on user_id, the column
+                    # the table is actually keyed by for one row per person.
+                    identity.user_id
                 )
             else:
                 await execute(
@@ -879,7 +924,8 @@ class V3Pipeline:
             logger.warning("Could not load baseline snapshot for %s: %s", identity_id, e)
             return None, None
 
-    async def _insert_snapshot(self, snapshot: IdentitySnapshot) -> bool:
+    async def _insert_snapshot(self, snapshot: IdentitySnapshot,
+                               identity_id: Optional[str] = None) -> bool:
         """Insert snapshot into database. True only if the row is now there.
 
         The caller sets self_model.identity_snapshot_id from this snapshot, and
@@ -902,7 +948,9 @@ class V3Pipeline:
                 ON CONFLICT (snapshot_id) DO NOTHING
                 """,
                 snapshot.snapshot_id,
-                snapshot.identity_id,
+                # The identity row this belongs to, which may have been
+                # reconciled to an existing one since the snapshot was built.
+                identity_id or snapshot.identity_id,
                 snapshot.identity_version,
                 snapshot.user_id,
                 json.dumps(snapshot.dict(), default=str),

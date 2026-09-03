@@ -442,6 +442,28 @@ Rule-driven reasoning engine that produces inferences from evidence + behavior o
 |---|---|---|
 | `List[Evidence]` + `List[BehaviorObject]` | Rule matching → Confidence scoring → Dedup | `List[Inference]` with type, label, description, confidence, importance, strength, rule_name |
 
+#### The recall index
+
+The `memories` table is a **curated subset**, not another copy of the typed
+stores. Events, behaviour objects, evidence, inferences, reflections and goals
+all have homes with better structure than a generic row; duplicating them would
+create a second source of truth that drifts from the first.
+
+What it adds is the thing none of those tables carries — `importance_score`,
+`access_count`, `last_accessed` — so the system can answer *what stands out*
+rather than *what happened*, and can tell how often something has actually been
+recalled.
+
+| Type | Drawn from |
+|---|---|
+| `semantic` | behaviour objects, ranked by their own importance |
+| `behavioral` | inferences — the conclusions drawn |
+| `reflection` | the period summary |
+
+Writes are idempotent: a memory's id is derived from what it is *about*, so
+re-ingesting the same history reinforces one row rather than appending a
+duplicate per batch. Recall records itself, incrementing `access_count`.
+
 ### Stage 5: Reflection
 
 Periodic summarization that synthesizes patterns and detected changes across all cognitive state.
