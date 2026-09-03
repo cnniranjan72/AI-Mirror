@@ -34,6 +34,20 @@ MAX_CLAIMS = 40
 # truncated one.
 MAX_EXAMPLES = 6
 
+# Only these collectors partition their observations into attended and skipped.
+# Temporal and interaction evidence is about the history as a whole and has no
+# per-observation split to make, so its rows are not evidence of anything about
+# whether the check has run.
+COUNTER_EVIDENCE_TYPES = ("topical", "creator", "behavioral")
+
+# Rows written before the producer existed carry no attended/skipped counts.
+# Every one of the 341 rows on the deployed instance was such a row, and this
+# page told each of those accounts that "every observation behind every claim
+# was actually watched" - a confident statement about a check that had never
+# been run. Absence of contradiction and absence of the test for it are
+# different things, and only one of them is reassuring.
+PRODUCER_MARKER = "attended_count"
+
 
 def _decode(value: Any) -> Any:
     """asyncpg hands back JSONB as text, no codec registered."""
@@ -60,7 +74,7 @@ async def build_contested(user_id: str, limit: int = MAX_CLAIMS) -> Dict[str, An
     rows = await fetch(
         """
         SELECT evidence_id, evidence_type, explanation, confidence,
-               net_confidence, conflict_resolution, metadata,
+               net_confidence, conflict_resolution, metadata, key_metrics,
                supporting_events, conflicting_observations
         FROM evidence
         WHERE user_id = $1
@@ -75,12 +89,21 @@ async def build_contested(user_id: str, limit: int = MAX_CLAIMS) -> Dict[str, An
 
     total_support = 0
     total_counter = 0
+    checked = 0
+    unchecked = 0
 
     for row in rows:
         supporting = _decode(row["supporting_events"]) or []
         conflicting = _decode(row["conflicting_observations"]) or []
         if not isinstance(supporting, list) or not isinstance(conflicting, list):
             continue
+
+        if row["evidence_type"] in COUNTER_EVIDENCE_TYPES:
+            metrics = _decode(row["key_metrics"])
+            if isinstance(metrics, dict) and PRODUCER_MARKER in metrics:
+                checked += 1
+            else:
+                unchecked += 1
 
         total_support += len(supporting)
         total_counter += len(conflicting)
@@ -172,14 +195,42 @@ async def build_contested(user_id: str, limit: int = MAX_CLAIMS) -> Dict[str, An
                 round(total_counter / observations, 3) if observations else 0.0
             ),
         },
-        "note": (
+        "checked": checked,
+        "unchecked": unchecked,
+        "stale_evidence": unchecked > 0 and checked == 0,
+        "note": _note(total_counter, observations, checked, unchecked),
+    }
+
+
+def _note(total_counter: int, observations: int, checked: int, unchecked: int) -> str:
+    """What the page can honestly say about the absence of contradiction."""
+    if total_counter:
+        return (
             f"{total_counter} of {observations} observations behind these claims "
             f"argue against the claim they belong to. An observation counts "
             f"against when the content was scrolled past well below your own "
             f"typical watch time, which is measured from your history rather "
             f"than fixed in seconds."
-            if total_counter else
-            "Nothing in the evidence collected so far contradicts itself. Every "
-            "observation behind every claim was actually watched."
-        ),
-    }
+        )
+
+    if unchecked and not checked:
+        return (
+            f"None of the {unchecked} claims here has been checked for "
+            f"contradiction: they were recorded before the system started "
+            f"weighing skipped content against the claims it belongs to. This "
+            f"is not the same as finding nothing, and it will resolve the next "
+            f"time this account ingests activity."
+        )
+
+    if unchecked:
+        return (
+            f"{checked} of {checked + unchecked} claims have been checked for "
+            f"contradiction and none of them contradicts itself. The remaining "
+            f"{unchecked} predate the check and will be reconsidered on the "
+            f"next ingest."
+        )
+
+    return (
+        "Nothing in the evidence collected so far contradicts itself. Every "
+        "observation behind every claim was actually watched."
+    )

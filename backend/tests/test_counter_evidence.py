@@ -377,3 +377,58 @@ class TestTheThresholdIsDeclaredNotBuried:
 
         assert shares[0] <= shares[1] <= shares[2]
         assert max(shares) - min(shares) < 0.25
+
+
+class TestNotLookingIsNotTheSameAsFindingNothing:
+    """Every one of the 341 evidence rows on the deployed instance was written
+    before the counter-evidence producer existed, so the Contested Claims page
+    told each of those accounts that "every observation behind every claim was
+    actually watched" - a confident statement about a check that had never been
+    run. Found by reading the live endpoint rather than the code.
+    """
+
+    def test_rows_from_the_producer_are_distinguishable(self):
+        """The marker has to be something only the producer writes. Absence of
+        conflicting_observations cannot serve: a genuinely uncontested claim has
+        none either."""
+        from app.services import contested
+
+        events = history([("cooking", 20, 60.0)])
+        evidence = EvidenceEngine().collect_topical_evidence(
+            events=events, topic="cooking")
+
+        assert contested.PRODUCER_MARKER in evidence.key_metrics
+        assert not evidence.conflicting_observations, (
+            "this claim has no contradictions, and must still be marked as checked"
+        )
+
+    def test_only_the_types_that_partition_are_counted(self):
+        """Temporal and interaction evidence is about the history as a whole and
+        has no per-observation split, so its rows say nothing about whether the
+        check has run and must not be counted as unchecked."""
+        from app.services import contested
+
+        assert "temporal" not in contested.COUNTER_EVIDENCE_TYPES
+        assert "interaction" not in contested.COUNTER_EVIDENCE_TYPES
+        assert "topical" in contested.COUNTER_EVIDENCE_TYPES
+
+    def test_unchecked_evidence_is_not_reported_as_uncontested(self):
+        from app.services.contested import _note
+
+        unchecked = _note(total_counter=0, observations=100, checked=0, unchecked=13)
+        assert "not the same as finding nothing" in unchecked
+        assert "actually watched" not in unchecked
+
+    def test_a_genuinely_uncontested_account_still_says_so(self):
+        """The honest message must survive: an account that skips nothing has a
+        real result, not a missing one."""
+        from app.services.contested import _note
+
+        clean = _note(total_counter=0, observations=100, checked=12, unchecked=0)
+        assert "actually watched" in clean
+
+    def test_a_partly_checked_account_reports_both(self):
+        from app.services.contested import _note
+
+        mixed = _note(total_counter=0, observations=100, checked=8, unchecked=5)
+        assert "8" in mixed and "5" in mixed

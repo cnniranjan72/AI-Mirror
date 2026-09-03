@@ -1250,6 +1250,7 @@ flowchart TB
 | **Memory** | `/memory` | Reflections, inferences, patterns with tab filters, Memory Tree (3D) |
 | **Evidence** | `/evidence` | Evidence list, type distribution bar chart, detail drawer |
 | **Contested Claims** | `/contested` | Claims the system's own evidence argues against, ranked by how contested rather than how confident, naming the specific content behind each disagreement |
+| | | Evidence recorded before the check existed is reported as **unchecked**, never as uncontested |
 | **Blind Spots** | `/blind-spots` | What the system doesn't know about you, separating "no opinion at all" from measured uncertainty |
 | **Moved On** | `/moved-on` | What's still current, what's tailing off, and what you've set aside — with the reason for each |
 | **Restore Points** | `/restore` | Send the model back to an earlier snapshot when it has drifted somewhere you don't recognise |

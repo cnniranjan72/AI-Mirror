@@ -178,6 +178,24 @@ export default function ContestedPage() {
           </GlassCard>
         ) : (
           <>
+            {/* Evidence written before the counter-evidence producer existed
+                carries no attended/skipped split. Every one of the 341 rows on
+                the deployed instance was such a row, and this page was telling
+                those accounts that "every observation behind every claim was
+                actually watched" - a confident statement about a check that had
+                never run. Not finding a contradiction and not having looked are
+                different things. */}
+            {data.unchecked > 0 && (
+              <GlassCard style={{ marginBottom: 16, borderColor: 'rgba(251,191,36,0.4)' }}>
+                <Badge variant="amber">
+                  {data.stale_evidence ? 'Not yet checked' : 'Partly checked'}
+                </Badge>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.6 }}>
+                  {data.note}
+                </p>
+              </GlassCard>
+            )}
+
             <GlassCard gradient style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'baseline' }}>
                 <div>
@@ -185,7 +203,9 @@ export default function ContestedPage() {
                     {Math.round(summary.contradicting_share * 100)}%
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                    of observations argue against
+                    {data.stale_evidence
+                      ? 'of observations — not yet measured'
+                      : 'of observations argue against'}
                   </div>
                 </div>
                 <div>
@@ -197,19 +217,27 @@ export default function ContestedPage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>claims contested</div>
                 </div>
-                <div style={{ flex: '1 1 280px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                  {data.note}
-                </div>
+                {data.unchecked === 0 && (
+                  <div style={{ flex: '1 1 280px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                    {data.note}
+                  </div>
+                )}
               </div>
             </GlassCard>
 
             {claims.length === 0 ? (
               <GlassCard>
-                <Badge variant="emerald">Nothing contested</Badge>
+                <Badge variant={data.stale_evidence ? 'slate' : 'emerald'}>
+                  {data.stale_evidence ? 'Nothing checked yet' : 'Nothing contested'}
+                </Badge>
                 <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 10, lineHeight: 1.6 }}>
-                  Every observation behind every claim was actually watched. That is a real
-                  result rather than a default: an account that skips nothing produces no
-                  counter-evidence, and this page would say so either way.
+                  {data.stale_evidence
+                    ? `These claims were recorded before the system began weighing skipped
+                       content against them, so no contradiction has been looked for. The
+                       next time this account ingests activity they will be reconsidered.`
+                    : `Every observation behind every claim was actually watched. That is a
+                       real result rather than a default: an account that skips nothing
+                       produces no counter-evidence, and this page would say so either way.`}
                 </p>
               </GlassCard>
             ) : (
