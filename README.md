@@ -147,18 +147,18 @@ sequenceDiagram
 
     Note over Ext: Instagram Reels or YouTube<br/>Watch/Shorts — DOM Observation
 
-    Ext->>API: POST /ingest<br/>{user_id, events[], platform}
+    Ext->>API: "POST /ingest {user_id, events[], platform}"
 
-    API->>PL: Behavior Gateway<br/>(normalize events)
+    API->>PL: "Behavior Gateway (normalize events)"
 
-    PL->>PL: Knowledge Consolidation<br/>(cluster by topic)
-    PL->>PL: Behavior Objects<br/>(topic, importance, creators)
-    PL->>PL: Evidence Engine<br/>(5-dimension evidence)
-    PL->>PL: Inference Engine<br/>(rule-based reasoning)
-    PL->>PL: Identity Engine<br/>(9 sub-profiles)
+    PL->>PL: "Knowledge Consolidation (cluster by topic)"
+    PL->>PL: "Behavior Objects (topic, importance, creators)"
+    PL->>PL: "Evidence Engine (5-dimension evidence)"
+    PL->>PL: "Inference Engine (rule-based reasoning)"
+    PL->>PL: "Identity Engine (9 sub-profiles)"
 
-    PL->>PL: Identity Snapshot<br/>(on significant shift)
-    PL->>PL: Self-Model<br/>(beliefs, uncertainties)
+    PL->>PL: "Identity Snapshot (on significant shift)"
+    PL->>PL: "Self-Model (beliefs, uncertainties)"
 
     PL-->>DB: Store results
     API->>DB: Vector Embeddings<br/>(384-dim pgvector)
@@ -258,15 +258,19 @@ flowchart TB
     RANK -->|Identity/Goal Alignment Score| FUSE[Fusion Engine]
     FUSE -->|Dedup + Citations| DEC[Decision Engine]
 
-    DEC -->|Confidence Threshold| DEC
-    DEC -->|Diversity Enforcement| DEC
-    DEC -->|Goal Alignment| DEC
-    DEC -->|Conflict Detection| DEC
+    DEC --> CT[Confidence Threshold]
+    DEC --> DV[Diversity Enforcement]
+    DEC --> GA[Goal Alignment]
+    DEC --> CD[Conflict Detection]
+    CT --> DEC
+    DV --> DEC
+    GA --> DEC
+    CD --> DEC
 
     DEC -->|Fused Facts| CTX[Context Builder]
     CTX -->|CharacterContext| LLMV[LLM Verbalizer]
 
-    LLMV -->|Format Only<br/>No Reasoning| RESP[Response]
+    LLMV -->|"Format Only — No Reasoning"| RESP[Response]
 
     LLMV -->|Error/Circuit Break| FALLBACK[Deterministic Template]
     FALLBACK --> RESP
@@ -1342,14 +1346,14 @@ erDiagram
 ```mermaid
 flowchart TB
     subgraph "Platforms Tracked"
-        IG[Instagram Reels<br/>content.js] -->|1s poll<br/>viewport detection| IG_VID[Identify Active Video]
+        IG[Instagram Reels<br/>content.js] -->|"1s poll, viewport detection"| IG_VID[Identify Active Video]
         IG_VID -->|on change| IG_EXT[Extract Metadata<br/>username, caption, hashtags<br/>audio, likes, saves]
         IG_EXT --> BUF[Event Buffer]
 
-        YT[YouTube Watch + Shorts<br/>youtube-content.js] -->|1s poll<br/>SPA URL detection| YT_TGT[Identify Target<br/>surface + videoId]
+        YT[YouTube Watch + Shorts<br/>youtube-content.js] -->|"1s poll, SPA URL detection"| YT_TGT[Identify Target<br/>surface + videoId]
         YT_TGT -->|on change| YT_EXT[Extract Metadata<br/>Tier 1: JSON parse<br/>Tier 2: DOM selectors]
         YT_EXT --> YT_ENG[Extract Engagement<br/>likes, subscribe state]
-        YT_ENG -->|watch time<br/>accumulation| BUF
+        YT_ENG -->|"watch time accumulation"| BUF
 
         BUF -->|10 events OR 30s| SEND[chrome.runtime<br/>.sendMessage]
     end
@@ -1715,8 +1719,8 @@ The export requires being signed in (any account — there's no separate approva
 flowchart TB
     START([Start]) --> CHOICE{What do you<br/>want to do?}
 
-    CHOICE -->|"I want to track<br/>my own behavior"| SETUP[Install Chrome Extension]
-    CHOICE -->|"I want to explore<br/>the system"| DEMO[Load Demo Data]
+    CHOICE -->|"I want to track my own behavior"| SETUP[Install Chrome Extension]
+    CHOICE -->|"I want to explore the system"| DEMO[Load Demo Data]
 
     SETUP --> EXT_LOAD[Load unpacked extension<br/>from chrome-extension/]
     EXT_LOAD --> VISIT[Visit instagram.com or<br/>youtube.com]
@@ -1752,7 +1756,7 @@ flowchart LR
     START([New User]) --> Q1{Have data?}
 
     Q1 -->|No| Q2{Want to track<br/>your own behavior?}
-    Q1 -->|Yes, load demo| DEMO[POST /seed or<br/>click 'Load Demo Data']
+    Q1 -->|Yes, load demo| DEMO["POST /seed or click 'Load Demo Data'"]
 
     Q2 -->|Yes| INSTALL[Install Extension]
     Q2 -->|No| DEMO
